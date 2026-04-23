@@ -8,7 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Loader2, Plus, Trash2, Upload, Image as ImageIcon } from "lucide-react";
+import { Loader2, Plus, Trash2, Upload, Image as ImageIcon, X } from "lucide-react";
+import { useRef } from "react";
 
 // 判断题干是否提示包含图表（导入时在题干里以「[此题含图…]」「见原 PDF」「见图」等方式标注）
 function hasImageMarker(stem: string): boolean {
@@ -39,6 +40,7 @@ type Q = {
   pitfall_note: string | null;
   term_tags: string[] | null;
   status: "draft" | "published";
+  image_url: string | null;
 };
 
 function Admin() {
