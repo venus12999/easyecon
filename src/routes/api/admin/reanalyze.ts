@@ -58,12 +58,11 @@ ${hasImage ? "6. 本题附带图片（图表/曲线/表格），必须先读图�
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              model: hasImage ? "google/gemini-2.5-pro" : "google/gemini-3-flash-preview",
+              model: "google/gemini-2.5-flash",
               messages: [
                 { role: "system", content: system },
                 { role: "user", content: userContent },
               ],
-              response_format: { type: "json_object" },
             }),
           });
 
@@ -91,16 +90,30 @@ ${hasImage ? "6. 本题附带图片（图表/曲线/表格），必须先读图�
           const data = await upstream.json();
           const content = data?.choices?.[0]?.message?.content ?? "{}";
           let parsed: { explanation?: string; pitfall_note?: string } = {};
-          try {
-            parsed = JSON.parse(content);
-          } catch {
-            // try strip code fences
-            const cleaned = content.replace(/```json\s*|\s*```/g, "").trim();
+          // 提取 JSON：先去掉 markdown 包裹，再截取首个 { 到最后一个 }
+          const stripFences = (s: string) =>
+            s.replace(/```json\s*/gi, "").replace(/```/g, "").trim();
+          const tryParse = (s: string) => {
             try {
-              parsed = JSON.parse(cleaned);
+              return JSON.parse(s);
             } catch {
-              parsed = { explanation: content };
+              return null;
             }
+          };
+          let raw = stripFences(String(content));
+          let obj = tryParse(raw);
+          if (!obj) {
+            const start = raw.indexOf("{");
+            const end = raw.lastIndexOf("}");
+            if (start !== -1 && end > start) {
+              obj = tryParse(raw.substring(start, end + 1));
+            }
+          }
+          if (obj && typeof obj === "object") {
+            parsed = obj as { explanation?: string; pitfall_note?: string };
+          } else {
+            // 兜底：把全部文本作为 explanation
+            parsed = { explanation: raw };
           }
 
           return Response.json({
