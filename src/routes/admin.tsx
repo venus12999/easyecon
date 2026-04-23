@@ -196,13 +196,28 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
                         </span>
                         {hasImageMarker(q.stem) && (
                           <span className="text-xs px-1.5 py-0.5 rounded bg-primary/15 text-primary inline-flex items-center gap-1">
-                            <ImageIcon className="h-3 w-3" /> 带图待补
+                            <ImageIcon className="h-3 w-3" /> {q.image_url ? "已上传图" : "带图待补"}
                           </span>
                         )}
                       </div>
                       <p className="text-sm line-clamp-2">{q.stem}</p>
+                      {q.image_url && (
+                        <img
+                          src={q.image_url}
+                          alt="题目配图"
+                          className="mt-2 max-h-24 rounded border border-border object-contain"
+                        />
+                      )}
                     </div>
                     <div className="flex gap-2">
+                      {hasImageMarker(q.stem) && (
+                        <ImageUploadButton
+                          questionId={q.id}
+                          token={token}
+                          hasImage={!!q.image_url}
+                          onChanged={reload}
+                        />
+                      )}
                       <Button size="sm" variant="outline" onClick={() => setEditing(q)}>编辑</Button>
                       <Button size="sm" variant="ghost" onClick={async () => {
                         if (!confirm("确认删除？")) return;
