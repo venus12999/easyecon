@@ -35,13 +35,26 @@ export const Route = createFileRoute("/api/admin/audit")({
           return new Response(JSON.stringify({ error: "LOVABLE_API_KEY 未配置" }), { status: 500 });
         }
 
+        // 前端按批调用：可传入 question_ids 限定本次审核哪些题
+        let requestedIds: string[] | null = null;
+        try {
+          const body = await request.json().catch(() => ({}));
+          if (Array.isArray(body?.question_ids) && body.question_ids.length > 0) {
+            requestedIds = body.question_ids.filter((x: unknown) => typeof x === "string");
+          }
+        } catch {
+          // ignore
+        }
+
         const { data: kps } = await supabaseAdmin
           .from("knowledge_points")
           .select("id,slug,name_zh,name_en,unit")
           .order("sort_order");
-        const { data: questions } = await supabaseAdmin
+        let qQuery = supabaseAdmin
           .from("questions")
           .select("id,knowledge_point_id,type,stem,option_a,option_b,option_c,option_d,correct_answer");
+        if (requestedIds) qQuery = qQuery.in("id", requestedIds);
+        const { data: questions } = await qQuery;
         const kpList = kps ?? [];
         const qList = questions ?? [];
         const kpById = new Map(kpList.map((k) => [k.id, k]));
@@ -50,9 +63,9 @@ export const Route = createFileRoute("/api/admin/audit")({
           .map((k) => `- slug=${k.slug} | ${k.name_zh}（${k.name_en}）unit ${k.unit}`)
           .join("\n");
 
-        // 分批送给 AI，避免 prompt 过长。每批 8 题。
+        // 单次调用一批 AI（前端控制分批，避免单个 HTTP 请求超过网关 30s 超时）
         const findings: AuditFinding[] = [];
-        const batchSize = 8;
+        const batchSize = qList.length; // 整批一次性送
         for (let i = 0; i < qList.length; i += batchSize) {
           const batch = qList.slice(i, i + batchSize);
           const itemsForAi = batch.map((q) => {
