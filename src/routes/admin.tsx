@@ -8,7 +8,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Loader2, Plus, Trash2, Upload } from "lucide-react";
+import { Loader2, Plus, Trash2, Upload, Image as ImageIcon } from "lucide-react";
+
+// 判断题干是否提示包含图表（导入时在题干里以「[此题含图…]」「见原 PDF」「见图」等方式标注）
+function hasImageMarker(stem: string): boolean {
+  if (!stem) return false;
+  return /\[\s*(此题|本题)?\s*含图|\[图|见原\s*PDF|见图|见下图|见上图|图\s*\d+|graph|figure|the\s+(above|following)\s+(graph|figure|diagram|table)/i.test(
+    stem,
+  );
+}
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ title: "题库管理" }, { name: "robots", content: "noindex" }] }),
@@ -97,6 +105,7 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
   const [questions, setQuestions] = useState<Q[]>([]);
   const [filterKp, setFilterKp] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
+  const [filterImage, setFilterImage] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<Q | null>(null);
   const [creating, setCreating] = useState(false);
@@ -118,9 +127,13 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
   const filtered = questions.filter((q) => {
     if (filterKp !== "all" && q.knowledge_point_id !== filterKp) return false;
     if (filterType !== "all" && q.type !== filterType) return false;
+    if (filterImage === "image" && !hasImageMarker(q.stem)) return false;
+    if (filterImage === "noimage" && hasImageMarker(q.stem)) return false;
     if (search && !q.stem.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
+
+  const imageCount = questions.filter((q) => hasImageMarker(q.stem)).length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -155,6 +168,14 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
                   <SelectItem value="pitfall">易错</SelectItem>
                 </SelectContent>
               </Select>
+              <Select value={filterImage} onValueChange={setFilterImage}>
+                <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部图文</SelectItem>
+                  <SelectItem value="image">仅带图题 ({imageCount})</SelectItem>
+                  <SelectItem value="noimage">仅纯文字题</SelectItem>
+                </SelectContent>
+              </Select>
               <Input placeholder="搜索题干…" value={search} onChange={(e) => setSearch(e.target.value)} className="w-60" />
               <Button size="sm" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> 新建</Button>
               <span className="ml-auto text-sm text-muted-foreground">共 {filtered.length} 题</span>
@@ -171,6 +192,11 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
                         <span className={`text-xs px-1.5 py-0.5 rounded ${q.status === "published" ? "bg-success/15 text-success" : "bg-warning/15 text-warning-foreground"}`}>
                           {q.status === "published" ? "已发布" : "草稿"}
                         </span>
+                        {hasImageMarker(q.stem) && (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-primary/15 text-primary inline-flex items-center gap-1">
+                            <ImageIcon className="h-3 w-3" /> 带图待补
+                          </span>
+                        )}
                       </div>
                       <p className="text-sm line-clamp-2">{q.stem}</p>
                     </div>
