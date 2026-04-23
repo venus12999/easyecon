@@ -192,6 +192,11 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
                         <span className={`text-xs px-1.5 py-0.5 rounded ${q.status === "published" ? "bg-success/15 text-success" : "bg-warning/15 text-warning-foreground"}`}>
                           {q.status === "published" ? "已发布" : "草稿"}
                         </span>
+                        {hasImageMarker(q.stem) && (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-primary/15 text-primary inline-flex items-center gap-1">
+                            <ImageIcon className="h-3 w-3" /> 带图待补
+                          </span>
+                        )}
                       </div>
                       <p className="text-sm line-clamp-2">{q.stem}</p>
                     </div>
