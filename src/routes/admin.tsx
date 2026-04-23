@@ -361,8 +361,19 @@ function EditDialog({ kps, initial, token, onClose, onSaved }: {
           image_url: form.image_url ?? null,
         }),
       });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error ?? "AI 分析失败");
+      const text = await r.text();
+      let j: { explanation?: string; pitfall_note?: string; error?: string } = {};
+      try {
+        j = text ? JSON.parse(text) : {};
+      } catch {
+        // 网关返回的 504/HTML 等非 JSON
+      }
+      if (!r.ok) {
+        if (r.status === 504) throw new Error("AI 响应超时，请重试或稍后再试");
+        if (r.status === 429) throw new Error("调用过于频繁，请稍候再试");
+        if (r.status === 402) throw new Error("AI 额度已用尽，请到设置中充值");
+        throw new Error(j.error ?? `AI 分析失败 (${r.status})`);
+      }
       const next = {
         explanation: j.explanation ?? form.explanation ?? "",
         pitfall_note: j.pitfall_note ?? "",
