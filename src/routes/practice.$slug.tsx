@@ -42,6 +42,7 @@ type Q = {
   explanation: string;
   pitfall_note: string | null;
   term_tags: string[] | null;
+  image_url: string | null;
 };
 type Kp = { id: string; slug: string; name_en: string; name_zh: string };
 
