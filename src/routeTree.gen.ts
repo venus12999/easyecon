@@ -11,9 +11,14 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WrongRouteImport } from './routes/wrong'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as MockRouteImport } from './routes/mock'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PracticeSlugRouteImport } from './routes/practice.$slug'
 import { Route as ApiAiExplainRouteImport } from './routes/api/ai-explain'
+import { Route as ApiAdminQuestionsRouteImport } from './routes/api/admin/questions'
+import { Route as ApiAdminLoginRouteImport } from './routes/api/admin/login'
+import { Route as ApiAdminImportRouteImport } from './routes/api/admin/import'
 
 const WrongRoute = WrongRouteImport.update({
   id: '/wrong',
@@ -23,6 +28,16 @@ const WrongRoute = WrongRouteImport.update({
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MockRoute = MockRouteImport.update({
+  id: '/mock',
+  path: '/mock',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -40,49 +55,109 @@ const ApiAiExplainRoute = ApiAiExplainRouteImport.update({
   path: '/api/ai-explain',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAdminQuestionsRoute = ApiAdminQuestionsRouteImport.update({
+  id: '/api/admin/questions',
+  path: '/api/admin/questions',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAdminLoginRoute = ApiAdminLoginRouteImport.update({
+  id: '/api/admin/login',
+  path: '/api/admin/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAdminImportRoute = ApiAdminImportRouteImport.update({
+  id: '/api/admin/import',
+  path: '/api/admin/import',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
+  '/mock': typeof MockRoute
   '/terms': typeof TermsRoute
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/practice/$slug': typeof PracticeSlugRoute
+  '/api/admin/import': typeof ApiAdminImportRoute
+  '/api/admin/login': typeof ApiAdminLoginRoute
+  '/api/admin/questions': typeof ApiAdminQuestionsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
+  '/mock': typeof MockRoute
   '/terms': typeof TermsRoute
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/practice/$slug': typeof PracticeSlugRoute
+  '/api/admin/import': typeof ApiAdminImportRoute
+  '/api/admin/login': typeof ApiAdminLoginRoute
+  '/api/admin/questions': typeof ApiAdminQuestionsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
+  '/mock': typeof MockRoute
   '/terms': typeof TermsRoute
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/practice/$slug': typeof PracticeSlugRoute
+  '/api/admin/import': typeof ApiAdminImportRoute
+  '/api/admin/login': typeof ApiAdminLoginRoute
+  '/api/admin/questions': typeof ApiAdminQuestionsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/terms' | '/wrong' | '/api/ai-explain' | '/practice/$slug'
-  fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/terms' | '/wrong' | '/api/ai-explain' | '/practice/$slug'
-  id:
-    | '__root__'
+  fullPaths:
     | '/'
+    | '/admin'
+    | '/mock'
     | '/terms'
     | '/wrong'
     | '/api/ai-explain'
     | '/practice/$slug'
+    | '/api/admin/import'
+    | '/api/admin/login'
+    | '/api/admin/questions'
+  fileRoutesByTo: FileRoutesByTo
+  to:
+    | '/'
+    | '/admin'
+    | '/mock'
+    | '/terms'
+    | '/wrong'
+    | '/api/ai-explain'
+    | '/practice/$slug'
+    | '/api/admin/import'
+    | '/api/admin/login'
+    | '/api/admin/questions'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin'
+    | '/mock'
+    | '/terms'
+    | '/wrong'
+    | '/api/ai-explain'
+    | '/practice/$slug'
+    | '/api/admin/import'
+    | '/api/admin/login'
+    | '/api/admin/questions'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRoute
+  MockRoute: typeof MockRoute
   TermsRoute: typeof TermsRoute
   WrongRoute: typeof WrongRoute
   ApiAiExplainRoute: typeof ApiAiExplainRoute
   PracticeSlugRoute: typeof PracticeSlugRoute
+  ApiAdminImportRoute: typeof ApiAdminImportRoute
+  ApiAdminLoginRoute: typeof ApiAdminLoginRoute
+  ApiAdminQuestionsRoute: typeof ApiAdminQuestionsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -99,6 +174,20 @@ declare module '@tanstack/react-router' {
       path: '/terms'
       fullPath: '/terms'
       preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mock': {
+      id: '/mock'
+      path: '/mock'
+      fullPath: '/mock'
+      preLoaderRoute: typeof MockRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -122,16 +211,51 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAiExplainRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/admin/questions': {
+      id: '/api/admin/questions'
+      path: '/api/admin/questions'
+      fullPath: '/api/admin/questions'
+      preLoaderRoute: typeof ApiAdminQuestionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/login': {
+      id: '/api/admin/login'
+      path: '/api/admin/login'
+      fullPath: '/api/admin/login'
+      preLoaderRoute: typeof ApiAdminLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/import': {
+      id: '/api/admin/import'
+      path: '/api/admin/import'
+      fullPath: '/api/admin/import'
+      preLoaderRoute: typeof ApiAdminImportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRoute,
+  MockRoute: MockRoute,
   TermsRoute: TermsRoute,
   WrongRoute: WrongRoute,
   ApiAiExplainRoute: ApiAiExplainRoute,
   PracticeSlugRoute: PracticeSlugRoute,
+  ApiAdminImportRoute: ApiAdminImportRoute,
+  ApiAdminLoginRoute: ApiAdminLoginRoute,
+  ApiAdminQuestionsRoute: ApiAdminQuestionsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}
