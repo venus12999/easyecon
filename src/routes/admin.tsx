@@ -209,14 +209,12 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
                       )}
                     </div>
                     <div className="flex gap-2">
-                      {hasImageMarker(q.stem) && (
-                        <ImageUploadButton
-                          questionId={q.id}
-                          token={token}
-                          hasImage={!!q.image_url}
-                          onChanged={reload}
-                        />
-                      )}
+                      <ImageUploadButton
+                        questionId={q.id}
+                        token={token}
+                        hasImage={!!q.image_url}
+                        onChanged={reload}
+                      />
                       <Button size="sm" variant="outline" onClick={() => setEditing(q)}>编辑</Button>
                       <Button size="sm" variant="ghost" onClick={async () => {
                         if (!confirm("确认删除？")) return;
