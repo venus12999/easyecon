@@ -21,6 +21,7 @@ export const Route = createFileRoute("/api/admin/reanalyze")({
             option_c: string;
             option_d: string;
             correct_answer: "A" | "B" | "C" | "D";
+            image_url?: string | null;
           };
           const apiKey = process.env.LOVABLE_API_KEY;
           if (!apiKey) {
@@ -30,6 +31,7 @@ export const Route = createFileRoute("/api/admin/reanalyze")({
             });
           }
 
+          const hasImage = !!body.image_url;
           const system = `你是 AP 微观经济（AP Microeconomics）资深命题分析专家，专为中国学生编写题库解析。
 严格规则：
 1. 只用简体中文输出 JSON，不要任何 Markdown 代码块包裹。
@@ -37,9 +39,17 @@ export const Route = createFileRoute("/api/admin/reanalyze")({
 3. 解析需点出正确答案为何正确，并简要说明其它选项的错误所在。
 4. 若你判断题库给出的正确答案与你分析不一致，仍需以题库为准撰写解析，但在 pitfall_note 字段提示"建议复核：本题正确答案疑为 X"。
 5. 解析控制在 200 字以内，分点清晰。
+${hasImage ? "6. 本题附带图片（图表/曲线/表格），必须先读图再结合题干分析，解析中需引用图中关键信息（如曲线移动方向、均衡点变化、表格数值等）。" : ""}
 输出严格 JSON 格式：{"explanation": "...", "pitfall_note": "..."}（pitfall_note 可为空字符串）`;
 
           const userMsg = `【题目】\n${body.stem}\n\n【选项】\nA. ${body.option_a}\nB. ${body.option_b}\nC. ${body.option_c}\nD. ${body.option_d}\n\n【题库标记的正确答案】${body.correct_answer}`;
+
+          const userContent: unknown = hasImage
+            ? [
+                { type: "text", text: userMsg },
+                { type: "image_url", image_url: { url: body.image_url } },
+              ]
+            : userMsg;
 
           const upstream = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
             method: "POST",
@@ -48,10 +58,10 @@ export const Route = createFileRoute("/api/admin/reanalyze")({
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              model: "google/gemini-3-flash-preview",
+              model: hasImage ? "google/gemini-2.5-pro" : "google/gemini-3-flash-preview",
               messages: [
                 { role: "system", content: system },
-                { role: "user", content: userMsg },
+                { role: "user", content: userContent },
               ],
               response_format: { type: "json_object" },
             }),
