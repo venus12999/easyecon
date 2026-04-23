@@ -326,14 +326,72 @@ function EditDialog({ kps, initial, token, onClose, onSaved }: {
     term_tags: [], status: "draft",
   });
   const [busy, setBusy] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+
+  // 判断答案/选项是否相对原题发生变化（新建时始终视为已变化）
+  function answerOrOptionsChanged(): boolean {
+    if (!initial) return true;
+    return (
+      initial.correct_answer !== form.correct_answer ||
+      initial.option_a !== form.option_a ||
+      initial.option_b !== form.option_b ||
+      initial.option_c !== form.option_c ||
+      initial.option_d !== form.option_d ||
+      initial.stem !== form.stem
+    );
+  }
+
+  async function reanalyze(): Promise<{ explanation: string; pitfall_note: string } | null> {
+    if (!form.stem || !form.option_a || !form.option_b || !form.option_c || !form.option_d || !form.correct_answer) {
+      toast.error("请先补全题干、四个选项与正确答案");
+      return null;
+    }
+    setAnalyzing(true);
+    try {
+      const r = await fetch("/api/admin/reanalyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-token": token },
+        body: JSON.stringify({
+          stem: form.stem,
+          option_a: form.option_a,
+          option_b: form.option_b,
+          option_c: form.option_c,
+          option_d: form.option_d,
+          correct_answer: form.correct_answer,
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? "AI 分析失败");
+      const next = {
+        explanation: j.explanation ?? form.explanation ?? "",
+        pitfall_note: j.pitfall_note ?? "",
+      };
+      setForm((f) => ({ ...f, explanation: next.explanation, pitfall_note: next.pitfall_note }));
+      toast.success("已重新生成解析");
+      return next;
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "AI 分析失败");
+      return null;
+    } finally {
+      setAnalyzing(false);
+    }
+  }
 
   async function save() {
     setBusy(true);
     try {
+      let payload = form;
+      // 如果答案/选项/题干相对原题发生变化，先让 AI 重新生成解析
+      if (initial && answerOrOptionsChanged()) {
+        const ai = await reanalyze();
+        if (ai) {
+          payload = { ...form, explanation: ai.explanation, pitfall_note: ai.pitfall_note };
+        }
+      }
       const r = await fetch("/api/admin/questions", {
         method: initial ? "PUT" : "POST",
         headers: { "Content-Type": "application/json", "x-admin-token": token },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
       if (!r.ok) throw new Error("保存失败");
       toast.success("已保存");
