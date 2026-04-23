@@ -605,34 +605,46 @@ function AuditPanel({
   const [busy, setBusy] = useState(false);
   const [findings, setFindings] = useState<Finding[] | null>(null);
   const [applying, setApplying] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
 
   async function runAudit() {
     setBusy(true);
     setFindings(null);
+    setProgress({ done: 0, total: questions.length });
     try {
-      const r = await fetch("/api/admin/audit", {
-        method: "POST",
-        headers: { "x-admin-token": token, "Content-Type": "application/json" },
-      });
-      const text = await r.text();
-      let j: { findings?: Finding[]; total?: number; error?: string } = {};
-      try {
-        j = text ? JSON.parse(text) : {};
-      } catch {
-        // 网关 504/HTML
+      // 前端分批：每批 6 题，单个 HTTP 请求保持在网关超时之下
+      const BATCH = 6;
+      const all: Finding[] = [];
+      for (let i = 0; i < questions.length; i += BATCH) {
+        const slice = questions.slice(i, i + BATCH).map((q) => q.id);
+        const r = await fetch("/api/admin/audit", {
+          method: "POST",
+          headers: { "x-admin-token": token, "Content-Type": "application/json" },
+          body: JSON.stringify({ question_ids: slice }),
+        });
+        const text = await r.text();
+        let j: { findings?: Finding[]; error?: string } = {};
+        try {
+          j = text ? JSON.parse(text) : {};
+        } catch {
+          /* HTML / 504 */
+        }
+        if (!r.ok) {
+          if (r.status === 504) throw new Error(`第 ${Math.floor(i / BATCH) + 1} 批 AI 响应超时，请稍后重试`);
+          if (r.status === 429) throw new Error("调用过于频繁，请稍候再试");
+          if (r.status === 402) throw new Error("AI 额度已用尽");
+          throw new Error(j.error ?? `审核失败 (${r.status})`);
+        }
+        if (j.findings) all.push(...j.findings);
+        setProgress({ done: Math.min(i + BATCH, questions.length), total: questions.length });
+        setFindings([...all]);
       }
-      if (!r.ok) {
-        if (r.status === 504) throw new Error("AI 响应超时，请重试");
-        if (r.status === 429) throw new Error("调用过于频繁，请稍候再试");
-        if (r.status === 402) throw new Error("AI 额度已用尽");
-        throw new Error(j.error ?? `审核失败 (${r.status})`);
-      }
-      setFindings(j.findings ?? []);
-      toast.success(`已审核 ${j.total ?? questions.length} 题，发现 ${j.findings?.length ?? 0} 条建议`);
+      toast.success(`已审核 ${questions.length} 题，发现 ${all.length} 条建议`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "审核失败");
     } finally {
       setBusy(false);
+      setProgress(null);
     }
   }
 
@@ -682,7 +694,11 @@ function AuditPanel({
           </div>
           <Button onClick={runAudit} disabled={busy}>
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            {busy ? "审核中…" : `开始审核（${questions.length} 题）`}
+            {busy
+              ? progress
+                ? `审核中 ${progress.done}/${progress.total}…`
+                : "审核中…"
+              : `开始审核（${questions.length} 题）`}
           </Button>
         </div>
 
