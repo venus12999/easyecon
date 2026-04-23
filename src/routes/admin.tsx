@@ -358,6 +358,7 @@ function EditDialog({ kps, initial, token, onClose, onSaved }: {
           option_c: form.option_c,
           option_d: form.option_d,
           correct_answer: form.correct_answer,
+          image_url: form.image_url ?? null,
         }),
       });
       const j = await r.json();
