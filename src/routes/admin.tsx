@@ -149,6 +149,7 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
           <TabsList>
             <TabsTrigger value="list">题目列表</TabsTrigger>
             <TabsTrigger value="import">批量导入</TabsTrigger>
+            <TabsTrigger value="audit">AI 审核</TabsTrigger>
           </TabsList>
 
           <TabsContent value="list" className="mt-4">
@@ -235,6 +236,10 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
 
           <TabsContent value="import" className="mt-4">
             <ImportPanel token={token} kps={kps} onDone={reload} />
+          </TabsContent>
+
+          <TabsContent value="audit" className="mt-4">
+            <AuditPanel token={token} kps={kps} questions={questions} onApplied={reload} />
           </TabsContent>
         </Tabs>
 
@@ -572,5 +577,184 @@ function ImageUploadButton({ questionId, token, hasImage, onChanged }: {
         </Button>
       )}
     </>
+  );
+}
+
+type Finding = {
+  question_id: string;
+  current_type: string;
+  current_kp_slug: string;
+  current_kp_zh: string;
+  suggested_type?: string;
+  suggested_kp_slug?: string;
+  reason: string;
+  stem_preview: string;
+};
+
+function AuditPanel({
+  token,
+  kps,
+  questions,
+  onApplied,
+}: {
+  token: string;
+  kps: Kp[];
+  questions: Q[];
+  onApplied: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [findings, setFindings] = useState<Finding[] | null>(null);
+  const [applying, setApplying] = useState<string | null>(null);
+
+  async function runAudit() {
+    setBusy(true);
+    setFindings(null);
+    try {
+      const r = await fetch("/api/admin/audit", {
+        method: "POST",
+        headers: { "x-admin-token": token, "Content-Type": "application/json" },
+      });
+      const text = await r.text();
+      let j: { findings?: Finding[]; total?: number; error?: string } = {};
+      try {
+        j = text ? JSON.parse(text) : {};
+      } catch {
+        // 网关 504/HTML
+      }
+      if (!r.ok) {
+        if (r.status === 504) throw new Error("AI 响应超时，请重试");
+        if (r.status === 429) throw new Error("调用过于频繁，请稍候再试");
+        if (r.status === 402) throw new Error("AI 额度已用尽");
+        throw new Error(j.error ?? `审核失败 (${r.status})`);
+      }
+      setFindings(j.findings ?? []);
+      toast.success(`已审核 ${j.total ?? questions.length} 题，发现 ${j.findings?.length ?? 0} 条建议`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "审核失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function applyOne(f: Finding) {
+    setApplying(f.question_id);
+    try {
+      const payload: Record<string, unknown> = { id: f.question_id };
+      if (f.suggested_type) payload.type = f.suggested_type;
+      if (f.suggested_kp_slug) {
+        const kp = kps.find((k) => k.slug === f.suggested_kp_slug);
+        if (!kp) throw new Error(`未知知识点 slug：${f.suggested_kp_slug}`);
+        payload.knowledge_point_id = kp.id;
+      }
+      const r = await fetch("/api/admin/questions", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "x-admin-token": token },
+        body: JSON.stringify(payload),
+      });
+      if (!r.ok) throw new Error("应用失败");
+      toast.success("已应用");
+      setFindings((prev) => (prev ?? []).filter((x) => x.question_id !== f.question_id));
+      onApplied();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "应用失败");
+    } finally {
+      setApplying(null);
+    }
+  }
+
+  async function applyAll() {
+    if (!findings || findings.length === 0) return;
+    if (!confirm(`确认一次性应用 ${findings.length} 条建议？`)) return;
+    for (const f of findings) {
+      await applyOne(f);
+    }
+  }
+
+  return (
+    <Card>
+      <CardContent className="p-6 space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1">
+            <h2 className="font-semibold">AI 题库分类审核</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              用 AI 重新核对每道题的题型（基础 / 应用 / 易错）与所属知识点。结果以建议形式列出，你可逐题确认或一键应用，不会自动覆盖。
+            </p>
+          </div>
+          <Button onClick={runAudit} disabled={busy}>
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            {busy ? "审核中…" : `开始审核（${questions.length} 题）`}
+          </Button>
+        </div>
+
+        {findings && findings.length === 0 && (
+          <div className="rounded-md bg-success/10 border border-success/30 px-4 py-3 text-sm text-success">
+            ✓ 全部题目分类正确，无需修改。
+          </div>
+        )}
+
+        {findings && findings.length > 0 && (
+          <>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">共 {findings.length} 条修改建议</span>
+              <Button size="sm" variant="outline" onClick={applyAll} disabled={!!applying}>
+                一键全部应用
+              </Button>
+            </div>
+            <div className="space-y-2">
+              {findings.map((f) => {
+                const newKp = f.suggested_kp_slug ? kps.find((k) => k.slug === f.suggested_kp_slug) : null;
+                return (
+                  <Card key={f.question_id} className="border-warning/40">
+                    <CardContent className="p-4 space-y-2">
+                      <p className="text-sm line-clamp-2">{f.stem_preview}</p>
+                      <div className="text-xs space-y-1">
+                        {f.suggested_type && (
+                          <div>
+                            <span className="text-muted-foreground">题型：</span>
+                            <span className="line-through opacity-60 mr-1">{f.current_type}</span>
+                            <span className="px-1.5 py-0.5 rounded bg-success/15 text-success font-medium">
+                              → {f.suggested_type}
+                            </span>
+                          </div>
+                        )}
+                        {f.suggested_kp_slug && (
+                          <div>
+                            <span className="text-muted-foreground">知识点：</span>
+                            <span className="line-through opacity-60 mr-1">{f.current_kp_zh}</span>
+                            <span className="px-1.5 py-0.5 rounded bg-success/15 text-success font-medium">
+                              → {newKp?.name_zh ?? f.suggested_kp_slug}
+                            </span>
+                          </div>
+                        )}
+                        <div className="text-muted-foreground">理由：{f.reason}</div>
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() =>
+                            setFindings((prev) => (prev ?? []).filter((x) => x.question_id !== f.question_id))
+                          }
+                          disabled={applying === f.question_id}
+                        >
+                          忽略
+                        </Button>
+                        <Button size="sm" onClick={() => applyOne(f)} disabled={applying === f.question_id}>
+                          {applying === f.question_id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            "应用"
+                          )}
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }

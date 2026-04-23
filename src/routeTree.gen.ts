@@ -21,6 +21,7 @@ import { Route as ApiAdminReanalyzeRouteImport } from './routes/api/admin/reanal
 import { Route as ApiAdminQuestionsRouteImport } from './routes/api/admin/questions'
 import { Route as ApiAdminLoginRouteImport } from './routes/api/admin/login'
 import { Route as ApiAdminImportRouteImport } from './routes/api/admin/import'
+import { Route as ApiAdminAuditRouteImport } from './routes/api/admin/audit'
 
 const WrongRoute = WrongRouteImport.update({
   id: '/wrong',
@@ -82,6 +83,11 @@ const ApiAdminImportRoute = ApiAdminImportRouteImport.update({
   path: '/api/admin/import',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAdminAuditRoute = ApiAdminAuditRouteImport.update({
+  id: '/api/admin/audit',
+  path: '/api/admin/audit',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -91,6 +97,7 @@ export interface FileRoutesByFullPath {
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/practice/$slug': typeof PracticeSlugRoute
+  '/api/admin/audit': typeof ApiAdminAuditRoute
   '/api/admin/import': typeof ApiAdminImportRoute
   '/api/admin/login': typeof ApiAdminLoginRoute
   '/api/admin/questions': typeof ApiAdminQuestionsRoute
@@ -105,6 +112,7 @@ export interface FileRoutesByTo {
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/practice/$slug': typeof PracticeSlugRoute
+  '/api/admin/audit': typeof ApiAdminAuditRoute
   '/api/admin/import': typeof ApiAdminImportRoute
   '/api/admin/login': typeof ApiAdminLoginRoute
   '/api/admin/questions': typeof ApiAdminQuestionsRoute
@@ -120,6 +128,7 @@ export interface FileRoutesById {
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/practice/$slug': typeof PracticeSlugRoute
+  '/api/admin/audit': typeof ApiAdminAuditRoute
   '/api/admin/import': typeof ApiAdminImportRoute
   '/api/admin/login': typeof ApiAdminLoginRoute
   '/api/admin/questions': typeof ApiAdminQuestionsRoute
@@ -136,6 +145,7 @@ export interface FileRouteTypes {
     | '/wrong'
     | '/api/ai-explain'
     | '/practice/$slug'
+    | '/api/admin/audit'
     | '/api/admin/import'
     | '/api/admin/login'
     | '/api/admin/questions'
@@ -150,6 +160,7 @@ export interface FileRouteTypes {
     | '/wrong'
     | '/api/ai-explain'
     | '/practice/$slug'
+    | '/api/admin/audit'
     | '/api/admin/import'
     | '/api/admin/login'
     | '/api/admin/questions'
@@ -164,6 +175,7 @@ export interface FileRouteTypes {
     | '/wrong'
     | '/api/ai-explain'
     | '/practice/$slug'
+    | '/api/admin/audit'
     | '/api/admin/import'
     | '/api/admin/login'
     | '/api/admin/questions'
@@ -179,6 +191,7 @@ export interface RootRouteChildren {
   WrongRoute: typeof WrongRoute
   ApiAiExplainRoute: typeof ApiAiExplainRoute
   PracticeSlugRoute: typeof PracticeSlugRoute
+  ApiAdminAuditRoute: typeof ApiAdminAuditRoute
   ApiAdminImportRoute: typeof ApiAdminImportRoute
   ApiAdminLoginRoute: typeof ApiAdminLoginRoute
   ApiAdminQuestionsRoute: typeof ApiAdminQuestionsRoute
@@ -272,6 +285,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAdminImportRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/admin/audit': {
+      id: '/api/admin/audit'
+      path: '/api/admin/audit'
+      fullPath: '/api/admin/audit'
+      preLoaderRoute: typeof ApiAdminAuditRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -283,6 +303,7 @@ const rootRouteChildren: RootRouteChildren = {
   WrongRoute: WrongRoute,
   ApiAiExplainRoute: ApiAiExplainRoute,
   PracticeSlugRoute: PracticeSlugRoute,
+  ApiAdminAuditRoute: ApiAdminAuditRoute,
   ApiAdminImportRoute: ApiAdminImportRoute,
   ApiAdminLoginRoute: ApiAdminLoginRoute,
   ApiAdminQuestionsRoute: ApiAdminQuestionsRoute,

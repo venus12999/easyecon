@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { renderStemWithTerms, type TermInfo } from "@/lib/term-render";
+import { optionStyles, colorizeExplanation } from "@/lib/option-colors";
 import { recordAnswer, addWrong, removeWrong } from "@/lib/storage";
 import { Check, X, ChevronLeft, ChevronRight, Bookmark, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
@@ -249,6 +250,7 @@ function QuestionCard({
               const isPicked = picked === o.k;
               const isCorrect = submitted && o.k === correct;
               const isWrongPick = submitted && isPicked && o.k !== correct;
+              const s = optionStyles[o.k];
               return (
                 <button
                   key={o.k}
@@ -256,24 +258,37 @@ function QuestionCard({
                   disabled={submitted}
                   onClick={() => onPick(o.k)}
                   className={[
-                    "w-full text-left rounded-lg border px-4 py-3 transition-all flex items-start gap-3",
-                    "hover:border-primary/50",
-                    isPicked && !submitted ? "border-primary bg-primary/5" : "",
-                    isCorrect ? "border-success bg-success/10" : "",
-                    isWrongPick ? "border-destructive bg-destructive/10" : "",
+                    "w-full text-left rounded-lg border-2 px-4 py-3 transition-all flex items-start gap-3",
                     submitted && !isCorrect && !isWrongPick ? "opacity-60" : "",
                   ].join(" ")}
+                  style={{
+                    borderColor: isCorrect
+                      ? "var(--success)"
+                      : isWrongPick
+                        ? "var(--destructive)"
+                        : isPicked
+                          ? s.border
+                          : "transparent",
+                    background: isCorrect
+                      ? "color-mix(in oklab, var(--success) 12%, transparent)"
+                      : isWrongPick
+                        ? "color-mix(in oklab, var(--destructive) 10%, transparent)"
+                        : s.bgSoft,
+                  }}
                 >
                   <span
-                    className={[
-                      "shrink-0 w-7 h-7 rounded-full border flex items-center justify-center text-sm font-medium",
-                      isCorrect ? "border-success text-success" : "",
-                      isWrongPick ? "border-destructive text-destructive" : "",
-                    ].join(" ")}
+                    className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white"
+                    style={{
+                      background: isWrongPick
+                        ? "var(--destructive)"
+                        : isCorrect
+                          ? "var(--success)"
+                          : s.bg,
+                    }}
                   >
                     {isCorrect ? <Check className="h-4 w-4" /> : isWrongPick ? <X className="h-4 w-4" /> : o.k}
                   </span>
-                  <span className="flex-1 text-sm leading-relaxed pt-0.5">
+                  <span className="flex-1 text-sm leading-relaxed pt-1" style={{ color: s.ink }}>
                     {renderStemWithTerms(o.v, tags, termDict)}
                   </span>
                 </button>
@@ -289,10 +304,21 @@ function QuestionCard({
             <CardContent className="p-6 space-y-3">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">解析</span>
-                <span className="text-sm text-muted-foreground">正确答案：{correct}</span>
+                <span className="text-sm text-muted-foreground">
+                  正确答案：
+                  <span
+                    className="font-bold rounded px-1.5 py-0.5"
+                    style={{
+                      background: optionStyles[correct].bg,
+                      color: "white",
+                    }}
+                  >
+                    {correct}
+                  </span>
+                </span>
               </div>
               <div className="prose prose-sm max-w-none whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                {q.explanation}
+                {colorizeExplanation(q.explanation)}
               </div>
               {q.pitfall_note && (
                 <div className="rounded-md bg-warning/15 border border-warning/30 px-3 py-2 text-sm">
