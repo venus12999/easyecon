@@ -90,6 +90,19 @@
   --success-foreground: oklch(0.99 0 0);
   --warning: oklch(0.78 0.15 70);
   --warning-foreground: oklch(0.2 0.05 70);
+  /* Soft 4-color palette for MCQ options A/B/C/D — 天蓝 / 薄荷 / 桃粉 / 淡紫 */
+  --opt-a: oklch(0.72 0.11 230);
+  --opt-a-soft: oklch(0.96 0.04 230);
+  --opt-a-ink: oklch(0.42 0.13 240);
+  --opt-b: oklch(0.78 0.13 165);
+  --opt-b-soft: oklch(0.96 0.05 165);
+  --opt-b-ink: oklch(0.45 0.12 165);
+  --opt-c: oklch(0.82 0.10 25);
+  --opt-c-soft: oklch(0.96 0.04 25);
+  --opt-c-ink: oklch(0.52 0.16 25);
+  --opt-d: oklch(0.78 0.10 305);
+  --opt-d-soft: oklch(0.96 0.04 305);
+  --opt-d-ink: oklch(0.48 0.16 305);
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -122,6 +135,18 @@
   --accent-foreground: oklch(0.984 0.003 247.858);
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.984 0.003 247.858);
+  --opt-a: oklch(0.72 0.11 230);
+  --opt-a-soft: oklch(0.30 0.06 230);
+  --opt-a-ink: oklch(0.86 0.10 230);
+  --opt-b: oklch(0.78 0.13 165);
+  --opt-b-soft: oklch(0.30 0.06 165);
+  --opt-b-ink: oklch(0.86 0.10 165);
+  --opt-c: oklch(0.82 0.10 25);
+  --opt-c-soft: oklch(0.32 0.07 25);
+  --opt-c-ink: oklch(0.86 0.10 25);
+  --opt-d: oklch(0.78 0.10 305);
+  --opt-d-soft: oklch(0.30 0.06 305);
+  --opt-d-ink: oklch(0.86 0.10 305);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.551 0.027 264.364);
