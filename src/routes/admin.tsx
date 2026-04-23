@@ -453,11 +453,26 @@ function EditDialog({ kps, initial, token, onClose, onSaved }: {
                 value={(form.term_tags ?? []).join(",")}
                 onChange={(e) => setForm({ ...form, term_tags: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })} />
             </div>
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-muted-foreground">
+                {initial && answerOrOptionsChanged() ? (
+                  <span className="text-warning-foreground">答案/选项/题干已变更，保存时将自动用 AI 重新生成解析</span>
+                ) : (
+                  <span>解析与易错提醒</span>
+                )}
+              </div>
+              <Button size="sm" variant="outline" onClick={() => reanalyze()} disabled={analyzing || busy}>
+                {analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                AI 重新分析
+              </Button>
+            </div>
             <Textarea rows={5} placeholder="官方解析（中文）" value={form.explanation ?? ""} onChange={(e) => setForm({ ...form, explanation: e.target.value })} />
             <Textarea rows={2} placeholder="易错提醒（可选）" value={form.pitfall_note ?? ""} onChange={(e) => setForm({ ...form, pitfall_note: e.target.value })} />
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={onClose}>取消</Button>
-              <Button onClick={save} disabled={busy}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "保存"}</Button>
+              <Button onClick={save} disabled={busy || analyzing}>
+                {busy || analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : "保存"}
+              </Button>
             </div>
           </CardContent>
         </Card>
