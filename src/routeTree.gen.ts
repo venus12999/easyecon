@@ -9,38 +9,98 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as WrongRouteImport } from './routes/wrong'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as PracticeSlugRouteImport } from './routes/practice.$slug'
+import { Route as ApiAiExplainRouteImport } from './routes/api/ai-explain'
 
+const WrongRoute = WrongRouteImport.update({
+  id: '/wrong',
+  path: '/wrong',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PracticeSlugRoute = PracticeSlugRouteImport.update({
+  id: '/practice/$slug',
+  path: '/practice/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAiExplainRoute = ApiAiExplainRouteImport.update({
+  id: '/api/ai-explain',
+  path: '/api/ai-explain',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/terms': typeof TermsRoute
+  '/wrong': typeof WrongRoute
+  '/api/ai-explain': typeof ApiAiExplainRoute
+  '/practice/$slug': typeof PracticeSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/terms': typeof TermsRoute
+  '/wrong': typeof WrongRoute
+  '/api/ai-explain': typeof ApiAiExplainRoute
+  '/practice/$slug': typeof PracticeSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/terms': typeof TermsRoute
+  '/wrong': typeof WrongRoute
+  '/api/ai-explain': typeof ApiAiExplainRoute
+  '/practice/$slug': typeof PracticeSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/terms' | '/wrong' | '/api/ai-explain' | '/practice/$slug'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/terms' | '/wrong' | '/api/ai-explain' | '/practice/$slug'
+  id:
+    | '__root__'
+    | '/'
+    | '/terms'
+    | '/wrong'
+    | '/api/ai-explain'
+    | '/practice/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  TermsRoute: typeof TermsRoute
+  WrongRoute: typeof WrongRoute
+  ApiAiExplainRoute: typeof ApiAiExplainRoute
+  PracticeSlugRoute: typeof PracticeSlugRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/wrong': {
+      id: '/wrong'
+      path: '/wrong'
+      fullPath: '/wrong'
+      preLoaderRoute: typeof WrongRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,12 +108,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/practice/$slug': {
+      id: '/practice/$slug'
+      path: '/practice/$slug'
+      fullPath: '/practice/$slug'
+      preLoaderRoute: typeof PracticeSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/ai-explain': {
+      id: '/api/ai-explain'
+      path: '/api/ai-explain'
+      fullPath: '/api/ai-explain'
+      preLoaderRoute: typeof ApiAiExplainRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  TermsRoute: TermsRoute,
+  WrongRoute: WrongRoute,
+  ApiAiExplainRoute: ApiAiExplainRoute,
+  PracticeSlugRoute: PracticeSlugRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}
