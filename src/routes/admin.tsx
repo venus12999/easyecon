@@ -8,7 +8,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Loader2, Plus, Trash2, Upload } from "lucide-react";
+import { Loader2, Plus, Trash2, Upload, Image as ImageIcon } from "lucide-react";
+
+// 判断题干是否提示包含图表（导入时在题干里以「[此题含图…]」「见原 PDF」「见图」等方式标注）
+function hasImageMarker(stem: string): boolean {
+  if (!stem) return false;
+  return /\[\s*(此题|本题)?\s*含图|\[图|见原\s*PDF|见图|见下图|见上图|图\s*\d+|graph|figure|the\s+(above|following)\s+(graph|figure|diagram|table)/i.test(
+    stem,
+  );
+}
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ title: "题库管理" }, { name: "robots", content: "noindex" }] }),
@@ -97,6 +105,7 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
   const [questions, setQuestions] = useState<Q[]>([]);
   const [filterKp, setFilterKp] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
+  const [filterImage, setFilterImage] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<Q | null>(null);
   const [creating, setCreating] = useState(false);
@@ -118,9 +127,13 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
   const filtered = questions.filter((q) => {
     if (filterKp !== "all" && q.knowledge_point_id !== filterKp) return false;
     if (filterType !== "all" && q.type !== filterType) return false;
+    if (filterImage === "image" && !hasImageMarker(q.stem)) return false;
+    if (filterImage === "noimage" && hasImageMarker(q.stem)) return false;
     if (search && !q.stem.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
+
+  const imageCount = questions.filter((q) => hasImageMarker(q.stem)).length;
 
   return (
     <div className="min-h-screen bg-background">
