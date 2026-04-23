@@ -58,12 +58,11 @@ ${hasImage ? "6. 本题附带图片（图表/曲线/表格），必须先读图�
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              model: hasImage ? "google/gemini-2.5-pro" : "google/gemini-3-flash-preview",
+              model: "google/gemini-2.5-flash",
               messages: [
                 { role: "system", content: system },
                 { role: "user", content: userContent },
               ],
-              response_format: { type: "json_object" },
             }),
           });
 
