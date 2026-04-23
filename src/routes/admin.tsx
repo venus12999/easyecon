@@ -409,3 +409,85 @@ function EditDialog({ kps, initial, token, onClose, onSaved }: {
     </div>
   );
 }
+
+function ImageUploadButton({ questionId, token, hasImage, onChanged }: {
+  questionId: string; token: string; hasImage: boolean; onChanged: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function handleFile(file: File) {
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("图片需小于 5MB");
+      return;
+    }
+    setBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("question_id", questionId);
+      const r = await fetch("/api/admin/upload-image", {
+        method: "POST",
+        headers: { "x-admin-token": token },
+        body: fd,
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? "上传失败");
+      toast.success("图片已保存");
+      onChanged();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "上传失败");
+    } finally {
+      setBusy(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  async function removeImage() {
+    if (!confirm("移除已上传的图片？")) return;
+    setBusy(true);
+    try {
+      const r = await fetch("/api/admin/upload-image", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json", "x-admin-token": token },
+        body: JSON.stringify({ id: questionId }),
+      });
+      if (!r.ok) throw new Error();
+      toast.success("已移除");
+      onChanged();
+    } catch {
+      toast.error("移除失败");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) handleFile(f);
+        }}
+      />
+      <Button
+        size="sm"
+        variant={hasImage ? "secondary" : "default"}
+        disabled={busy}
+        onClick={() => inputRef.current?.click()}
+      >
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
+        {hasImage ? "替换图" : "上传图"}
+      </Button>
+      {hasImage && (
+        <Button size="sm" variant="ghost" disabled={busy} onClick={removeImage} title="移除图片">
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      )}
+    </>
+  );
+}
