@@ -17,6 +17,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as PracticeSlugRouteImport } from './routes/practice.$slug'
 import { Route as ApiAiExplainRouteImport } from './routes/api/ai-explain'
 import { Route as ApiAdminUploadImageRouteImport } from './routes/api/admin/upload-image'
+import { Route as ApiAdminReanalyzeRouteImport } from './routes/api/admin/reanalyze'
 import { Route as ApiAdminQuestionsRouteImport } from './routes/api/admin/questions'
 import { Route as ApiAdminLoginRouteImport } from './routes/api/admin/login'
 import { Route as ApiAdminImportRouteImport } from './routes/api/admin/import'
@@ -61,6 +62,11 @@ const ApiAdminUploadImageRoute = ApiAdminUploadImageRouteImport.update({
   path: '/api/admin/upload-image',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAdminReanalyzeRoute = ApiAdminReanalyzeRouteImport.update({
+  id: '/api/admin/reanalyze',
+  path: '/api/admin/reanalyze',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAdminQuestionsRoute = ApiAdminQuestionsRouteImport.update({
   id: '/api/admin/questions',
   path: '/api/admin/questions',
@@ -88,6 +94,7 @@ export interface FileRoutesByFullPath {
   '/api/admin/import': typeof ApiAdminImportRoute
   '/api/admin/login': typeof ApiAdminLoginRoute
   '/api/admin/questions': typeof ApiAdminQuestionsRoute
+  '/api/admin/reanalyze': typeof ApiAdminReanalyzeRoute
   '/api/admin/upload-image': typeof ApiAdminUploadImageRoute
 }
 export interface FileRoutesByTo {
@@ -101,6 +108,7 @@ export interface FileRoutesByTo {
   '/api/admin/import': typeof ApiAdminImportRoute
   '/api/admin/login': typeof ApiAdminLoginRoute
   '/api/admin/questions': typeof ApiAdminQuestionsRoute
+  '/api/admin/reanalyze': typeof ApiAdminReanalyzeRoute
   '/api/admin/upload-image': typeof ApiAdminUploadImageRoute
 }
 export interface FileRoutesById {
@@ -115,6 +123,7 @@ export interface FileRoutesById {
   '/api/admin/import': typeof ApiAdminImportRoute
   '/api/admin/login': typeof ApiAdminLoginRoute
   '/api/admin/questions': typeof ApiAdminQuestionsRoute
+  '/api/admin/reanalyze': typeof ApiAdminReanalyzeRoute
   '/api/admin/upload-image': typeof ApiAdminUploadImageRoute
 }
 export interface FileRouteTypes {
@@ -130,6 +139,7 @@ export interface FileRouteTypes {
     | '/api/admin/import'
     | '/api/admin/login'
     | '/api/admin/questions'
+    | '/api/admin/reanalyze'
     | '/api/admin/upload-image'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -143,6 +153,7 @@ export interface FileRouteTypes {
     | '/api/admin/import'
     | '/api/admin/login'
     | '/api/admin/questions'
+    | '/api/admin/reanalyze'
     | '/api/admin/upload-image'
   id:
     | '__root__'
@@ -156,6 +167,7 @@ export interface FileRouteTypes {
     | '/api/admin/import'
     | '/api/admin/login'
     | '/api/admin/questions'
+    | '/api/admin/reanalyze'
     | '/api/admin/upload-image'
   fileRoutesById: FileRoutesById
 }
@@ -170,6 +182,7 @@ export interface RootRouteChildren {
   ApiAdminImportRoute: typeof ApiAdminImportRoute
   ApiAdminLoginRoute: typeof ApiAdminLoginRoute
   ApiAdminQuestionsRoute: typeof ApiAdminQuestionsRoute
+  ApiAdminReanalyzeRoute: typeof ApiAdminReanalyzeRoute
   ApiAdminUploadImageRoute: typeof ApiAdminUploadImageRoute
 }
 
@@ -231,6 +244,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAdminUploadImageRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/admin/reanalyze': {
+      id: '/api/admin/reanalyze'
+      path: '/api/admin/reanalyze'
+      fullPath: '/api/admin/reanalyze'
+      preLoaderRoute: typeof ApiAdminReanalyzeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/admin/questions': {
       id: '/api/admin/questions'
       path: '/api/admin/questions'
@@ -266,6 +286,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAdminImportRoute: ApiAdminImportRoute,
   ApiAdminLoginRoute: ApiAdminLoginRoute,
   ApiAdminQuestionsRoute: ApiAdminQuestionsRoute,
+  ApiAdminReanalyzeRoute: ApiAdminReanalyzeRoute,
   ApiAdminUploadImageRoute: ApiAdminUploadImageRoute,
 }
 export const routeTree = rootRouteImport

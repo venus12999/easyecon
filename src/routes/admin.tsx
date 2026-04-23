@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Loader2, Plus, Trash2, Upload, Image as ImageIcon } from "lucide-react";
+import { Loader2, Plus, Trash2, Upload, Image as ImageIcon, Sparkles } from "lucide-react";
 
 // 判断题干是否提示包含图表（导入时在题干里以「[此题含图…]」「见原 PDF」「见图」等方式标注）
 function hasImageMarker(stem: string): boolean {
@@ -326,14 +326,72 @@ function EditDialog({ kps, initial, token, onClose, onSaved }: {
     term_tags: [], status: "draft",
   });
   const [busy, setBusy] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+
+  // 判断答案/选项是否相对原题发生变化（新建时始终视为已变化）
+  function answerOrOptionsChanged(): boolean {
+    if (!initial) return true;
+    return (
+      initial.correct_answer !== form.correct_answer ||
+      initial.option_a !== form.option_a ||
+      initial.option_b !== form.option_b ||
+      initial.option_c !== form.option_c ||
+      initial.option_d !== form.option_d ||
+      initial.stem !== form.stem
+    );
+  }
+
+  async function reanalyze(): Promise<{ explanation: string; pitfall_note: string } | null> {
+    if (!form.stem || !form.option_a || !form.option_b || !form.option_c || !form.option_d || !form.correct_answer) {
+      toast.error("请先补全题干、四个选项与正确答案");
+      return null;
+    }
+    setAnalyzing(true);
+    try {
+      const r = await fetch("/api/admin/reanalyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-token": token },
+        body: JSON.stringify({
+          stem: form.stem,
+          option_a: form.option_a,
+          option_b: form.option_b,
+          option_c: form.option_c,
+          option_d: form.option_d,
+          correct_answer: form.correct_answer,
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? "AI 分析失败");
+      const next = {
+        explanation: j.explanation ?? form.explanation ?? "",
+        pitfall_note: j.pitfall_note ?? "",
+      };
+      setForm((f) => ({ ...f, explanation: next.explanation, pitfall_note: next.pitfall_note }));
+      toast.success("已重新生成解析");
+      return next;
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "AI 分析失败");
+      return null;
+    } finally {
+      setAnalyzing(false);
+    }
+  }
 
   async function save() {
     setBusy(true);
     try {
+      let payload = form;
+      // 如果答案/选项/题干相对原题发生变化，先让 AI 重新生成解析
+      if (initial && answerOrOptionsChanged()) {
+        const ai = await reanalyze();
+        if (ai) {
+          payload = { ...form, explanation: ai.explanation, pitfall_note: ai.pitfall_note };
+        }
+      }
       const r = await fetch("/api/admin/questions", {
         method: initial ? "PUT" : "POST",
         headers: { "Content-Type": "application/json", "x-admin-token": token },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
       if (!r.ok) throw new Error("保存失败");
       toast.success("已保存");
@@ -395,11 +453,26 @@ function EditDialog({ kps, initial, token, onClose, onSaved }: {
                 value={(form.term_tags ?? []).join(",")}
                 onChange={(e) => setForm({ ...form, term_tags: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })} />
             </div>
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-muted-foreground">
+                {initial && answerOrOptionsChanged() ? (
+                  <span className="text-warning-foreground">答案/选项/题干已变更，保存时将自动用 AI 重新生成解析</span>
+                ) : (
+                  <span>解析与易错提醒</span>
+                )}
+              </div>
+              <Button size="sm" variant="outline" onClick={() => reanalyze()} disabled={analyzing || busy}>
+                {analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                AI 重新分析
+              </Button>
+            </div>
             <Textarea rows={5} placeholder="官方解析（中文）" value={form.explanation ?? ""} onChange={(e) => setForm({ ...form, explanation: e.target.value })} />
             <Textarea rows={2} placeholder="易错提醒（可选）" value={form.pitfall_note ?? ""} onChange={(e) => setForm({ ...form, pitfall_note: e.target.value })} />
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={onClose}>取消</Button>
-              <Button onClick={save} disabled={busy}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "保存"}</Button>
+              <Button onClick={save} disabled={busy || analyzing}>
+                {busy || analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : "保存"}
+              </Button>
             </div>
           </CardContent>
         </Card>
