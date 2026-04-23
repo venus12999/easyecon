@@ -78,6 +78,7 @@ export type Database = {
           difficulty: number
           explanation: string
           id: string
+          image_url: string | null
           knowledge_point_id: string
           option_a: string
           option_b: string
@@ -96,6 +97,7 @@ export type Database = {
           difficulty?: number
           explanation: string
           id?: string
+          image_url?: string | null
           knowledge_point_id: string
           option_a: string
           option_b: string
@@ -114,6 +116,7 @@ export type Database = {
           difficulty?: number
           explanation?: string
           id?: string
+          image_url?: string | null
           knowledge_point_id?: string
           option_a?: string
           option_b?: string
