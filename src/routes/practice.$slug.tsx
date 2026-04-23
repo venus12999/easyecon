@@ -237,6 +237,13 @@ function QuestionCard({
           <p className="text-base leading-relaxed">
             {renderStemWithTerms(q.stem, tags, termDict)}
           </p>
+          {q.image_url && (
+            <img
+              src={q.image_url}
+              alt="题目配图"
+              className="max-h-80 w-auto rounded-md border border-border bg-muted/30"
+            />
+          )}
           <div className="space-y-2">
             {opts.map((o) => {
               const isPicked = picked === o.k;
