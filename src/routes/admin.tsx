@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Loader2, Plus, Trash2, Upload, Image as ImageIcon } from "lucide-react";
-import { useRef } from "react";
 
 // 判断题干是否提示包含图表（导入时在题干里以「[此题含图…]」「见原 PDF」「见图」等方式标注）
 function hasImageMarker(stem: string): boolean {
