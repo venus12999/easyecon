@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { renderStemWithTerms, type TermInfo } from "@/lib/term-render";
+import { optionStyles, colorizeExplanation } from "@/lib/option-colors";
 import { recordAnswer, addWrong, removeWrong } from "@/lib/storage";
 import { Check, X, ChevronLeft, ChevronRight, Bookmark, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
@@ -289,10 +290,21 @@ function QuestionCard({
             <CardContent className="p-6 space-y-3">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">解析</span>
-                <span className="text-sm text-muted-foreground">正确答案：{correct}</span>
+                <span className="text-sm text-muted-foreground">
+                  正确答案：
+                  <span
+                    className="font-bold rounded px-1.5 py-0.5"
+                    style={{
+                      background: optionStyles[correct].bg,
+                      color: "white",
+                    }}
+                  >
+                    {correct}
+                  </span>
+                </span>
               </div>
               <div className="prose prose-sm max-w-none whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                {q.explanation}
+                {colorizeExplanation(q.explanation)}
               </div>
               {q.pitfall_note && (
                 <div className="rounded-md bg-warning/15 border border-warning/30 px-3 py-2 text-sm">

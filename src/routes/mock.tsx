@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { renderStemWithTerms, type TermInfo } from "@/lib/term-render";
+import { optionStyles } from "@/lib/option-colors";
 import { addWrong, recordAnswer } from "@/lib/storage";
 import { Clock, Loader2 } from "lucide-react";
 
@@ -173,14 +174,26 @@ function Mock() {
               <div className="space-y-2">
                 {opts.map((o) => {
                   const picked = answers[cur.id] === o.k;
+                  const s = optionStyles[o.k];
                   return (
                     <button
                       key={o.k}
                       onClick={() => setAnswers({ ...answers, [cur.id]: o.k })}
-                      className={`w-full text-left rounded-lg border px-4 py-3 flex items-start gap-3 hover:border-primary/50 ${picked ? "border-primary bg-primary/5" : ""}`}
+                      className="w-full text-left rounded-lg border-2 px-4 py-3 flex items-start gap-3 transition-all"
+                      style={{
+                        borderColor: picked ? s.border : "transparent",
+                        background: s.bgSoft,
+                      }}
                     >
-                      <span className="shrink-0 w-7 h-7 rounded-full border flex items-center justify-center text-sm font-medium">{o.k}</span>
-                      <span className="flex-1 text-sm pt-0.5">{renderStemWithTerms(o.v, cur.term_tags ?? [], termDict)}</span>
+                      <span
+                        className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white"
+                        style={{ background: s.bg }}
+                      >
+                        {o.k}
+                      </span>
+                      <span className="flex-1 text-sm pt-1" style={{ color: s.ink }}>
+                        {renderStemWithTerms(o.v, cur.term_tags ?? [], termDict)}
+                      </span>
                     </button>
                   );
                 })}
