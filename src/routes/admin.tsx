@@ -168,6 +168,14 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
                   <SelectItem value="pitfall">易错</SelectItem>
                 </SelectContent>
               </Select>
+              <Select value={filterImage} onValueChange={setFilterImage}>
+                <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部图文</SelectItem>
+                  <SelectItem value="image">仅带图题 ({imageCount})</SelectItem>
+                  <SelectItem value="noimage">仅纯文字题</SelectItem>
+                </SelectContent>
+              </Select>
               <Input placeholder="搜索题干…" value={search} onChange={(e) => setSearch(e.target.value)} className="w-60" />
               <Button size="sm" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> 新建</Button>
               <span className="ml-auto text-sm text-muted-foreground">共 {filtered.length} 题</span>
