@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { renderStemWithTerms, type TermInfo } from "@/lib/term-render";
-import { optionStyles } from "@/lib/option-colors";
+import { optionStyles, type OptKey } from "@/lib/option-colors";
 import { addWrong, recordAnswer } from "@/lib/storage";
 import { Clock, Loader2 } from "lucide-react";
 
@@ -23,7 +23,8 @@ type Q = {
   option_b: string;
   option_c: string;
   option_d: string;
-  correct_answer: "A" | "B" | "C" | "D";
+  option_e: string | null;
+  correct_answer: OptKey;
   explanation: string;
   term_tags: string[] | null;
   knowledge_points: { name_zh: string } | null;
@@ -43,7 +44,7 @@ function Mock() {
   const [size, setSize] = useState(15);
   const [pool, setPool] = useState<Q[]>([]);
   const [questions, setQuestions] = useState<Q[]>([]);
-  const [answers, setAnswers] = useState<Record<string, "A" | "B" | "C" | "D">>({});
+  const [answers, setAnswers] = useState<Record<string, OptKey>>({});
   const [idx, setIdx] = useState(0);
   const [seconds, setSeconds] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -70,7 +71,7 @@ function Mock() {
     setLoading(true);
     const { data } = await supabase
       .from("questions")
-      .select("id,knowledge_point_id,stem,option_a,option_b,option_c,option_d,correct_answer,explanation,term_tags,knowledge_points(name_zh)")
+      .select("id,knowledge_point_id,stem,option_a,option_b,option_c,option_d,option_e,correct_answer,explanation,term_tags,knowledge_points(name_zh)")
       .eq("status", "published");
     const all = (data ?? []) as unknown as Q[];
     setPool(all);
@@ -148,9 +149,10 @@ function Mock() {
   if (phase === "running") {
     const cur = questions[idx];
     if (!cur) return null;
-    const opts: Array<{ k: "A" | "B" | "C" | "D"; v: string }> = [
+    const opts: Array<{ k: OptKey; v: string }> = [
       { k: "A", v: cur.option_a }, { k: "B", v: cur.option_b },
       { k: "C", v: cur.option_c }, { k: "D", v: cur.option_d },
+      ...(cur.option_e ? [{ k: "E" as OptKey, v: cur.option_e }] : []),
     ];
     const mm = String(Math.floor(seconds / 60)).padStart(2, "0");
     const ss = String(seconds % 60).padStart(2, "0");

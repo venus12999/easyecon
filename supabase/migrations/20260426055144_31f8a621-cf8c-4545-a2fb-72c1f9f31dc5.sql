@@ -1,0 +1,1 @@
+ALTER TABLE public.questions DROP CONSTRAINT IF EXISTS questions_correct_answer_check;

@@ -84,6 +84,7 @@ export type Database = {
           option_b: string
           option_c: string
           option_d: string
+          option_e: string | null
           pitfall_note: string | null
           status: Database["public"]["Enums"]["question_status"]
           stem: string
@@ -103,6 +104,7 @@ export type Database = {
           option_b: string
           option_c: string
           option_d: string
+          option_e?: string | null
           pitfall_note?: string | null
           status?: Database["public"]["Enums"]["question_status"]
           stem: string
@@ -122,6 +124,7 @@ export type Database = {
           option_b?: string
           option_c?: string
           option_d?: string
+          option_e?: string | null
           pitfall_note?: string | null
           status?: Database["public"]["Enums"]["question_status"]
           stem?: string

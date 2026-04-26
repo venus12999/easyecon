@@ -34,7 +34,8 @@ type Q = {
   option_b: string;
   option_c: string;
   option_d: string;
-  correct_answer: "A" | "B" | "C" | "D";
+  option_e: string | null;
+  correct_answer: "A" | "B" | "C" | "D" | "E";
   explanation: string;
   pitfall_note: string | null;
   term_tags: string[] | null;
@@ -326,7 +327,7 @@ function EditDialog({ kps, initial, token, onClose, onSaved }: {
   const [form, setForm] = useState<Partial<Q>>(initial ?? {
     knowledge_point_id: kps[0]?.id ?? "",
     type: "basic", difficulty: 1, stem: "",
-    option_a: "", option_b: "", option_c: "", option_d: "",
+    option_a: "", option_b: "", option_c: "", option_d: "", option_e: "",
     correct_answer: "A", explanation: "", pitfall_note: "",
     term_tags: [], status: "draft",
   });
@@ -342,13 +343,14 @@ function EditDialog({ kps, initial, token, onClose, onSaved }: {
       initial.option_b !== form.option_b ||
       initial.option_c !== form.option_c ||
       initial.option_d !== form.option_d ||
+      (initial.option_e ?? "") !== (form.option_e ?? "") ||
       initial.stem !== form.stem
     );
   }
 
   async function reanalyze(): Promise<{ explanation: string; pitfall_note: string } | null> {
     if (!form.stem || !form.option_a || !form.option_b || !form.option_c || !form.option_d || !form.correct_answer) {
-      toast.error("请先补全题干、四个选项与正确答案");
+      toast.error("请先补全题干、A–D 选项与正确答案（E 选项可选）");
       return null;
     }
     setAnalyzing(true);
@@ -362,6 +364,7 @@ function EditDialog({ kps, initial, token, onClose, onSaved }: {
           option_b: form.option_b,
           option_c: form.option_c,
           option_d: form.option_d,
+          option_e: form.option_e ?? null,
           correct_answer: form.correct_answer,
           image_url: form.image_url ?? null,
         }),
@@ -449,15 +452,15 @@ function EditDialog({ kps, initial, token, onClose, onSaved }: {
             </div>
             <Textarea rows={4} placeholder="题干（English）" value={form.stem ?? ""} onChange={(e) => setForm({ ...form, stem: e.target.value })} />
             <div className="grid grid-cols-2 gap-2">
-              {(["A","B","C","D"] as const).map((k) => (
-                <Input key={k} placeholder={`选项 ${k}`} value={(form as any)[`option_${k.toLowerCase()}`] ?? ""}
+              {(["A","B","C","D","E"] as const).map((k) => (
+                <Input key={k} placeholder={`选项 ${k}${k === "E" ? "（可选）" : ""}`} value={(form as any)[`option_${k.toLowerCase()}`] ?? ""}
                   onChange={(e) => setForm({ ...form, [`option_${k.toLowerCase()}`]: e.target.value })} />
               ))}
             </div>
             <div className="grid grid-cols-3 gap-2">
               <Select value={form.correct_answer} onValueChange={(v) => setForm({ ...form, correct_answer: v as Q["correct_answer"] })}>
                 <SelectTrigger><SelectValue placeholder="正确答案" /></SelectTrigger>
-                <SelectContent>{["A","B","C","D"].map((k) => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
+                <SelectContent>{["A","B","C","D","E"].map((k) => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
               </Select>
               <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v as Q["status"] })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
