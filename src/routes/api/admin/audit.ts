@@ -10,6 +10,8 @@ type AuditFinding = {
   suggested_type?: string;
   suggested_kp_slug?: string;
   reason: string;
+  confidence: number;
+  key_evidence?: string;
   stem_preview: string;
 };
 
@@ -149,9 +151,13 @@ ${JSON.stringify(itemsForAi, null, 2)}`;
                               },
                               suggested_kp_slug: { type: "string" },
                               confidence: { type: "integer", minimum: 1, maximum: 5 },
+                              key_evidence: {
+                                type: "string",
+                                description: "题干或选项中决定改判的关键短语原文（10-40字），用于高亮展示给管理员",
+                              },
                               reason: { type: "string" },
                             },
-                            required: ["question_id", "confidence", "reason"],
+                            required: ["question_id", "confidence", "key_evidence", "reason"],
                             additionalProperties: false,
                           },
                         },
@@ -179,7 +185,16 @@ ${JSON.stringify(itemsForAi, null, 2)}`;
 
           const j = await r.json();
           const toolCall = j?.choices?.[0]?.message?.tool_calls?.[0];
-          let parsed: { findings?: Array<{ question_id: string; suggested_type?: string; suggested_kp_slug?: string; confidence?: number; reason: string }> } = {};
+          let parsed: {
+            findings?: Array<{
+              question_id: string;
+              suggested_type?: string;
+              suggested_kp_slug?: string;
+              confidence?: number;
+              key_evidence?: string;
+              reason: string;
+            }>;
+          } = {};
           try {
             const argStr = toolCall?.function?.arguments;
             if (argStr) {
@@ -210,6 +225,8 @@ ${JSON.stringify(itemsForAi, null, 2)}`;
               suggested_type: suggestedType,
               suggested_kp_slug: suggestedSlug,
               reason: f.reason,
+              confidence: typeof f.confidence === "number" ? f.confidence : 4,
+              key_evidence: f.key_evidence,
               stem_preview: q.stem.slice(0, 120),
             });
           }

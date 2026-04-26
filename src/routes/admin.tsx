@@ -591,6 +591,8 @@ type Finding = {
   suggested_type?: string;
   suggested_kp_slug?: string;
   reason: string;
+  confidence: number;
+  key_evidence?: string;
   stem_preview: string;
 };
 
@@ -722,10 +724,38 @@ function AuditPanel({
             <div className="space-y-2">
               {findings.map((f) => {
                 const newKp = f.suggested_kp_slug ? kps.find((k) => k.slug === f.suggested_kp_slug) : null;
+                const conf = Math.max(1, Math.min(5, f.confidence ?? 4));
+                const confTone =
+                  conf >= 5
+                    ? "bg-destructive/15 text-destructive border-destructive/30"
+                    : "bg-warning/15 text-warning border-warning/30";
+                // 在题干预览中高亮 AI 给出的关键证据短语
+                const evidence = f.key_evidence?.trim();
+                let stemNode: React.ReactNode = f.stem_preview;
+                if (evidence && f.stem_preview.toLowerCase().includes(evidence.toLowerCase())) {
+                  const idx = f.stem_preview.toLowerCase().indexOf(evidence.toLowerCase());
+                  stemNode = (
+                    <>
+                      {f.stem_preview.slice(0, idx)}
+                      <mark className="bg-warning/30 text-foreground rounded px-0.5">
+                        {f.stem_preview.slice(idx, idx + evidence.length)}
+                      </mark>
+                      {f.stem_preview.slice(idx + evidence.length)}
+                    </>
+                  );
+                }
                 return (
                   <Card key={f.question_id} className="border-warning/40">
                     <CardContent className="p-4 space-y-2">
-                      <p className="text-sm line-clamp-2">{f.stem_preview}</p>
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm line-clamp-2 flex-1">{stemNode}</p>
+                        <span
+                          className={`shrink-0 text-[11px] px-1.5 py-0.5 rounded border font-medium ${confTone}`}
+                          title="AI 置信度（仅展示 ≥4 的建议）"
+                        >
+                          置信度 {conf}/5
+                        </span>
+                      </div>
                       <div className="text-xs space-y-1">
                         {f.suggested_type && (
                           <div>
@@ -743,6 +773,14 @@ function AuditPanel({
                             <span className="px-1.5 py-0.5 rounded bg-success/15 text-success font-medium">
                               → {newKp?.name_zh ?? f.suggested_kp_slug}
                             </span>
+                          </div>
+                        )}
+                        {evidence && (
+                          <div>
+                            <span className="text-muted-foreground">关键依据：</span>
+                            <mark className="bg-warning/30 text-foreground rounded px-1 py-0.5">
+                              {evidence}
+                            </mark>
                           </div>
                         )}
                         <div className="text-muted-foreground">理由：{f.reason}</div>
