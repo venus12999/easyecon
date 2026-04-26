@@ -11,7 +11,8 @@ type Item = {
   option_b: string;
   option_c: string;
   option_d: string;
-  correct_answer: "A" | "B" | "C" | "D";
+  option_e?: string | null;
+  correct_answer: "A" | "B" | "C" | "D" | "E";
   explanation: string;
   pitfall_note?: string | null;
   term_tags?: string[];
@@ -44,6 +45,7 @@ export const Route = createFileRoute("/api/admin/import")({
             option_b: it.option_b,
             option_c: it.option_c,
             option_d: it.option_d,
+            option_e: it.option_e ?? null,
             correct_answer: it.correct_answer,
             explanation: it.explanation,
             pitfall_note: it.pitfall_note ?? null,
