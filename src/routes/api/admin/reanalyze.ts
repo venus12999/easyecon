@@ -20,7 +20,8 @@ export const Route = createFileRoute("/api/admin/reanalyze")({
             option_b: string;
             option_c: string;
             option_d: string;
-            correct_answer: "A" | "B" | "C" | "D";
+            option_e?: string | null;
+            correct_answer: "A" | "B" | "C" | "D" | "E";
             image_url?: string | null;
           };
           const apiKey = process.env.LOVABLE_API_KEY;
@@ -32,17 +33,18 @@ export const Route = createFileRoute("/api/admin/reanalyze")({
           }
 
           const hasImage = !!body.image_url;
+          const hasE = !!(body.option_e && body.option_e.trim());
           const system = `你是 AP 微观经济（AP Microeconomics）资深命题分析专家，专为中国学生编写题库解析。
 严格规则：
 1. 只用简体中文输出 JSON，不要任何 Markdown 代码块包裹。
 2. 紧扣 AP CED 大纲与微观经济学标准定义。
-3. 解析需点出正确答案为何正确，并简要说明其它选项的错误所在。
+3. 解析需点出正确答案为何正确，并必须**逐一**说明其它每个选项（包括 E 选项，若存在）为什么错误，不能遗漏任何一个错误选项。
 4. 若你判断题库给出的正确答案与你分析不一致，仍需以题库为准撰写解析，但在 pitfall_note 字段提示"建议复核：本题正确答案疑为 X"。
-5. 解析控制在 200 字以内，分点清晰。
+5. 解析按选项分点（- A选项：…  - B选项：…），正确选项也要单独说明，控制在 400 字以内。
 ${hasImage ? "6. 本题附带图片（图表/曲线/表格），必须先读图再结合题干分析，解析中需引用图中关键信息（如曲线移动方向、均衡点变化、表格数值等）。" : ""}
 输出严格 JSON 格式：{"explanation": "...", "pitfall_note": "..."}（pitfall_note 可为空字符串）`;
 
-          const userMsg = `【题目】\n${body.stem}\n\n【选项】\nA. ${body.option_a}\nB. ${body.option_b}\nC. ${body.option_c}\nD. ${body.option_d}\n\n【题库标记的正确答案】${body.correct_answer}`;
+          const userMsg = `【题目】\n${body.stem}\n\n【选项】\nA. ${body.option_a}\nB. ${body.option_b}\nC. ${body.option_c}\nD. ${body.option_d}${hasE ? `\nE. ${body.option_e}` : ""}\n\n【题库标记的正确答案】${body.correct_answer}\n\n请对每一个选项（A/B/C/D${hasE ? "/E" : ""}）都给出一句解析，不能漏。`;
 
           const userContent: unknown = hasImage
             ? [
@@ -63,6 +65,7 @@ ${hasImage ? "6. 本题附带图片（图表/曲线/表格），必须先读图�
                 { role: "system", content: system },
                 { role: "user", content: userContent },
               ],
+              max_tokens: 2048,
             }),
           });
 
