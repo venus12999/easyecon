@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { renderStemWithTerms, type TermInfo } from "@/lib/term-render";
-import { optionStyles, colorizeExplanation } from "@/lib/option-colors";
+import { optionStyles, colorizeExplanation, type OptKey } from "@/lib/option-colors";
 import { recordAnswer, addWrong, removeWrong } from "@/lib/storage";
 import { Check, X, ChevronLeft, ChevronRight, Bookmark, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
@@ -39,7 +39,8 @@ type Q = {
   option_b: string;
   option_c: string;
   option_d: string;
-  correct_answer: "A" | "B" | "C" | "D";
+  option_e: string | null;
+  correct_answer: OptKey;
   explanation: string;
   pitfall_note: string | null;
   term_tags: string[] | null;
@@ -55,7 +56,7 @@ function Practice() {
   const [kp, setKp] = useState<Kp | null>(null);
   const [questions, setQuestions] = useState<Q[]>([]);
   const [idx, setIdx] = useState(0);
-  const [picked, setPicked] = useState<"A" | "B" | "C" | "D" | null>(null);
+  const [picked, setPicked] = useState<OptKey | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [termDict, setTermDict] = useState<Record<string, TermInfo>>({});
   const [loading, setLoading] = useState(true);
@@ -217,16 +218,17 @@ function QuestionCard({
   termDict,
 }: {
   q: Q;
-  picked: "A" | "B" | "C" | "D" | null;
+  picked: OptKey | null;
   submitted: boolean;
-  onPick: (v: "A" | "B" | "C" | "D") => void;
+  onPick: (v: OptKey) => void;
   termDict: Record<string, TermInfo>;
 }) {
-  const opts: Array<{ k: "A" | "B" | "C" | "D"; v: string }> = [
+  const opts: Array<{ k: OptKey; v: string }> = [
     { k: "A", v: q.option_a },
     { k: "B", v: q.option_b },
     { k: "C", v: q.option_c },
     { k: "D", v: q.option_d },
+    ...(q.option_e ? [{ k: "E" as OptKey, v: q.option_e }] : []),
   ];
   const tags = q.term_tags ?? [];
   const correct = q.correct_answer;
@@ -351,7 +353,13 @@ function AskAi({ q }: { q: Q }) {
           question: input,
           context: {
             stem: q.stem,
-            options: { A: q.option_a, B: q.option_b, C: q.option_c, D: q.option_d },
+            options: {
+              A: q.option_a,
+              B: q.option_b,
+              C: q.option_c,
+              D: q.option_d,
+              ...(q.option_e ? { E: q.option_e } : {}),
+            },
             correct: q.correct_answer,
             explanation: q.explanation,
           },
