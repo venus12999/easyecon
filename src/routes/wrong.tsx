@@ -30,11 +30,34 @@ function WrongBook() {
       setLoading(false);
       return;
     }
-    const { data } = await supabase
+    const { data: qs, error: qErr } = await supabase
       .from("questions")
-      .select("id,stem,knowledge_point_id,knowledge_points(name_zh,slug)")
+      .select("id,stem,knowledge_point_id")
       .in("id", ids);
-    setItems((data ?? []) as unknown as Q[]);
+    if (qErr) {
+      console.error("[wrong] questions query failed", qErr);
+      setItems([]);
+      setLoading(false);
+      return;
+    }
+    const kpIds = Array.from(new Set((qs ?? []).map((q) => q.knowledge_point_id)));
+    const kpMap: Record<string, { name_zh: string; slug: string }> = {};
+    if (kpIds.length > 0) {
+      const { data: kps } = await supabase
+        .from("knowledge_points")
+        .select("id,name_zh,slug")
+        .in("id", kpIds);
+      (kps ?? []).forEach((k) => {
+        kpMap[k.id] = { name_zh: k.name_zh, slug: k.slug };
+      });
+    }
+    const merged: Q[] = (qs ?? []).map((q) => ({
+      id: q.id,
+      stem: q.stem,
+      knowledge_point_id: q.knowledge_point_id,
+      knowledge_points: kpMap[q.knowledge_point_id] ?? null,
+    }));
+    setItems(merged);
     setLoading(false);
   }
   useEffect(() => {
