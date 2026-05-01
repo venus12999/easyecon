@@ -82,7 +82,7 @@ function Index() {
       <main className="mx-auto max-w-6xl px-4 py-8">
         <section className="mb-8">
           <div className="flex items-center gap-2 text-xs text-primary font-medium mb-2">
-            <Sparkles className="h-3.5 w-3.5" /> Phase 1 · Unit 2 Supply & Demand
+            <Sparkles className="h-3.5 w-3.5" /> AP Microeconomics
           </div>
           <h1 className="text-3xl font-bold tracking-tight">选一个知识点开始刷</h1>
           <p className="mt-2 text-muted-foreground">
