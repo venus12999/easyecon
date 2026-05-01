@@ -106,6 +106,7 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
   const [kps, setKps] = useState<Kp[]>([]);
   const [questions, setQuestions] = useState<Q[]>([]);
   const [filterKp, setFilterKp] = useState<string>("all");
+  const [filterUnit, setFilterUnit] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
   const [filterImage, setFilterImage] = useState<string>("all");
   const [search, setSearch] = useState("");
@@ -127,6 +128,10 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
   useEffect(() => { reload(); }, [reload]);
 
   const filtered = questions.filter((q) => {
+    if (filterUnit !== "all") {
+      const kp = kps.find((k) => k.id === q.knowledge_point_id);
+      if (!kp || String(kp.unit) !== filterUnit) return false;
+    }
     if (filterKp !== "all" && q.knowledge_point_id !== filterKp) return false;
     if (filterType !== "all" && q.type !== filterType) return false;
     if (filterImage === "image" && !hasImageMarker(q.stem)) return false;
@@ -136,6 +141,8 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
   });
 
   const imageCount = questions.filter((q) => hasImageMarker(q.stem)).length;
+  const units = Array.from(new Set(kps.map((k) => k.unit))).sort((a, b) => a - b);
+  const visibleKps = filterUnit === "all" ? kps : kps.filter((k) => String(k.unit) === filterUnit);
 
   return (
     <div className="min-h-screen bg-background">
@@ -155,11 +162,18 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
 
           <TabsContent value="list" className="mt-4">
             <div className="flex flex-wrap gap-2 mb-4 items-center">
+              <Select value={filterUnit} onValueChange={(v) => { setFilterUnit(v); setFilterKp("all"); }}>
+                <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部单元</SelectItem>
+                  {units.map((u) => <SelectItem key={u} value={String(u)}>Unit {u}</SelectItem>)}
+                </SelectContent>
+              </Select>
               <Select value={filterKp} onValueChange={setFilterKp}>
                 <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">全部知识点</SelectItem>
-                  {kps.map((k) => <SelectItem key={k.id} value={k.id}>{k.name_zh}</SelectItem>)}
+                  {visibleKps.map((k) => <SelectItem key={k.id} value={k.id}>{k.name_zh}</SelectItem>)}
                 </SelectContent>
               </Select>
               <Select value={filterType} onValueChange={setFilterType}>
