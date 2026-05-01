@@ -29,7 +29,10 @@ type Kp = {
   sort_order: number;
 };
 
-type Counts = Record<string, { basic: number; application: number; pitfall: number; total: number }>;
+type Counts = Record<
+  string,
+  { basic: number; application: number; pitfall: number; total: number; draft: number }
+>;
 
 function Index() {
   const [kps, setKps] = useState<Kp[]>([]);
@@ -37,6 +40,7 @@ function Index() {
   const [progress, setProgress] = useState<ProgressMap>({});
   const [tab, setTab] = useState<"basic" | "application" | "pitfall">("basic");
   const [loading, setLoading] = useState(true);
+  const [unit, setUnit] = useState<number | null>(null);
 
   useEffect(() => {
     setProgress(getProgress());
@@ -44,24 +48,33 @@ function Index() {
       const { data: kpData } = await supabase
         .from("knowledge_points")
         .select("*")
-        .eq("unit", 2)
+        .order("unit")
         .order("sort_order");
       const { data: qData } = await supabase
         .from("questions")
-        .select("knowledge_point_id,type")
-        .eq("status", "published");
+        .select("knowledge_point_id,type,status");
       const c: Counts = {};
       (qData ?? []).forEach((q) => {
         const k = q.knowledge_point_id as string;
-        if (!c[k]) c[k] = { basic: 0, application: 0, pitfall: 0, total: 0 };
-        c[k][q.type as "basic" | "application" | "pitfall"] += 1;
-        c[k].total += 1;
+        if (!c[k]) c[k] = { basic: 0, application: 0, pitfall: 0, total: 0, draft: 0 };
+        if (q.status === "published") {
+          c[k][q.type as "basic" | "application" | "pitfall"] += 1;
+          c[k].total += 1;
+        } else {
+          c[k].draft += 1;
+        }
       });
-      setKps((kpData ?? []) as Kp[]);
+      const kpList = (kpData ?? []) as Kp[];
+      setKps(kpList);
+      const firstUnit = kpList[0]?.unit ?? null;
+      setUnit((cur) => cur ?? firstUnit);
       setCounts(c);
       setLoading(false);
     })();
   }, []);
+
+  const allUnits = Array.from(new Set(kps.map((k) => k.unit))).sort((a, b) => a - b);
+  const visibleKps = unit == null ? kps : kps.filter((k) => k.unit === unit);
 
   return (
     <div className="min-h-screen bg-background">
@@ -76,6 +89,24 @@ function Index() {
             英文题干 + 中文解析 + 术语悬停翻译。专为中国 AP 学生设计。
           </p>
         </section>
+
+        {allUnits.length > 0 && (
+          <div className="mb-4 flex flex-wrap gap-2">
+            {allUnits.map((u) => (
+              <button
+                key={u}
+                onClick={() => setUnit(u)}
+                className={`px-3 py-1.5 rounded-md text-sm border transition-colors ${
+                  unit === u
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-card hover:bg-accent"
+                }`}
+              >
+                Unit {u}
+              </button>
+            ))}
+          </div>
+        )}
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)} className="mb-6">
           <TabsList>
@@ -93,8 +124,8 @@ function Index() {
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {kps.map((kp) => {
-              const c = counts[kp.id] ?? { basic: 0, application: 0, pitfall: 0, total: 0 };
+            {visibleKps.map((kp) => {
+              const c = counts[kp.id] ?? { basic: 0, application: 0, pitfall: 0, total: 0, draft: 0 };
               const n = c[tab];
               const p = progress[kp.id];
               const acc = p && p.attempts > 0 ? Math.round((p.correct / p.attempts) * 100) : null;
@@ -126,7 +157,11 @@ function Index() {
                       )}
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-muted-foreground">
-                          {n > 0 ? `${n} 题` : "暂无题目"}
+                          {n > 0
+                            ? `${n} 题`
+                            : c.draft > 0
+                              ? `暂无题目（${c.draft} 道待审核）`
+                              : "暂无题目"}
                         </span>
                         {acc !== null ? (
                           <span className="text-primary font-medium">
