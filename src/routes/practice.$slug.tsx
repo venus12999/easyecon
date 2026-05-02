@@ -11,6 +11,7 @@ import { optionStyles, colorizeExplanation, type OptKey } from "@/lib/option-col
 import { recordAnswer, addWrong, removeWrong } from "@/lib/storage";
 import { Check, X, ChevronLeft, ChevronRight, Bookmark, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/use-auth";
 
 const searchSchema = z.object({
   type: z.enum(["basic", "application", "pitfall"]).optional(),
@@ -51,6 +52,7 @@ function Practice() {
   const { slug } = Route.useParams();
   const { type } = Route.useSearch();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [kp, setKp] = useState<Kp | null>(null);
   const [questions, setQuestions] = useState<Q[]>([]);
@@ -104,6 +106,24 @@ function Practice() {
     recordAnswer(cur.knowledge_point_id, ok);
     if (!ok) addWrong(cur.id);
     else removeWrong(cur.id);
+    if (user) {
+      void supabase.from("answer_attempts").insert({
+        user_id: user.id,
+        question_id: cur.id,
+        knowledge_point_id: cur.knowledge_point_id,
+        picked_answer: picked,
+        is_correct: ok,
+        mode: "practice",
+      });
+      if (!ok) {
+        void supabase.from("wrong_questions").upsert(
+          { user_id: user.id, question_id: cur.id },
+          { onConflict: "user_id,question_id" },
+        );
+      } else {
+        void supabase.from("wrong_questions").delete().eq("user_id", user.id).eq("question_id", cur.id);
+      }
+    }
   }
   function next() {
     if (idx < questions.length - 1) {
