@@ -125,6 +125,10 @@ function Practice() {
       }
     }
   }
+  function finishPractice() {
+    if (picked && !submitted) submit();
+    void navigate({ to: "/" });
+  }
   function next() {
     if (idx < questions.length - 1) {
       setIdx(idx + 1);
@@ -183,8 +187,8 @@ function Practice() {
         <div className="mb-4">
           <div className="flex items-center justify-between">
             <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">← 返回知识点</Link>
-            <Button asChild variant="outline" size="sm">
-              <Link to="/"><Home className="h-4 w-4 mr-1" />结束练习</Link>
+            <Button type="button" variant="outline" size="sm" onClick={finishPractice}>
+              <Home className="h-4 w-4 mr-1" />结束练习
             </Button>
           </div>
         </div>
@@ -231,8 +235,8 @@ function Practice() {
             <Button onClick={submit} disabled={!picked}>提交</Button>
           ) : (
             idx === questions.length - 1 ? (
-              <Button asChild>
-                <Link to="/"><Home className="h-4 w-4 mr-1" />完成 · 返回主页</Link>
+              <Button type="button" onClick={finishPractice}>
+                <Home className="h-4 w-4 mr-1" />完成 · 返回主页
               </Button>
             ) : (
               <Button onClick={next}>
