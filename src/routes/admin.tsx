@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Loader2, Plus, Trash2, Upload, Image as ImageIcon, Sparkles } from "lucide-react";
+import { Loader2, Plus, Trash2, Upload, Image as ImageIcon, Sparkles, Inbox } from "lucide-react";
 
 // 判断题干是否提示包含图表（导入时在题干里以「[此题含图…]」「见原 PDF」「见图」等方式标注）
 function hasImageMarker(stem: string): boolean {
@@ -158,6 +158,7 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
             <TabsTrigger value="list">题目列表</TabsTrigger>
             <TabsTrigger value="import">批量导入</TabsTrigger>
             <TabsTrigger value="audit">AI 审核</TabsTrigger>
+            <TabsTrigger value="feedback">用户反馈</TabsTrigger>
           </TabsList>
 
           <TabsContent value="list" className="mt-4">
@@ -255,6 +256,10 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
 
           <TabsContent value="audit" className="mt-4">
             <AuditPanel token={token} kps={kps} questions={questions} onApplied={reload} />
+          </TabsContent>
+
+          <TabsContent value="feedback" className="mt-4">
+            <FeedbackPanel token={token} />
           </TabsContent>
         </Tabs>
 
