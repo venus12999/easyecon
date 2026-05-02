@@ -25,7 +25,7 @@ export const Route = createFileRoute("/api/admin/feedback")({
         if (!verifyToken(request.headers.get("x-admin-token"))) return unauth();
         const { id, status, admin_note } = await request.json();
         if (!id) return new Response(JSON.stringify({ error: "missing id" }), { status: 400 });
-        const patch: Record<string, unknown> = {};
+        const patch: { status?: "new" | "in_progress" | "resolved"; admin_note?: string } = {};
         if (status && ["new", "in_progress", "resolved"].includes(status)) patch.status = status;
         if (typeof admin_note === "string") patch.admin_note = admin_note;
         const { data, error } = await supabaseAdmin
