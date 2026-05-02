@@ -20,7 +20,42 @@ export const optionStyles: Record<OptKey, { bg: string; bgSoft: string; ink: str
  */
 export function colorizeExplanation(text: string): ReactNode[] {
   if (!text) return [];
-  const re = /(选项\s*[ABCDE]|答案\s*[ABCDE]|Option\s*[ABCDE]|\([ABCDE]\)|([ABCDE])|「[ABCDE]」|【[ABCDE]】|\b[ABCDE]\s*选项)/g;
+
+  // 1) 如果解析按 A./B./C... 分段解释每个选项，则每段整体着色
+  const segRe = /(^|\n)\s*(?:选项\s*)?([ABCDE])\s*[\.、:：\)）]\s*/g;
+  const segMatches: { letter: OptKey; start: number; contentStart: number }[] = [];
+  let sm: RegExpExecArray | null;
+  while ((sm = segRe.exec(text)) !== null) {
+    segMatches.push({
+      letter: sm[2] as OptKey,
+      start: sm.index + sm[1].length,
+      contentStart: sm.index + sm[0].length,
+    });
+  }
+  const distinctLetters = new Set(segMatches.map((s) => s.letter));
+  if (segMatches.length >= 2 && distinctLetters.size >= 2) {
+    const parts: ReactNode[] = [];
+    if (segMatches[0].start > 0) parts.push(text.slice(0, segMatches[0].start));
+    for (let i = 0; i < segMatches.length; i++) {
+      const cur = segMatches[i];
+      const end = i + 1 < segMatches.length ? segMatches[i + 1].start : text.length;
+      const seg = text.slice(cur.start, end);
+      const s = optionStyles[cur.letter];
+      parts.push(
+        <span
+          key={`seg-${i}`}
+          className="block rounded px-2 py-1 my-1"
+          style={{ color: s.ink, background: s.bgSoft, borderLeft: `3px solid ${s.bg}` }}
+        >
+          {seg}
+        </span>,
+      );
+    }
+    return parts;
+  }
+
+  // 2) 否则只对明确指代选项的写法着色（避免命中 MC、AP、E 等普通字母）
+  const re = /(选项\s*[ABCDE]|答案\s*[ABCDE]|Option\s+[ABCDE]|\([ABCDE]\)|（[ABCDE]）|「[ABCDE]」|【[ABCDE]】|[ABCDE]\s*选项)/g;
   const parts: ReactNode[] = [];
   let last = 0;
   let m: RegExpExecArray | null;
