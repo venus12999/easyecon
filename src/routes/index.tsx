@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getProgress, type ProgressMap } from "@/lib/storage";
 import { ChevronRight, Sparkles } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -40,6 +41,29 @@ function Index() {
   const [tab, setTab] = useState<"basic" | "application" | "pitfall">("basic");
   const [loading, setLoading] = useState(true);
   const [unit, setUnit] = useState<number | null>(null);
+  const { user } = useAuth();
+  const [stats, setStats] = useState<{ today: number; rate: number | null; totalAttempts: number }>({
+    today: 0,
+    rate: null,
+    totalAttempts: 0,
+  });
+
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      const { data } = await supabase
+        .from("answer_attempts")
+        .select("is_correct,created_at")
+        .eq("user_id", user.id);
+      if (!data) return;
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+      const today = data.filter((a) => new Date(a.created_at) >= startOfDay).length;
+      const total = data.length;
+      const correct = data.filter((a) => a.is_correct).length;
+      setStats({ today, totalAttempts: total, rate: total ? Math.round((correct / total) * 100) : null });
+    })();
+  }, [user]);
 
   useEffect(() => {
     setProgress(getProgress());
@@ -88,6 +112,54 @@ function Index() {
             英文题干 + 中文解析 + 术语悬停翻译。专为中国 AP 学生设计。
           </p>
         </section>
+
+        {user && (
+          <section className="grid gap-3 sm:grid-cols-3 mb-6">
+            <Card>
+              <CardContent className="p-5">
+                <div className="text-xs text-muted-foreground">今日已完成</div>
+                <div className="mt-1 text-3xl font-bold text-primary">{stats.today}</div>
+                <div className="mt-1 text-xs text-muted-foreground">累计 {stats.totalAttempts} 题</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-5">
+                <div className="text-xs text-muted-foreground">总正确率</div>
+                <div className="mt-1 text-3xl font-bold text-success">
+                  {stats.rate !== null ? `${stats.rate}%` : "—"}
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">基于全部答题</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-5">
+                <div className="text-xs text-muted-foreground">账号</div>
+                <div className="mt-1 text-sm font-semibold truncate" title={user.email ?? ""}>
+                  {user.email}
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">数据自动云端保存</div>
+              </CardContent>
+            </Card>
+          </section>
+        )}
+        {!user && (
+          <Card className="mb-6 border-primary/30 bg-primary/5">
+            <CardContent className="p-5 flex items-center justify-between gap-4">
+              <div className="text-sm">
+                <div className="font-semibold">注册后所有进度自动云端保存</div>
+                <div className="text-muted-foreground text-xs mt-1">
+                  每个邮箱仅可注册一次。当前为游客模式。
+                </div>
+              </div>
+              <Link
+                to="/auth"
+                className="shrink-0 inline-flex items-center rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90"
+              >
+                登录 / 注册
+              </Link>
+            </CardContent>
+          </Card>
+        )}
 
         {allUnits.length > 0 && (
           <div className="mb-4 flex flex-wrap gap-2">
