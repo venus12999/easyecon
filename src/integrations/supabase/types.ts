@@ -35,6 +35,42 @@ export type Database = {
         }
         Relationships: []
       }
+      feedback: {
+        Row: {
+          admin_note: string | null
+          category: Database["public"]["Enums"]["feedback_category"]
+          contact: string | null
+          created_at: string
+          id: string
+          message: string
+          page_url: string | null
+          status: Database["public"]["Enums"]["feedback_status"]
+          updated_at: string
+        }
+        Insert: {
+          admin_note?: string | null
+          category?: Database["public"]["Enums"]["feedback_category"]
+          contact?: string | null
+          created_at?: string
+          id?: string
+          message: string
+          page_url?: string | null
+          status?: Database["public"]["Enums"]["feedback_status"]
+          updated_at?: string
+        }
+        Update: {
+          admin_note?: string | null
+          category?: Database["public"]["Enums"]["feedback_category"]
+          contact?: string | null
+          created_at?: string
+          id?: string
+          message?: string
+          page_url?: string | null
+          status?: Database["public"]["Enums"]["feedback_status"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
       knowledge_points: {
         Row: {
           created_at: string
@@ -183,6 +219,8 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
+      feedback_category: "bug" | "suggestion"
+      feedback_status: "new" | "in_progress" | "resolved"
       question_status: "draft" | "published"
       question_type: "basic" | "application" | "pitfall"
     }
@@ -312,6 +350,8 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      feedback_category: ["bug", "suggestion"],
+      feedback_status: ["new", "in_progress", "resolved"],
       question_status: ["draft", "published"],
       question_type: ["basic", "application", "pitfall"],
     },
