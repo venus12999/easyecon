@@ -51,16 +51,27 @@ function Index() {
   useEffect(() => {
     if (!user) return;
     (async () => {
-      const { data } = await supabase
-        .from("answer_attempts")
-        .select("is_correct,created_at")
-        .eq("user_id", user.id);
-      if (!data) return;
       const startOfDay = new Date();
       startOfDay.setHours(0, 0, 0, 0);
-      const today = data.filter((a) => new Date(a.created_at) >= startOfDay).length;
-      const total = data.length;
-      const correct = data.filter((a) => a.is_correct).length;
+      const [todayRes, totalRes, correctRes] = await Promise.all([
+        supabase
+          .from("answer_attempts")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .gte("created_at", startOfDay.toISOString()),
+        supabase
+          .from("answer_attempts")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id),
+        supabase
+          .from("answer_attempts")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .eq("is_correct", true),
+      ]);
+      const today = todayRes.count ?? 0;
+      const total = totalRes.count ?? 0;
+      const correct = correctRes.count ?? 0;
       setStats({ today, totalAttempts: total, rate: total ? Math.round((correct / total) * 100) : null });
     })();
   }, [user]);
