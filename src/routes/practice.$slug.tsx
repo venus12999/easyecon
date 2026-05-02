@@ -2,7 +2,6 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
-import { SiteHeader } from "@/components/SiteHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -12,6 +11,7 @@ import { optionStyles, colorizeExplanation, type OptKey } from "@/lib/option-col
 import { recordAnswer, addWrong, removeWrong } from "@/lib/storage";
 import { Check, X, ChevronLeft, ChevronRight, Bookmark, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/hooks/use-auth";
 
 const searchSchema = z.object({
   type: z.enum(["basic", "application", "pitfall"]).optional(),
@@ -52,6 +52,7 @@ function Practice() {
   const { slug } = Route.useParams();
   const { type } = Route.useSearch();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [kp, setKp] = useState<Kp | null>(null);
   const [questions, setQuestions] = useState<Q[]>([]);
@@ -105,6 +106,24 @@ function Practice() {
     recordAnswer(cur.knowledge_point_id, ok);
     if (!ok) addWrong(cur.id);
     else removeWrong(cur.id);
+    if (user) {
+      void supabase.from("answer_attempts").insert({
+        user_id: user.id,
+        question_id: cur.id,
+        knowledge_point_id: cur.knowledge_point_id,
+        picked_answer: picked,
+        is_correct: ok,
+        mode: "practice",
+      });
+      if (!ok) {
+        void supabase.from("wrong_questions").upsert(
+          { user_id: user.id, question_id: cur.id },
+          { onConflict: "user_id,question_id" },
+        );
+      } else {
+        void supabase.from("wrong_questions").delete().eq("user_id", user.id).eq("question_id", cur.id);
+      }
+    }
   }
   function next() {
     if (idx < questions.length - 1) {
@@ -124,7 +143,7 @@ function Practice() {
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
-        <SiteHeader />
+        
         <main className="mx-auto max-w-3xl px-4 py-12 text-center text-muted-foreground">
           <Loader2 className="h-6 w-6 animate-spin mx-auto" />
         </main>
@@ -134,7 +153,7 @@ function Practice() {
   if (!kp) {
     return (
       <div className="min-h-screen bg-background">
-        <SiteHeader />
+        
         <main className="mx-auto max-w-3xl px-4 py-12 text-center">
           <p>知识点不存在</p>
           <Link to="/" className="text-primary underline mt-2 inline-block">返回首页</Link>
@@ -145,7 +164,7 @@ function Practice() {
   if (questions.length === 0) {
     return (
       <div className="min-h-screen bg-background">
-        <SiteHeader />
+        
         <main className="mx-auto max-w-3xl px-4 py-12 text-center">
           <h1 className="text-xl font-semibold">{kp.name_zh} · {kp.name_en}</h1>
           <p className="mt-3 text-muted-foreground">该题型下暂无已发布题目。</p>
@@ -159,7 +178,7 @@ function Practice() {
 
   return (
     <div className="min-h-screen bg-background">
-      <SiteHeader />
+      
       <main className="mx-auto max-w-3xl px-4 py-6 pb-24">
         <div className="mb-4">
           <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">← 返回知识点</Link>
@@ -192,6 +211,12 @@ function Practice() {
             size="sm"
             onClick={() => {
               addWrong(cur!.id);
+                if (user && cur) {
+                  void supabase.from("wrong_questions").upsert(
+                    { user_id: user.id, question_id: cur.id },
+                    { onConflict: "user_id,question_id" },
+                  );
+                }
               toast.success("已加入错题本");
             }}
           >

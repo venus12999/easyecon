@@ -35,6 +35,39 @@ export type Database = {
         }
         Relationships: []
       }
+      answer_attempts: {
+        Row: {
+          created_at: string
+          id: string
+          is_correct: boolean
+          knowledge_point_id: string
+          mode: string
+          picked_answer: string | null
+          question_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_correct: boolean
+          knowledge_point_id: string
+          mode?: string
+          picked_answer?: string | null
+          question_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_correct?: boolean
+          knowledge_point_id?: string
+          mode?: string
+          picked_answer?: string | null
+          question_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       feedback: {
         Row: {
           admin_note: string | null
@@ -104,6 +137,63 @@ export type Database = {
           sort_order?: number
           unit?: number
           updated_at?: string
+        }
+        Relationships: []
+      }
+      mock_attempts: {
+        Row: {
+          correct: number
+          created_at: string
+          detail: Json
+          duration_seconds: number
+          id: string
+          total: number
+          user_id: string
+        }
+        Insert: {
+          correct: number
+          created_at?: string
+          detail?: Json
+          duration_seconds: number
+          id?: string
+          total: number
+          user_id: string
+        }
+        Update: {
+          correct?: number
+          created_at?: string
+          detail?: Json
+          duration_seconds?: number
+          id?: string
+          total?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          email: string
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          email: string
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          email?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -208,6 +298,24 @@ export type Database = {
           term_zh?: string
           unit?: number | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      wrong_questions: {
+        Row: {
+          added_at: string
+          question_id: string
+          user_id: string
+        }
+        Insert: {
+          added_at?: string
+          question_id: string
+          user_id: string
+        }
+        Update: {
+          added_at?: string
+          question_id?: string
+          user_id?: string
         }
         Relationships: []
       }

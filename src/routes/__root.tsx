@@ -1,8 +1,11 @@
-import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
+import { Outlet, Link, createRootRoute, HeadContent, Scripts, useRouterState } from "@tanstack/react-router";
 
 import appCss from "../styles.css?url";
 import { Toaster } from "@/components/ui/sonner";
 import { FeedbackWidget } from "@/components/FeedbackWidget";
+import { AuthProvider } from "@/hooks/use-auth";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { AppSidebar } from "@/components/AppSidebar";
 
 function NotFoundComponent() {
   return (
@@ -71,11 +74,33 @@ function RootShell({ children }: { children: React.ReactNode }) {
 }
 
 function RootComponent() {
+  const path = useRouterState({ select: (r) => r.location.pathname });
+  const isAuthRoute = path === "/auth";
+  if (isAuthRoute) {
+    return (
+      <AuthProvider>
+        <Outlet />
+        <Toaster richColors position="top-center" />
+      </AuthProvider>
+    );
+  }
   return (
-    <>
-      <Outlet />
-      <Toaster richColors position="top-center" />
-      <FeedbackWidget />
-    </>
+    <AuthProvider>
+      <SidebarProvider>
+        <div className="min-h-screen flex w-full bg-background">
+          <AppSidebar />
+          <div className="flex-1 flex flex-col min-w-0">
+            <header className="h-12 flex items-center border-b bg-card/40 backdrop-blur sticky top-0 z-30">
+              <SidebarTrigger className="ml-2" />
+            </header>
+            <main className="flex-1 min-w-0">
+              <Outlet />
+            </main>
+          </div>
+        </div>
+        <Toaster richColors position="top-center" />
+        <FeedbackWidget />
+      </SidebarProvider>
+    </AuthProvider>
   );
 }

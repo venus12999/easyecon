@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { SiteHeader } from "@/components/SiteHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
@@ -58,7 +57,7 @@ function TermsPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <SiteHeader />
+      
       <main className="mx-auto max-w-4xl px-4 py-8">
         <h1 className="text-2xl font-bold tracking-tight mb-1">术语速查</h1>
         <p className="text-muted-foreground text-sm mb-6">英文术语 · 中文翻译 · 定义 · 易混词</p>

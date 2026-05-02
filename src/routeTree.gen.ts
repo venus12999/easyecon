@@ -12,11 +12,13 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as WrongRouteImport } from './routes/wrong'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as MockRouteImport } from './routes/mock'
+import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PracticeSlugRouteImport } from './routes/practice.$slug'
 import { Route as ApiFeedbackRouteImport } from './routes/api/feedback'
 import { Route as ApiAiExplainRouteImport } from './routes/api/ai-explain'
+import { Route as ApiAdminUsersRouteImport } from './routes/api/admin/users'
 import { Route as ApiAdminUploadImageRouteImport } from './routes/api/admin/upload-image'
 import { Route as ApiAdminReanalyzeRouteImport } from './routes/api/admin/reanalyze'
 import { Route as ApiAdminQuestionsRouteImport } from './routes/api/admin/questions'
@@ -38,6 +40,11 @@ const TermsRoute = TermsRouteImport.update({
 const MockRoute = MockRouteImport.update({
   id: '/mock',
   path: '/mock',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminRoute = AdminRouteImport.update({
@@ -63,6 +70,11 @@ const ApiFeedbackRoute = ApiFeedbackRouteImport.update({
 const ApiAiExplainRoute = ApiAiExplainRouteImport.update({
   id: '/api/ai-explain',
   path: '/api/ai-explain',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAdminUsersRoute = ApiAdminUsersRouteImport.update({
+  id: '/api/admin/users',
+  path: '/api/admin/users',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAdminUploadImageRoute = ApiAdminUploadImageRouteImport.update({
@@ -104,6 +116,7 @@ const ApiAdminAuditRoute = ApiAdminAuditRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/auth': typeof AuthRoute
   '/mock': typeof MockRoute
   '/terms': typeof TermsRoute
   '/wrong': typeof WrongRoute
@@ -117,10 +130,12 @@ export interface FileRoutesByFullPath {
   '/api/admin/questions': typeof ApiAdminQuestionsRoute
   '/api/admin/reanalyze': typeof ApiAdminReanalyzeRoute
   '/api/admin/upload-image': typeof ApiAdminUploadImageRoute
+  '/api/admin/users': typeof ApiAdminUsersRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/auth': typeof AuthRoute
   '/mock': typeof MockRoute
   '/terms': typeof TermsRoute
   '/wrong': typeof WrongRoute
@@ -134,11 +149,13 @@ export interface FileRoutesByTo {
   '/api/admin/questions': typeof ApiAdminQuestionsRoute
   '/api/admin/reanalyze': typeof ApiAdminReanalyzeRoute
   '/api/admin/upload-image': typeof ApiAdminUploadImageRoute
+  '/api/admin/users': typeof ApiAdminUsersRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/auth': typeof AuthRoute
   '/mock': typeof MockRoute
   '/terms': typeof TermsRoute
   '/wrong': typeof WrongRoute
@@ -152,12 +169,14 @@ export interface FileRoutesById {
   '/api/admin/questions': typeof ApiAdminQuestionsRoute
   '/api/admin/reanalyze': typeof ApiAdminReanalyzeRoute
   '/api/admin/upload-image': typeof ApiAdminUploadImageRoute
+  '/api/admin/users': typeof ApiAdminUsersRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/admin'
+    | '/auth'
     | '/mock'
     | '/terms'
     | '/wrong'
@@ -171,10 +190,12 @@ export interface FileRouteTypes {
     | '/api/admin/questions'
     | '/api/admin/reanalyze'
     | '/api/admin/upload-image'
+    | '/api/admin/users'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/admin'
+    | '/auth'
     | '/mock'
     | '/terms'
     | '/wrong'
@@ -188,10 +209,12 @@ export interface FileRouteTypes {
     | '/api/admin/questions'
     | '/api/admin/reanalyze'
     | '/api/admin/upload-image'
+    | '/api/admin/users'
   id:
     | '__root__'
     | '/'
     | '/admin'
+    | '/auth'
     | '/mock'
     | '/terms'
     | '/wrong'
@@ -205,11 +228,13 @@ export interface FileRouteTypes {
     | '/api/admin/questions'
     | '/api/admin/reanalyze'
     | '/api/admin/upload-image'
+    | '/api/admin/users'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
+  AuthRoute: typeof AuthRoute
   MockRoute: typeof MockRoute
   TermsRoute: typeof TermsRoute
   WrongRoute: typeof WrongRoute
@@ -223,6 +248,7 @@ export interface RootRouteChildren {
   ApiAdminQuestionsRoute: typeof ApiAdminQuestionsRoute
   ApiAdminReanalyzeRoute: typeof ApiAdminReanalyzeRoute
   ApiAdminUploadImageRoute: typeof ApiAdminUploadImageRoute
+  ApiAdminUsersRoute: typeof ApiAdminUsersRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -246,6 +272,13 @@ declare module '@tanstack/react-router' {
       path: '/mock'
       fullPath: '/mock'
       preLoaderRoute: typeof MockRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin': {
@@ -281,6 +314,13 @@ declare module '@tanstack/react-router' {
       path: '/api/ai-explain'
       fullPath: '/api/ai-explain'
       preLoaderRoute: typeof ApiAiExplainRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/users': {
+      id: '/api/admin/users'
+      path: '/api/admin/users'
+      fullPath: '/api/admin/users'
+      preLoaderRoute: typeof ApiAdminUsersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/admin/upload-image': {
@@ -338,6 +378,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
+  AuthRoute: AuthRoute,
   MockRoute: MockRoute,
   TermsRoute: TermsRoute,
   WrongRoute: WrongRoute,
@@ -351,6 +392,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAdminQuestionsRoute: ApiAdminQuestionsRoute,
   ApiAdminReanalyzeRoute: ApiAdminReanalyzeRoute,
   ApiAdminUploadImageRoute: ApiAdminUploadImageRoute,
+  ApiAdminUsersRoute: ApiAdminUsersRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

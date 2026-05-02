@@ -1,7 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { SiteHeader } from "@/components/SiteHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -9,6 +8,7 @@ import { renderStemWithTerms, type TermInfo } from "@/lib/term-render";
 import { optionStyles, type OptKey } from "@/lib/option-colors";
 import { addWrong, recordAnswer } from "@/lib/storage";
 import { Clock, Loader2 } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/mock")({
   head: () => ({ meta: [{ title: "模考模式 · AP 微观经济" }] }),
@@ -40,6 +40,7 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 function Mock() {
+  const { user } = useAuth();
   const [phase, setPhase] = useState<"idle" | "running" | "done">("idle");
   const [size, setSize] = useState(15);
   const [pool, setPool] = useState<Q[]>([]);
@@ -91,6 +92,43 @@ function Mock() {
       recordAnswer(q.knowledge_point_id, ok);
       if (!ok && a) addWrong(q.id);
     });
+    if (user) {
+      const total = questions.length;
+      const correct = questions.filter((q) => answers[q.id] === q.correct_answer).length;
+      const detail = questions.map((q) => ({
+        question_id: q.id,
+        knowledge_point_id: q.knowledge_point_id,
+        picked: answers[q.id] ?? null,
+        correct: q.correct_answer,
+        is_correct: answers[q.id] === q.correct_answer,
+      }));
+      void supabase.from("mock_attempts").insert({
+        user_id: user.id,
+        total,
+        correct,
+        duration_seconds: seconds,
+        detail,
+      });
+      const rows = questions
+        .filter((q) => !!answers[q.id])
+        .map((q) => ({
+          user_id: user.id,
+          question_id: q.id,
+          knowledge_point_id: q.knowledge_point_id,
+          picked_answer: answers[q.id],
+          is_correct: answers[q.id] === q.correct_answer,
+          mode: "mock",
+        }));
+      if (rows.length > 0) void supabase.from("answer_attempts").insert(rows);
+      const wrongRows = questions
+        .filter((q) => answers[q.id] !== q.correct_answer)
+        .map((q) => ({ user_id: user.id, question_id: q.id }));
+      if (wrongRows.length > 0) {
+        void supabase
+          .from("wrong_questions")
+          .upsert(wrongRows, { onConflict: "user_id,question_id" });
+      }
+    }
     setPhase("done");
   }
 
@@ -113,7 +151,7 @@ function Mock() {
   if (phase === "idle") {
     return (
       <div className="min-h-screen bg-background">
-        <SiteHeader />
+        
         <main className="mx-auto max-w-2xl px-4 py-12">
           <h1 className="text-2xl font-bold mb-2">模考模式</h1>
           <p className="text-muted-foreground text-sm mb-6">
@@ -158,7 +196,7 @@ function Mock() {
     const ss = String(seconds % 60).padStart(2, "0");
     return (
       <div className="min-h-screen bg-background">
-        <SiteHeader />
+        
         <main className="mx-auto max-w-3xl px-4 py-6 pb-24">
           <div className="mb-4 flex items-center justify-between">
             <div className="text-sm text-muted-foreground">{idx + 1} / {questions.length}</div>
@@ -222,7 +260,7 @@ function Mock() {
   const pct = Math.round((stats.correct / stats.total) * 100);
   return (
     <div className="min-h-screen bg-background">
-      <SiteHeader />
+      
       <main className="mx-auto max-w-3xl px-4 py-8">
         <h1 className="text-2xl font-bold mb-2">模考结果</h1>
         <p className="text-muted-foreground text-sm mb-6">用时 {Math.floor(seconds / 60)} 分 {seconds % 60} 秒</p>

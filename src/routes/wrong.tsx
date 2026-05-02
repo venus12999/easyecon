@@ -1,11 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { SiteHeader } from "@/components/SiteHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getWrong, removeWrong } from "@/lib/storage";
 import { Trash2 } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/wrong")({
   head: () => ({ meta: [{ title: "错题本 · AP 微观经济" }] }),
@@ -20,11 +20,21 @@ type Q = {
 };
 
 function WrongBook() {
+  const { user } = useAuth();
   const [items, setItems] = useState<Q[]>([]);
   const [loading, setLoading] = useState(true);
 
   async function load() {
-    const ids = getWrong();
+    let ids: string[] = [];
+    if (user) {
+      const { data } = await supabase
+        .from("wrong_questions")
+        .select("question_id")
+        .eq("user_id", user.id);
+      ids = (data ?? []).map((r) => r.question_id);
+    } else {
+      ids = getWrong();
+    }
     if (ids.length === 0) {
       setItems([]);
       setLoading(false);
@@ -62,11 +72,11 @@ function WrongBook() {
   }
   useEffect(() => {
     load();
-  }, []);
+  }, [user]);
 
   return (
     <div className="min-h-screen bg-background">
-      <SiteHeader />
+      
       <main className="mx-auto max-w-3xl px-4 py-8">
         <h1 className="text-2xl font-bold tracking-tight mb-1">错题本</h1>
         <p className="text-muted-foreground text-sm mb-6">数据保存在你的浏览器本地</p>
@@ -101,8 +111,15 @@ function WrongBook() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => {
+                      onClick={async () => {
                         removeWrong(q.id);
+                        if (user) {
+                          await supabase
+                            .from("wrong_questions")
+                            .delete()
+                            .eq("user_id", user.id)
+                            .eq("question_id", q.id);
+                        }
                         load();
                       }}
                     >
