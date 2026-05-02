@@ -180,11 +180,13 @@ function Index() {
         )}
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)} className="mb-6">
-          <TabsList>
-            <TabsTrigger value="basic">基础题（概念）</TabsTrigger>
-            <TabsTrigger value="application">应用题（情境）</TabsTrigger>
-            <TabsTrigger value="pitfall">易错题（常见坑）</TabsTrigger>
-          </TabsList>
+          <div className="overflow-x-auto -mx-1 px-1">
+            <TabsList className="w-max">
+              <TabsTrigger value="basic">基础题（概念）</TabsTrigger>
+              <TabsTrigger value="application">应用题（情境）</TabsTrigger>
+              <TabsTrigger value="pitfall">易错题（常见坑）</TabsTrigger>
+            </TabsList>
+          </div>
         </Tabs>
 
         {loading ? (
