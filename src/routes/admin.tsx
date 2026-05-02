@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Loader2, Plus, Trash2, Upload, Image as ImageIcon, Sparkles, Inbox } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
+import { isAdminEmail } from "@/lib/admin-emails";
+import { supabase } from "@/integrations/supabase/client";
 
 // 判断题干是否提示包含图表（导入时在题干里以「[此题含图…]」「见原 PDF」「见图」等方式标注）
 function hasImageMarker(stem: string): boolean {
@@ -43,58 +46,89 @@ type Q = {
 };
 
 function Admin() {
+  const { user, loading: authLoading } = useAuth();
   const [token, setToken] = useState<string | null>(null);
-  const [pwd, setPwd] = useState("");
   const [loading, setLoading] = useState(false);
+  const [denied, setDenied] = useState(false);
 
   useEffect(() => {
     const t = sessionStorage.getItem("admin_token");
     if (t) setToken(t);
   }, []);
 
-  async function login() {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/admin/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: pwd }),
-      });
-      if (!res.ok) {
-        toast.error("密码错误");
-        return;
-      }
-      const j = await res.json();
-      sessionStorage.setItem("admin_token", j.token);
-      setToken(j.token);
-      toast.success("登录成功");
-    } finally {
-      setLoading(false);
+  // 已登录且在白名单 → 自动用 supabase JWT 换 admin token
+  useEffect(() => {
+    if (authLoading || token) return;
+    if (!user) return;
+    if (!isAdminEmail(user.email)) {
+      setDenied(true);
+      return;
     }
+    (async () => {
+      setLoading(true);
+      try {
+        const { data: sess } = await supabase.auth.getSession();
+        const jwt = sess.session?.access_token;
+        if (!jwt) {
+          setDenied(true);
+          return;
+        }
+        const res = await fetch("/api/admin/login", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${jwt}` },
+        });
+        if (!res.ok) {
+          setDenied(true);
+          return;
+        }
+        const j = await res.json();
+        sessionStorage.setItem("admin_token", j.token);
+        setToken(j.token);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [user, authLoading, token]);
+
+  if (authLoading || (user && isAdminEmail(user.email) && loading && !token)) {
+    return (
+      <main className="mx-auto max-w-sm px-4 py-16 text-center">
+        <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
+      </main>
+    );
+  }
+
+  if (!user) {
+    return (
+      <main className="mx-auto max-w-sm px-4 py-16 text-center space-y-4">
+        <h1 className="text-xl font-bold">需要登录</h1>
+        <p className="text-sm text-muted-foreground">请先登录管理员账号</p>
+        <Button asChild>
+          <Link to="/auth">前往登录</Link>
+        </Button>
+      </main>
+    );
+  }
+
+  if (denied || !isAdminEmail(user.email)) {
+    return (
+      <main className="mx-auto max-w-md px-4 py-16 text-center space-y-3">
+        <h1 className="text-xl font-bold">无访问权限</h1>
+        <p className="text-sm text-muted-foreground">
+          当前账号 <span className="font-mono">{user.email}</span> 不是管理员。
+        </p>
+        <Button asChild variant="outline">
+          <Link to="/">返回首页</Link>
+        </Button>
+      </main>
+    );
   }
 
   if (!token) {
     return (
-      <div className="min-h-screen bg-background">
-        
-        <main className="mx-auto max-w-sm px-4 py-16">
-          <h1 className="text-xl font-bold mb-4">管理员登录</h1>
-          <Card>
-            <CardContent className="p-6 space-y-3">
-              <Input
-                type="password"
-                value={pwd}
-                onChange={(e) => setPwd(e.target.value)}
-                placeholder="管理员密码"
-                onKeyDown={(e) => e.key === "Enter" && login()}
-              />
-              <Button onClick={login} disabled={loading || !pwd} className="w-full">
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "进入"}
-              </Button>
-            </CardContent>
-          </Card>
-        </main>
-      </div>
+      <main className="mx-auto max-w-sm px-4 py-16 text-center">
+        <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
+      </main>
     );
   }
 

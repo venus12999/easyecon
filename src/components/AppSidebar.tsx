@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
+import { isAdminEmail } from "@/lib/admin-emails";
 
 const practiceItems = [
   { title: "刷题", url: "/", icon: BookOpen, exact: true },
@@ -29,6 +30,7 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const path = useRouterState({ select: (r) => r.location.pathname });
   const { user, signOut } = useAuth();
+  const showAdmin = isAdminEmail(user?.email);
 
   const isActive = (url: string, exact?: boolean) => (exact ? path === url : path === url || path.startsWith(url + "/"));
 
@@ -83,14 +85,16 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild isActive={isActive("/admin")}>
-                  <Link to="/admin" className="flex items-center gap-2">
-                    <Shield className="h-4 w-4" />
-                    {!collapsed && <span>管理后台</span>}
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
+              {showAdmin && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive("/admin")}>
+                    <Link to="/admin" className="flex items-center gap-2">
+                      <Shield className="h-4 w-4" />
+                      {!collapsed && <span>管理后台</span>}
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
