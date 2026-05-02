@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as WrongRouteImport } from './routes/wrong'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as MockRouteImport } from './routes/mock'
+import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PracticeSlugRouteImport } from './routes/practice.$slug'
@@ -38,6 +39,11 @@ const TermsRoute = TermsRouteImport.update({
 const MockRoute = MockRouteImport.update({
   id: '/mock',
   path: '/mock',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminRoute = AdminRouteImport.update({
@@ -104,6 +110,7 @@ const ApiAdminAuditRoute = ApiAdminAuditRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/auth': typeof AuthRoute
   '/mock': typeof MockRoute
   '/terms': typeof TermsRoute
   '/wrong': typeof WrongRoute
@@ -121,6 +128,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/auth': typeof AuthRoute
   '/mock': typeof MockRoute
   '/terms': typeof TermsRoute
   '/wrong': typeof WrongRoute
@@ -139,6 +147,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/auth': typeof AuthRoute
   '/mock': typeof MockRoute
   '/terms': typeof TermsRoute
   '/wrong': typeof WrongRoute
@@ -158,6 +167,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/admin'
+    | '/auth'
     | '/mock'
     | '/terms'
     | '/wrong'
@@ -175,6 +185,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/admin'
+    | '/auth'
     | '/mock'
     | '/terms'
     | '/wrong'
@@ -192,6 +203,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/admin'
+    | '/auth'
     | '/mock'
     | '/terms'
     | '/wrong'
@@ -210,6 +222,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
+  AuthRoute: typeof AuthRoute
   MockRoute: typeof MockRoute
   TermsRoute: typeof TermsRoute
   WrongRoute: typeof WrongRoute
@@ -246,6 +259,13 @@ declare module '@tanstack/react-router' {
       path: '/mock'
       fullPath: '/mock'
       preLoaderRoute: typeof MockRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin': {
@@ -338,6 +358,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
+  AuthRoute: AuthRoute,
   MockRoute: MockRoute,
   TermsRoute: TermsRoute,
   WrongRoute: WrongRoute,
