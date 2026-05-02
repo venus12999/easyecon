@@ -158,6 +158,7 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
             <TabsTrigger value="import">批量导入</TabsTrigger>
             <TabsTrigger value="audit">AI 审核</TabsTrigger>
             <TabsTrigger value="feedback">用户反馈</TabsTrigger>
+            <TabsTrigger value="users">用户数据</TabsTrigger>
           </TabsList>
 
           <TabsContent value="list" className="mt-4">
@@ -259,6 +260,10 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
 
           <TabsContent value="feedback" className="mt-4">
             <FeedbackPanel token={token} />
+          </TabsContent>
+
+          <TabsContent value="users" className="mt-4">
+            <UsersPanel token={token} />
           </TabsContent>
         </Tabs>
 
