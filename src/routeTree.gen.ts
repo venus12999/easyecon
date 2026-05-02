@@ -15,12 +15,14 @@ import { Route as MockRouteImport } from './routes/mock'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PracticeSlugRouteImport } from './routes/practice.$slug'
+import { Route as ApiFeedbackRouteImport } from './routes/api/feedback'
 import { Route as ApiAiExplainRouteImport } from './routes/api/ai-explain'
 import { Route as ApiAdminUploadImageRouteImport } from './routes/api/admin/upload-image'
 import { Route as ApiAdminReanalyzeRouteImport } from './routes/api/admin/reanalyze'
 import { Route as ApiAdminQuestionsRouteImport } from './routes/api/admin/questions'
 import { Route as ApiAdminLoginRouteImport } from './routes/api/admin/login'
 import { Route as ApiAdminImportRouteImport } from './routes/api/admin/import'
+import { Route as ApiAdminFeedbackRouteImport } from './routes/api/admin/feedback'
 import { Route as ApiAdminAuditRouteImport } from './routes/api/admin/audit'
 
 const WrongRoute = WrongRouteImport.update({
@@ -53,6 +55,11 @@ const PracticeSlugRoute = PracticeSlugRouteImport.update({
   path: '/practice/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiFeedbackRoute = ApiFeedbackRouteImport.update({
+  id: '/api/feedback',
+  path: '/api/feedback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAiExplainRoute = ApiAiExplainRouteImport.update({
   id: '/api/ai-explain',
   path: '/api/ai-explain',
@@ -83,6 +90,11 @@ const ApiAdminImportRoute = ApiAdminImportRouteImport.update({
   path: '/api/admin/import',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAdminFeedbackRoute = ApiAdminFeedbackRouteImport.update({
+  id: '/api/admin/feedback',
+  path: '/api/admin/feedback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAdminAuditRoute = ApiAdminAuditRouteImport.update({
   id: '/api/admin/audit',
   path: '/api/admin/audit',
@@ -96,8 +108,10 @@ export interface FileRoutesByFullPath {
   '/terms': typeof TermsRoute
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
+  '/api/feedback': typeof ApiFeedbackRoute
   '/practice/$slug': typeof PracticeSlugRoute
   '/api/admin/audit': typeof ApiAdminAuditRoute
+  '/api/admin/feedback': typeof ApiAdminFeedbackRoute
   '/api/admin/import': typeof ApiAdminImportRoute
   '/api/admin/login': typeof ApiAdminLoginRoute
   '/api/admin/questions': typeof ApiAdminQuestionsRoute
@@ -111,8 +125,10 @@ export interface FileRoutesByTo {
   '/terms': typeof TermsRoute
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
+  '/api/feedback': typeof ApiFeedbackRoute
   '/practice/$slug': typeof PracticeSlugRoute
   '/api/admin/audit': typeof ApiAdminAuditRoute
+  '/api/admin/feedback': typeof ApiAdminFeedbackRoute
   '/api/admin/import': typeof ApiAdminImportRoute
   '/api/admin/login': typeof ApiAdminLoginRoute
   '/api/admin/questions': typeof ApiAdminQuestionsRoute
@@ -127,8 +143,10 @@ export interface FileRoutesById {
   '/terms': typeof TermsRoute
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
+  '/api/feedback': typeof ApiFeedbackRoute
   '/practice/$slug': typeof PracticeSlugRoute
   '/api/admin/audit': typeof ApiAdminAuditRoute
+  '/api/admin/feedback': typeof ApiAdminFeedbackRoute
   '/api/admin/import': typeof ApiAdminImportRoute
   '/api/admin/login': typeof ApiAdminLoginRoute
   '/api/admin/questions': typeof ApiAdminQuestionsRoute
@@ -144,8 +162,10 @@ export interface FileRouteTypes {
     | '/terms'
     | '/wrong'
     | '/api/ai-explain'
+    | '/api/feedback'
     | '/practice/$slug'
     | '/api/admin/audit'
+    | '/api/admin/feedback'
     | '/api/admin/import'
     | '/api/admin/login'
     | '/api/admin/questions'
@@ -159,8 +179,10 @@ export interface FileRouteTypes {
     | '/terms'
     | '/wrong'
     | '/api/ai-explain'
+    | '/api/feedback'
     | '/practice/$slug'
     | '/api/admin/audit'
+    | '/api/admin/feedback'
     | '/api/admin/import'
     | '/api/admin/login'
     | '/api/admin/questions'
@@ -174,8 +196,10 @@ export interface FileRouteTypes {
     | '/terms'
     | '/wrong'
     | '/api/ai-explain'
+    | '/api/feedback'
     | '/practice/$slug'
     | '/api/admin/audit'
+    | '/api/admin/feedback'
     | '/api/admin/import'
     | '/api/admin/login'
     | '/api/admin/questions'
@@ -190,8 +214,10 @@ export interface RootRouteChildren {
   TermsRoute: typeof TermsRoute
   WrongRoute: typeof WrongRoute
   ApiAiExplainRoute: typeof ApiAiExplainRoute
+  ApiFeedbackRoute: typeof ApiFeedbackRoute
   PracticeSlugRoute: typeof PracticeSlugRoute
   ApiAdminAuditRoute: typeof ApiAdminAuditRoute
+  ApiAdminFeedbackRoute: typeof ApiAdminFeedbackRoute
   ApiAdminImportRoute: typeof ApiAdminImportRoute
   ApiAdminLoginRoute: typeof ApiAdminLoginRoute
   ApiAdminQuestionsRoute: typeof ApiAdminQuestionsRoute
@@ -243,6 +269,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PracticeSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/feedback': {
+      id: '/api/feedback'
+      path: '/api/feedback'
+      fullPath: '/api/feedback'
+      preLoaderRoute: typeof ApiFeedbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/ai-explain': {
       id: '/api/ai-explain'
       path: '/api/ai-explain'
@@ -285,6 +318,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAdminImportRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/admin/feedback': {
+      id: '/api/admin/feedback'
+      path: '/api/admin/feedback'
+      fullPath: '/api/admin/feedback'
+      preLoaderRoute: typeof ApiAdminFeedbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/admin/audit': {
       id: '/api/admin/audit'
       path: '/api/admin/audit'
@@ -302,8 +342,10 @@ const rootRouteChildren: RootRouteChildren = {
   TermsRoute: TermsRoute,
   WrongRoute: WrongRoute,
   ApiAiExplainRoute: ApiAiExplainRoute,
+  ApiFeedbackRoute: ApiFeedbackRoute,
   PracticeSlugRoute: PracticeSlugRoute,
   ApiAdminAuditRoute: ApiAdminAuditRoute,
+  ApiAdminFeedbackRoute: ApiAdminFeedbackRoute,
   ApiAdminImportRoute: ApiAdminImportRoute,
   ApiAdminLoginRoute: ApiAdminLoginRoute,
   ApiAdminQuestionsRoute: ApiAdminQuestionsRoute,
