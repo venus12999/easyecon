@@ -59,6 +59,7 @@ function Practice() {
   const [idx, setIdx] = useState(0);
   const [picked, setPicked] = useState<OptKey | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [savingAnswer, setSavingAnswer] = useState(false);
   const [termDict, setTermDict] = useState<Record<string, TermInfo>>({});
   const [loading, setLoading] = useState(true);
 
@@ -99,15 +100,15 @@ function Practice() {
 
   const cur = questions[idx];
 
-  function submit() {
+  async function submit() {
     if (!picked || !cur) return;
-    setSubmitted(true);
+    setSavingAnswer(true);
     const ok = picked === cur.correct_answer;
     recordAnswer(cur.knowledge_point_id, ok);
     if (!ok) addWrong(cur.id);
     else removeWrong(cur.id);
     if (user) {
-      void supabase.from("answer_attempts").insert({
+      await supabase.from("answer_attempts").insert({
         user_id: user.id,
         question_id: cur.id,
         knowledge_point_id: cur.knowledge_point_id,
@@ -124,6 +125,12 @@ function Practice() {
         void supabase.from("wrong_questions").delete().eq("user_id", user.id).eq("question_id", cur.id);
       }
     }
+    setSubmitted(true);
+    setSavingAnswer(false);
+  }
+  async function finishPractice() {
+    if (picked && !submitted) await submit();
+    void navigate({ to: "/" });
   }
   function next() {
     if (idx < questions.length - 1) {
@@ -183,8 +190,8 @@ function Practice() {
         <div className="mb-4">
           <div className="flex items-center justify-between">
             <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">← 返回知识点</Link>
-            <Button asChild variant="outline" size="sm">
-              <Link to="/"><Home className="h-4 w-4 mr-1" />结束练习</Link>
+            <Button type="button" variant="outline" size="sm" onClick={finishPractice} disabled={savingAnswer}>
+              <Home className="h-4 w-4 mr-1" />结束练习
             </Button>
           </div>
         </div>
@@ -228,11 +235,11 @@ function Practice() {
             <Bookmark className="h-4 w-4" /> 标记
           </Button>
           {!submitted ? (
-            <Button onClick={submit} disabled={!picked}>提交</Button>
+            <Button onClick={submit} disabled={!picked || savingAnswer}>{savingAnswer ? "保存中…" : "提交"}</Button>
           ) : (
             idx === questions.length - 1 ? (
-              <Button asChild>
-                <Link to="/"><Home className="h-4 w-4 mr-1" />完成 · 返回主页</Link>
+              <Button type="button" onClick={finishPractice}>
+                <Home className="h-4 w-4 mr-1" />完成 · 返回主页
               </Button>
             ) : (
               <Button onClick={next}>
