@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Loader2, Plus, Trash2, Upload, Image as ImageIcon, Sparkles } from "lucide-react";
+import { Loader2, Plus, Trash2, Upload, Image as ImageIcon, Sparkles, Inbox } from "lucide-react";
 
 // 判断题干是否提示包含图表（导入时在题干里以「[此题含图…]」「见原 PDF」「见图」等方式标注）
 function hasImageMarker(stem: string): boolean {
@@ -158,6 +158,7 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
             <TabsTrigger value="list">题目列表</TabsTrigger>
             <TabsTrigger value="import">批量导入</TabsTrigger>
             <TabsTrigger value="audit">AI 审核</TabsTrigger>
+            <TabsTrigger value="feedback">用户反馈</TabsTrigger>
           </TabsList>
 
           <TabsContent value="list" className="mt-4">
@@ -255,6 +256,10 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
 
           <TabsContent value="audit" className="mt-4">
             <AuditPanel token={token} kps={kps} questions={questions} onApplied={reload} />
+          </TabsContent>
+
+          <TabsContent value="feedback" className="mt-4">
+            <FeedbackPanel token={token} />
           </TabsContent>
         </Tabs>
 
@@ -827,5 +832,165 @@ function AuditPanel({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+type FeedbackItem = {
+  id: string;
+  category: "bug" | "suggestion";
+  message: string;
+  page_url: string | null;
+  contact: string | null;
+  status: "new" | "in_progress" | "resolved";
+  admin_note: string | null;
+  created_at: string;
+};
+
+function FeedbackPanel({ token }: { token: string }) {
+  const [items, setItems] = useState<FeedbackItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [filter, setFilter] = useState<"all" | "new" | "in_progress" | "resolved">("all");
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await fetch("/api/admin/feedback", { headers: { "x-admin-token": token } });
+      const j = await r.json();
+      setItems(j.items ?? []);
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
+
+  const visible = items.filter((i) => filter === "all" || i.status === filter);
+  const newCount = items.filter((i) => i.status === "new").length;
+
+  async function update(id: string, patch: Partial<Pick<FeedbackItem, "status" | "admin_note">>) {
+    const r = await fetch("/api/admin/feedback", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "x-admin-token": token },
+      body: JSON.stringify({ id, ...patch }),
+    });
+    if (r.ok) {
+      toast.success("已更新");
+      reload();
+    } else toast.error("更新失败");
+  }
+
+  async function remove(id: string) {
+    if (!confirm("确认删除？")) return;
+    const r = await fetch("/api/admin/feedback", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json", "x-admin-token": token },
+      body: JSON.stringify({ id }),
+    });
+    if (r.ok) {
+      toast.success("已删除");
+      reload();
+    } else toast.error("删除失败");
+  }
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <Inbox className="h-4 w-4 text-muted-foreground" />
+        <span className="text-sm">
+          共 {items.length} 条 · 未处理 <b className="text-warning-foreground">{newCount}</b>
+        </span>
+        <div className="ml-auto flex gap-1">
+          {(["all", "new", "in_progress", "resolved"] as const).map((s) => (
+            <Button
+              key={s}
+              size="sm"
+              variant={filter === s ? "default" : "outline"}
+              onClick={() => setFilter(s)}
+            >
+              {s === "all" ? "全部" : s === "new" ? "未处理" : s === "in_progress" ? "处理中" : "已解决"}
+            </Button>
+          ))}
+          <Button size="sm" variant="ghost" onClick={reload} disabled={loading}>
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "刷新"}
+          </Button>
+        </div>
+      </div>
+
+      {visible.length === 0 ? (
+        <p className="text-sm text-muted-foreground">暂无反馈</p>
+      ) : (
+        <div className="space-y-3">
+          {visible.map((f) => (
+            <Card key={f.id}>
+              <CardContent className="p-4 space-y-2">
+                <div className="flex items-center gap-2 text-xs">
+                  <span
+                    className={`px-1.5 py-0.5 rounded ${
+                      f.category === "bug"
+                        ? "bg-destructive/15 text-destructive"
+                        : "bg-primary/15 text-primary"
+                    }`}
+                  >
+                    {f.category === "bug" ? "🐞 Bug" : "💡 建议"}
+                  </span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded ${
+                      f.status === "new"
+                        ? "bg-warning/15 text-warning-foreground"
+                        : f.status === "in_progress"
+                        ? "bg-secondary"
+                        : "bg-success/15 text-success"
+                    }`}
+                  >
+                    {f.status === "new" ? "未处理" : f.status === "in_progress" ? "处理中" : "已解决"}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {new Date(f.created_at).toLocaleString()}
+                  </span>
+                  {f.page_url && (
+                    <span className="text-muted-foreground truncate">来自 {f.page_url}</span>
+                  )}
+                </div>
+                <p className="text-sm whitespace-pre-wrap">{f.message}</p>
+                {f.contact && (
+                  <p className="text-xs text-muted-foreground">联系方式：{f.contact}</p>
+                )}
+                <Textarea
+                  placeholder="处理备注（仅自己可见）"
+                  defaultValue={f.admin_note ?? ""}
+                  rows={2}
+                  onBlur={(e) => {
+                    const v = e.target.value;
+                    if (v !== (f.admin_note ?? "")) update(f.id, { admin_note: v });
+                  }}
+                />
+                <div className="flex gap-2">
+                  {f.status !== "in_progress" && (
+                    <Button size="sm" variant="outline" onClick={() => update(f.id, { status: "in_progress" })}>
+                      标记处理中
+                    </Button>
+                  )}
+                  {f.status !== "resolved" && (
+                    <Button size="sm" onClick={() => update(f.id, { status: "resolved" })}>
+                      标记已解决
+                    </Button>
+                  )}
+                  {f.status !== "new" && (
+                    <Button size="sm" variant="ghost" onClick={() => update(f.id, { status: "new" })}>
+                      重置
+                    </Button>
+                  )}
+                  <Button size="sm" variant="ghost" className="ml-auto" onClick={() => remove(f.id)}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
