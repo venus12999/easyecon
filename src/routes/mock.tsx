@@ -1,7 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { SiteHeader } from "@/components/SiteHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -113,7 +112,7 @@ function Mock() {
   if (phase === "idle") {
     return (
       <div className="min-h-screen bg-background">
-        <SiteHeader />
+        
         <main className="mx-auto max-w-2xl px-4 py-12">
           <h1 className="text-2xl font-bold mb-2">模考模式</h1>
           <p className="text-muted-foreground text-sm mb-6">
@@ -158,7 +157,7 @@ function Mock() {
     const ss = String(seconds % 60).padStart(2, "0");
     return (
       <div className="min-h-screen bg-background">
-        <SiteHeader />
+        
         <main className="mx-auto max-w-3xl px-4 py-6 pb-24">
           <div className="mb-4 flex items-center justify-between">
             <div className="text-sm text-muted-foreground">{idx + 1} / {questions.length}</div>
@@ -222,7 +221,7 @@ function Mock() {
   const pct = Math.round((stats.correct / stats.total) * 100);
   return (
     <div className="min-h-screen bg-background">
-      <SiteHeader />
+      
       <main className="mx-auto max-w-3xl px-4 py-8">
         <h1 className="text-2xl font-bold mb-2">模考结果</h1>
         <p className="text-muted-foreground text-sm mb-6">用时 {Math.floor(seconds / 60)} 分 {seconds % 60} 秒</p>

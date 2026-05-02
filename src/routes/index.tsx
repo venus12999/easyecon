@@ -1,7 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { SiteHeader } from "@/components/SiteHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getProgress, type ProgressMap } from "@/lib/storage";
@@ -78,7 +77,7 @@ function Index() {
 
   return (
     <div className="min-h-screen bg-background">
-      <SiteHeader />
+      
       <main className="mx-auto max-w-6xl px-4 py-8">
         <section className="mb-8">
           <div className="flex items-center gap-2 text-xs text-primary font-medium mb-2">

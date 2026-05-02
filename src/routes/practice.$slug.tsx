@@ -2,7 +2,6 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
-import { SiteHeader } from "@/components/SiteHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -124,7 +123,7 @@ function Practice() {
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
-        <SiteHeader />
+        
         <main className="mx-auto max-w-3xl px-4 py-12 text-center text-muted-foreground">
           <Loader2 className="h-6 w-6 animate-spin mx-auto" />
         </main>
@@ -134,7 +133,7 @@ function Practice() {
   if (!kp) {
     return (
       <div className="min-h-screen bg-background">
-        <SiteHeader />
+        
         <main className="mx-auto max-w-3xl px-4 py-12 text-center">
           <p>知识点不存在</p>
           <Link to="/" className="text-primary underline mt-2 inline-block">返回首页</Link>
@@ -145,7 +144,7 @@ function Practice() {
   if (questions.length === 0) {
     return (
       <div className="min-h-screen bg-background">
-        <SiteHeader />
+        
         <main className="mx-auto max-w-3xl px-4 py-12 text-center">
           <h1 className="text-xl font-semibold">{kp.name_zh} · {kp.name_en}</h1>
           <p className="mt-3 text-muted-foreground">该题型下暂无已发布题目。</p>
@@ -159,7 +158,7 @@ function Practice() {
 
   return (
     <div className="min-h-screen bg-background">
-      <SiteHeader />
+      
       <main className="mx-auto max-w-3xl px-4 py-6 pb-24">
         <div className="mb-4">
           <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">← 返回知识点</Link>

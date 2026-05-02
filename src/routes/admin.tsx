@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState, useCallback, useRef } from "react";
-import { SiteHeader } from "@/components/SiteHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -77,7 +76,7 @@ function Admin() {
   if (!token) {
     return (
       <div className="min-h-screen bg-background">
-        <SiteHeader />
+        
         <main className="mx-auto max-w-sm px-4 py-16">
           <h1 className="text-xl font-bold mb-4">管理员登录</h1>
           <Card>
@@ -146,7 +145,7 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
 
   return (
     <div className="min-h-screen bg-background">
-      <SiteHeader />
+      
       <main className="mx-auto max-w-6xl px-4 py-8">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold">题库管理</h1>

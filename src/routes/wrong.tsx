@@ -1,7 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { SiteHeader } from "@/components/SiteHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getWrong, removeWrong } from "@/lib/storage";
@@ -66,7 +65,7 @@ function WrongBook() {
 
   return (
     <div className="min-h-screen bg-background">
-      <SiteHeader />
+      
       <main className="mx-auto max-w-3xl px-4 py-8">
         <h1 className="text-2xl font-bold tracking-tight mb-1">错题本</h1>
         <p className="text-muted-foreground text-sm mb-6">数据保存在你的浏览器本地</p>
