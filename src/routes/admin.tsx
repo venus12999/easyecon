@@ -998,3 +998,114 @@ function FeedbackPanel({ token }: { token: string }) {
     </div>
   );
 }
+function UsersPanel({ token }: { token: string }) {
+  type U = { user_id: string; email: string; display_name: string | null; created_at: string; total: number; correct: number; last: string | null; mocks: number };
+  type Detail = {
+    profile: { email: string; created_at: string } | null;
+    attempts: Array<{ id: string; question_id: string; picked_answer: string | null; is_correct: boolean; mode: string; created_at: string }>;
+    mocks: Array<{ id: string; total: number; correct: number; duration_seconds: number; created_at: string }>;
+    wrongs: Array<{ question_id: string; added_at: string }>;
+    questions: Record<string, { stem: string; correct_answer: string }>;
+  };
+  const [users, setUsers] = useState<U[]>([]);
+  const [picked, setPicked] = useState<string | null>(null);
+  const [detail, setDetail] = useState<Detail | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/admin/users", { headers: { "x-admin-token": token } })
+      .then((r) => r.json())
+      .then((j) => { setUsers(j.users ?? []); setLoading(false); });
+  }, [token]);
+
+  async function open(uid: string) {
+    setPicked(uid);
+    setDetail(null);
+    const r = await fetch(`/api/admin/users?user_id=${uid}`, { headers: { "x-admin-token": token } });
+    setDetail(await r.json());
+  }
+
+  if (loading) return <div className="text-sm text-muted-foreground">加载中…</div>;
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
+      <Card>
+        <CardContent className="p-4">
+          <div className="text-sm font-medium mb-2">注册用户（{users.length}）</div>
+          <div className="space-y-1 max-h-[70vh] overflow-auto">
+            {users.map((u) => (
+              <button
+                key={u.user_id}
+                onClick={() => open(u.user_id)}
+                className={`w-full text-left rounded-md border px-3 py-2 text-sm hover:bg-accent ${picked === u.user_id ? "bg-accent" : ""}`}
+              >
+                <div className="font-medium truncate">{u.email}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  答题 {u.total} · 正确 {u.total ? Math.round((u.correct / u.total) * 100) : 0}% · 模考 {u.mocks}
+                </div>
+                <div className="text-[10px] text-muted-foreground">
+                  注册 {new Date(u.created_at).toLocaleDateString()} · 最近 {u.last ? new Date(u.last).toLocaleString() : "—"}
+                </div>
+              </button>
+            ))}
+            {users.length === 0 && <div className="text-xs text-muted-foreground">暂无注册用户</div>}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-4">
+          {!picked && <div className="text-sm text-muted-foreground">选择一个用户查看明细</div>}
+          {picked && !detail && <div className="text-sm text-muted-foreground">加载中…</div>}
+          {detail && (
+            <Tabs defaultValue="attempts">
+              <div className="mb-3">
+                <div className="font-medium">{detail.profile?.email}</div>
+                <div className="text-xs text-muted-foreground">注册于 {detail.profile && new Date(detail.profile.created_at).toLocaleString()}</div>
+              </div>
+              <TabsList>
+                <TabsTrigger value="attempts">答题明细 ({detail.attempts.length})</TabsTrigger>
+                <TabsTrigger value="mocks">模考记录 ({detail.mocks.length})</TabsTrigger>
+                <TabsTrigger value="wrongs">错题 ({detail.wrongs.length})</TabsTrigger>
+              </TabsList>
+              <TabsContent value="attempts" className="mt-3 max-h-[60vh] overflow-auto space-y-2">
+                {detail.attempts.map((a) => {
+                  const q = detail.questions[a.question_id];
+                  return (
+                    <div key={a.id} className="border rounded px-3 py-2 text-xs">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`px-1.5 py-0.5 rounded ${a.is_correct ? "bg-success/15 text-success" : "bg-destructive/15 text-destructive"}`}>
+                          {a.is_correct ? "✓" : "✗"}
+                        </span>
+                        <span className="text-muted-foreground">{a.mode}</span>
+                        <span className="text-muted-foreground ml-auto">{new Date(a.created_at).toLocaleString()}</span>
+                      </div>
+                      <div className="line-clamp-2">{q?.stem ?? "(题目已删除)"}</div>
+                      <div className="text-muted-foreground mt-1">选 {a.picked_answer ?? "—"} · 正确 {q?.correct_answer ?? "?"}</div>
+                    </div>
+                  );
+                })}
+              </TabsContent>
+              <TabsContent value="mocks" className="mt-3 space-y-2 max-h-[60vh] overflow-auto">
+                {detail.mocks.map((m) => (
+                  <div key={m.id} className="border rounded px-3 py-2 text-sm flex justify-between">
+                    <span>{new Date(m.created_at).toLocaleString()}</span>
+                    <span>{m.correct}/{m.total} · {Math.round((m.correct/m.total)*100)}% · {Math.floor(m.duration_seconds/60)}分{m.duration_seconds%60}秒</span>
+                  </div>
+                ))}
+              </TabsContent>
+              <TabsContent value="wrongs" className="mt-3 space-y-2 max-h-[60vh] overflow-auto">
+                {detail.wrongs.map((w) => (
+                  <div key={w.question_id} className="border rounded px-3 py-2 text-xs">
+                    <div className="line-clamp-2">{detail.questions[w.question_id]?.stem ?? "(题目已删除)"}</div>
+                    <div className="text-muted-foreground mt-1">加入于 {new Date(w.added_at).toLocaleString()}</div>
+                  </div>
+                ))}
+              </TabsContent>
+            </Tabs>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
