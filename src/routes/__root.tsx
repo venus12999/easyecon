@@ -2,6 +2,7 @@ import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/r
 
 import appCss from "../styles.css?url";
 import { Toaster } from "@/components/ui/sonner";
+import { FeedbackWidget } from "@/components/FeedbackWidget";
 
 function NotFoundComponent() {
   return (
@@ -74,6 +75,7 @@ function RootComponent() {
     <>
       <Outlet />
       <Toaster richColors position="top-center" />
+      <FeedbackWidget />
     </>
   );
 }
