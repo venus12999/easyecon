@@ -211,6 +211,12 @@ function Practice() {
             size="sm"
             onClick={() => {
               addWrong(cur!.id);
+                if (user && cur) {
+                  void supabase.from("wrong_questions").upsert(
+                    { user_id: user.id, question_id: cur.id },
+                    { onConflict: "user_id,question_id" },
+                  );
+                }
               toast.success("已加入错题本");
             }}
           >
