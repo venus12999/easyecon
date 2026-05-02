@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { renderStemWithTerms, type TermInfo } from "@/lib/term-render";
 import { optionStyles, colorizeExplanation, type OptKey } from "@/lib/option-colors";
 import { recordAnswer, addWrong, removeWrong } from "@/lib/storage";
-import { Check, X, ChevronLeft, ChevronRight, Bookmark, Loader2, Sparkles } from "lucide-react";
+import { Check, X, ChevronLeft, ChevronRight, Bookmark, Loader2, Sparkles, Home } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -181,7 +181,12 @@ function Practice() {
       
       <main className="mx-auto max-w-3xl px-4 py-6 pb-24">
         <div className="mb-4">
-          <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">← 返回知识点</Link>
+          <div className="flex items-center justify-between">
+            <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">← 返回知识点</Link>
+            <Button asChild variant="outline" size="sm">
+              <Link to="/"><Home className="h-4 w-4 mr-1" />结束练习</Link>
+            </Button>
+          </div>
         </div>
         <div className="mb-4 flex items-center justify-between">
           <div>
@@ -225,9 +230,15 @@ function Practice() {
           {!submitted ? (
             <Button onClick={submit} disabled={!picked}>提交</Button>
           ) : (
-            <Button onClick={next} disabled={idx === questions.length - 1}>
-              下一题 <ChevronRight className="h-4 w-4" />
-            </Button>
+            idx === questions.length - 1 ? (
+              <Button asChild>
+                <Link to="/"><Home className="h-4 w-4 mr-1" />完成 · 返回主页</Link>
+              </Button>
+            ) : (
+              <Button onClick={next}>
+                下一题 <ChevronRight className="h-4 w-4" />
+              </Button>
+            )
           )}
         </div>
       </main>
