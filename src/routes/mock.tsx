@@ -18,6 +18,7 @@ export const Route = createFileRoute("/mock")({
 type Q = {
   id: string;
   knowledge_point_id: string;
+  unit: number;
   stem: string;
   option_a: string;
   option_b: string;
@@ -27,7 +28,7 @@ type Q = {
   correct_answer: OptKey;
   explanation: string;
   term_tags: string[] | null;
-  knowledge_points: { name_zh: string } | null;
+  knowledge_points: { name_zh: string; unit: number } | null;
 };
 
 function shuffle<T>(arr: T[]): T[] {
@@ -42,14 +43,22 @@ function shuffle<T>(arr: T[]): T[] {
 function Mock() {
   const { user } = useAuth();
   const [phase, setPhase] = useState<"idle" | "running" | "done">("idle");
-  const [size, setSize] = useState(15);
-  const [pool, setPool] = useState<Q[]>([]);
   const [questions, setQuestions] = useState<Q[]>([]);
   const [answers, setAnswers] = useState<Record<string, OptKey>>({});
   const [idx, setIdx] = useState(0);
   const [seconds, setSeconds] = useState(0);
   const [loading, setLoading] = useState(false);
   const [termDict, setTermDict] = useState<Record<string, TermInfo>>({});
+  const [shortageNote, setShortageNote] = useState<string | null>(null);
+
+  // 官方 AP 微观考试：60 题 / 70 分钟
+  const TOTAL_QUESTIONS = 60;
+  const TIME_LIMIT_SECONDS = 70 * 60;
+  // 每个 Unit 的目标题数（均落在官方比例区间内，合计 60）
+  // U1 13.3% / U2 23.3% / U3 20% / U4 18.3% / U5 11.7% / U6 13.3%
+  const UNIT_TARGETS: Record<number, number> = { 1: 8, 2: 14, 3: 12, 4: 11, 5: 7, 6: 8 };
+  const remainingSeconds = Math.max(0, TIME_LIMIT_SECONDS - seconds);
+  const timeUp = phase === "running" && remainingSeconds === 0;
 
   useEffect(() => {
     supabase
@@ -68,16 +77,50 @@ function Mock() {
     return () => clearInterval(t);
   }, [phase]);
 
+  // 时间到自动交卷
+  useEffect(() => {
+    if (timeUp) submit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeUp]);
+
   async function start() {
     setLoading(true);
+    setShortageNote(null);
     const { data } = await supabase
       .from("questions")
-      .select("id,knowledge_point_id,stem,option_a,option_b,option_c,option_d,option_e,correct_answer,explanation,term_tags,knowledge_points(name_zh)")
+      .select("id,knowledge_point_id,stem,option_a,option_b,option_c,option_d,option_e,correct_answer,explanation,term_tags,knowledge_points!inner(name_zh,unit)")
       .eq("status", "published");
-    const all = (data ?? []) as unknown as Q[];
-    setPool(all);
-    const picked = shuffle(all).slice(0, Math.min(size, all.length));
-    setQuestions(picked);
+    const all = ((data ?? []) as unknown as Q[]).map((q) => ({
+      ...q,
+      unit: q.knowledge_points?.unit ?? 0,
+    }));
+
+    // 按 unit 分组并按目标抽取
+    const picked: Q[] = [];
+    const usedIds = new Set<string>();
+    const shortages: string[] = [];
+    for (const [unitStr, target] of Object.entries(UNIT_TARGETS)) {
+      const unit = Number(unitStr);
+      const bucket = all.filter((q) => q.unit === unit);
+      const take = shuffle(bucket).slice(0, target);
+      take.forEach((q) => usedIds.add(q.id));
+      picked.push(...take);
+      if (take.length < target) shortages.push(`Unit ${unit} 缺 ${target - take.length} 题`);
+    }
+    // 题库不足时，从剩余题中随机补到 60 题
+    if (picked.length < TOTAL_QUESTIONS) {
+      const remain = shuffle(all.filter((q) => !usedIds.has(q.id))).slice(
+        0,
+        TOTAL_QUESTIONS - picked.length,
+      );
+      picked.push(...remain);
+    }
+    if (shortages.length > 0) {
+      setShortageNote(`题库不足，已用其他单元补齐：${shortages.join("、")}`);
+    }
+    // 整体打乱顺序
+    const finalQuestions = shuffle(picked);
+    setQuestions(finalQuestions);
     setAnswers({});
     setIdx(0);
     setSeconds(0);
@@ -153,29 +196,27 @@ function Mock() {
       <div className="min-h-screen bg-background">
         
         <main className="mx-auto max-w-2xl px-4 py-12">
-          <h1 className="text-2xl font-bold mb-2">模考模式</h1>
+          <h1 className="text-2xl font-bold mb-2">完整模考（AP 官方比例）</h1>
           <p className="text-muted-foreground text-sm mb-6">
-            从已发布题库中随机抽取 N 题，计时作答。交卷后展示总分、按知识点分布与错题。
+            按 AP 微观经济考试规格随机抽取 <b>60 道</b> 多选题，限时 <b>70 分钟</b>，时间到自动交卷。
           </p>
           <Card>
             <CardContent className="p-6 space-y-4">
-              <div>
-                <label className="text-sm font-medium">题数</label>
-                <div className="flex gap-2 mt-2">
-                  {[10, 15, 25].map((n) => (
-                    <Button
-                      key={n}
-                      variant={size === n ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setSize(n)}
-                    >
-                      {n} 题
-                    </Button>
+              <div className="space-y-2 text-sm">
+                <div className="font-medium">单元题数分布（与 AP 官方比例一致）</div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  {Object.entries(UNIT_TARGETS).map(([u, n]) => (
+                    <div key={u} className="flex justify-between border rounded px-2 py-1.5 bg-card">
+                      <span>Unit {u}</span>
+                      <span className="text-muted-foreground">
+                        {n} 题 · {((n / TOTAL_QUESTIONS) * 100).toFixed(1)}%
+                      </span>
+                    </div>
                   ))}
                 </div>
               </div>
               <Button onClick={start} disabled={loading} className="w-full">
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "开始模考"}
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "开始模考（60 题 / 70 分钟）"}
               </Button>
             </CardContent>
           </Card>
@@ -192,16 +233,22 @@ function Mock() {
       { k: "C", v: cur.option_c }, { k: "D", v: cur.option_d },
       ...(cur.option_e ? [{ k: "E" as OptKey, v: cur.option_e }] : []),
     ];
-    const mm = String(Math.floor(seconds / 60)).padStart(2, "0");
-    const ss = String(seconds % 60).padStart(2, "0");
+    const mm = String(Math.floor(remainingSeconds / 60)).padStart(2, "0");
+    const ss = String(remainingSeconds % 60).padStart(2, "0");
+    const lowTime = remainingSeconds <= 5 * 60;
     return (
       <div className="min-h-screen bg-background">
         
         <main className="mx-auto max-w-3xl px-4 py-6 pb-24">
+          {shortageNote && (
+            <div className="mb-3 rounded-md border border-amber-300 bg-amber-50 text-amber-900 text-xs px-3 py-2">
+              {shortageNote}
+            </div>
+          )}
           <div className="mb-4 flex items-center justify-between">
             <div className="text-sm text-muted-foreground">{idx + 1} / {questions.length}</div>
-            <div className="flex items-center gap-1.5 text-sm font-mono">
-              <Clock className="h-4 w-4 text-primary" />
+            <div className={`flex items-center gap-1.5 text-sm font-mono ${lowTime ? "text-destructive font-bold" : ""}`}>
+              <Clock className={`h-4 w-4 ${lowTime ? "text-destructive" : "text-primary"}`} />
               {mm}:{ss}
             </div>
           </div>
