@@ -15,6 +15,7 @@ export const Route = createFileRoute("/wrong")({
 type Q = {
   id: string;
   stem: string;
+  type: "basic" | "application" | "pitfall";
   knowledge_point_id: string;
   knowledge_points: { name_zh: string; slug: string } | null;
 };
@@ -42,7 +43,7 @@ function WrongBook() {
     }
     const { data: qs, error: qErr } = await supabase
       .from("questions")
-      .select("id,stem,knowledge_point_id")
+      .select("id,stem,type,knowledge_point_id")
       .in("id", ids);
     if (qErr) {
       console.error("[wrong] questions query failed", qErr);
@@ -64,6 +65,7 @@ function WrongBook() {
     const merged: Q[] = (qs ?? []).map((q) => ({
       id: q.id,
       stem: q.stem,
+      type: q.type as Q["type"],
       knowledge_point_id: q.knowledge_point_id,
       knowledge_points: kpMap[q.knowledge_point_id] ?? null,
     }));
