@@ -2,7 +2,6 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { getProgress, type ProgressMap } from "@/lib/storage";
 import { ChevronRight, Sparkles } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -42,7 +41,6 @@ type KpProgressInfo = {
 function Index() {
   const [kps, setKps] = useState<Kp[]>([]);
   const [counts, setCounts] = useState<Counts>({});
-  const [progress, setProgress] = useState<ProgressMap>({});
   const [loading, setLoading] = useState(true);
   const [unit, setUnit] = useState<number | null>(null);
   const { user } = useAuth();
@@ -82,7 +80,6 @@ function Index() {
   }, [user]);
 
   useEffect(() => {
-    setProgress(getProgress());
     (async () => {
       const { data: kpData } = await supabase
         .from("knowledge_points")
