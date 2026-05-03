@@ -8,7 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
 import { renderStemWithTerms, type TermInfo } from "@/lib/term-render";
 import { optionStyles, colorizeExplanation, type OptKey } from "@/lib/option-colors";
-import { recordAnswer, addWrong, removeWrong } from "@/lib/storage";
+import { recordAnswer, addWrong, getWrong } from "@/lib/storage";
 import { Check, X, ChevronLeft, ChevronRight, Bookmark, Loader2, Sparkles, Home } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
@@ -63,6 +63,8 @@ function Practice() {
   const [savingAnswer, setSavingAnswer] = useState(false);
   const [termDict, setTermDict] = useState<Record<string, TermInfo>>({});
   const [loading, setLoading] = useState(true);
+  const [wrongSet, setWrongSet] = useState<Set<string>>(new Set());
+  const [answeredSet, setAnsweredSet] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     (async () => {
@@ -95,9 +97,21 @@ function Practice() {
       setIdx(0);
       setPicked(null);
       setSubmitted(false);
+      // Load existing wrong-book + answered records to dedupe
+      if (user) {
+        const [{ data: wrongs }, { data: attempts }] = await Promise.all([
+          supabase.from("wrong_questions").select("question_id").eq("user_id", user.id),
+          supabase.from("answer_attempts").select("question_id").eq("user_id", user.id),
+        ]);
+        setWrongSet(new Set((wrongs ?? []).map((r) => r.question_id)));
+        setAnsweredSet(new Set((attempts ?? []).map((r) => r.question_id)));
+      } else {
+        setWrongSet(new Set(getWrong()));
+        setAnsweredSet(new Set());
+      }
       setLoading(false);
     })();
-  }, [slug, type]);
+  }, [slug, type, user]);
 
   const cur = questions[idx];
 
@@ -106,26 +120,32 @@ function Practice() {
     setSavingAnswer(true);
     const ok = picked === cur.correct_answer;
     if (ok) playCorrect(); else playWrong();
-    recordAnswer(cur.knowledge_point_id, ok);
-    if (!ok) addWrong(cur.id);
-    else removeWrong(cur.id);
+    const alreadyAnswered = answeredSet.has(cur.id);
+    if (!alreadyAnswered) {
+      recordAnswer(cur.knowledge_point_id, ok);
+    }
+    if (!ok && !wrongSet.has(cur.id)) addWrong(cur.id);
     if (user) {
-      await supabase.from("answer_attempts").insert({
-        user_id: user.id,
-        question_id: cur.id,
-        knowledge_point_id: cur.knowledge_point_id,
-        picked_answer: picked,
-        is_correct: ok,
-        mode: "practice",
-      });
-      if (!ok) {
-        void supabase.from("wrong_questions").upsert(
+      if (!alreadyAnswered) {
+        await supabase.from("answer_attempts").insert({
+          user_id: user.id,
+          question_id: cur.id,
+          knowledge_point_id: cur.knowledge_point_id,
+          picked_answer: picked,
+          is_correct: ok,
+          mode: "practice",
+        });
+        setAnsweredSet((s) => new Set(s).add(cur.id));
+      }
+      if (!ok && !wrongSet.has(cur.id)) {
+        await supabase.from("wrong_questions").upsert(
           { user_id: user.id, question_id: cur.id },
           { onConflict: "user_id,question_id" },
         );
-      } else {
-        void supabase.from("wrong_questions").delete().eq("user_id", user.id).eq("question_id", cur.id);
+        setWrongSet((s) => new Set(s).add(cur.id));
       }
+    } else if (!ok) {
+      setWrongSet((s) => new Set(s).add(cur.id));
     }
     setSubmitted(true);
     setSavingAnswer(false);
@@ -223,18 +243,21 @@ function Practice() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => {
-              addWrong(cur!.id);
-                if (user && cur) {
-                  void supabase.from("wrong_questions").upsert(
-                    { user_id: user.id, question_id: cur.id },
-                    { onConflict: "user_id,question_id" },
-                  );
-                }
+            disabled={!cur || wrongSet.has(cur.id)}
+            onClick={async () => {
+              if (!cur || wrongSet.has(cur.id)) return;
+              addWrong(cur.id);
+              if (user) {
+                await supabase.from("wrong_questions").upsert(
+                  { user_id: user.id, question_id: cur.id },
+                  { onConflict: "user_id,question_id" },
+                );
+              }
+              setWrongSet((s) => new Set(s).add(cur.id));
               toast.success("已加入错题本");
             }}
           >
-            <Bookmark className="h-4 w-4" /> 加入错题本
+            <Bookmark className="h-4 w-4" /> {cur && wrongSet.has(cur.id) ? "已在错题本" : "加入错题本"}
           </Button>
           {!submitted ? (
             <Button onClick={submit} disabled={!picked || savingAnswer}>{savingAnswer ? "保存中…" : "提交"}</Button>
