@@ -94,8 +94,16 @@ function WrongBook() {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-3">
-            {items.map((q) => (
+          <div className="space-y-6">
+            {(["basic", "application", "pitfall"] as const).map((t) => {
+              const group = items.filter((q) => q.type === t);
+              if (group.length === 0) return null;
+              const label = t === "basic" ? "基础题（概念）" : t === "application" ? "应用题（情境）" : "易错题（常见坑）";
+              return (
+                <div key={t}>
+                  <h2 className="text-sm font-semibold text-muted-foreground mb-2">{label} · {group.length}</h2>
+                  <div className="space-y-3">
+                    {group.map((q) => (
               <Card key={q.id}>
                 <CardContent className="p-4 flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
@@ -130,7 +138,11 @@ function WrongBook() {
                   </div>
                 </CardContent>
               </Card>
-            ))}
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </main>
