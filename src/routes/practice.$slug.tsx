@@ -12,6 +12,7 @@ import { recordAnswer, addWrong, removeWrong } from "@/lib/storage";
 import { Check, X, ChevronLeft, ChevronRight, Bookmark, Loader2, Sparkles, Home } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
+import { playCorrect, playWrong } from "@/lib/sfx";
 
 const searchSchema = z.object({
   type: z.enum(["basic", "application", "pitfall"]).optional(),
@@ -104,6 +105,7 @@ function Practice() {
     if (!picked || !cur) return;
     setSavingAnswer(true);
     const ok = picked === cur.correct_answer;
+    if (ok) playCorrect(); else playWrong();
     recordAnswer(cur.knowledge_point_id, ok);
     if (!ok) addWrong(cur.id);
     else removeWrong(cur.id);
