@@ -2,7 +2,6 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { getProgress, type ProgressMap } from "@/lib/storage";
 import { ChevronRight, Sparkles } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -33,13 +32,19 @@ type Counts = Record<
   { basic: number; application: number; pitfall: number; total: number; draft: number }
 >;
 
+type KpProgressInfo = {
+  done: number; // 当前轮已做题数
+  total: number;
+  round: number; // 第几轮（1 起）
+};
+
 function Index() {
   const [kps, setKps] = useState<Kp[]>([]);
   const [counts, setCounts] = useState<Counts>({});
-  const [progress, setProgress] = useState<ProgressMap>({});
   const [loading, setLoading] = useState(true);
   const [unit, setUnit] = useState<number | null>(null);
   const { user } = useAuth();
+  const [kpProgress, setKpProgress] = useState<Record<string, KpProgressInfo>>({});
   const [stats, setStats] = useState<{ today: number; rate: number | null; totalAttempts: number }>({
     today: 0,
     rate: null,
@@ -75,7 +80,6 @@ function Index() {
   }, [user]);
 
   useEffect(() => {
-    setProgress(getProgress());
     (async () => {
       const { data: kpData } = await supabase
         .from("knowledge_points")
@@ -104,6 +108,47 @@ function Index() {
       setLoading(false);
     })();
   }, []);
+
+  // 计算每个知识点的「当前轮进度」：按时间顺序遍历答题记录，
+  // 每当本轮覆盖该知识点全部题目后开启新一轮。
+  useEffect(() => {
+    if (!user) {
+      setKpProgress({});
+      return;
+    }
+    if (Object.keys(counts).length === 0) return;
+    (async () => {
+      const { data } = await supabase
+        .from("answer_attempts")
+        .select("knowledge_point_id,question_id,created_at")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: true });
+      const grouped: Record<string, { qid: string }[]> = {};
+      (data ?? []).forEach((r) => {
+        const k = r.knowledge_point_id as string;
+        (grouped[k] ??= []).push({ qid: r.question_id as string });
+      });
+      const next: Record<string, KpProgressInfo> = {};
+      for (const [kpId, rows] of Object.entries(grouped)) {
+        const total = counts[kpId]?.total ?? 0;
+        if (total === 0) continue;
+        let round = 1;
+        let seen = new Set<string>();
+        for (const r of rows) {
+          seen.add(r.qid);
+          if (seen.size >= total) {
+            round += 1;
+            seen = new Set();
+          }
+        }
+        // 若刚好整轮结束，显示已完成的整轮
+        const done = seen.size === 0 && round > 1 ? total : seen.size;
+        const displayRound = seen.size === 0 && round > 1 ? round - 1 : round;
+        next[kpId] = { done, total, round: displayRound };
+      }
+      setKpProgress(next);
+    })();
+  }, [user, counts]);
 
   const allUnits = Array.from(new Set(kps.map((k) => k.unit))).sort((a, b) => a - b);
   const visibleKps = unit == null ? kps : kps.filter((k) => k.unit === unit);
@@ -199,8 +244,7 @@ function Index() {
             {visibleKps.map((kp) => {
               const c = counts[kp.id] ?? { basic: 0, application: 0, pitfall: 0, total: 0, draft: 0 };
               const n = c.total;
-              const p = progress[kp.id];
-              const acc = p && p.attempts > 0 ? Math.round((p.correct / p.attempts) * 100) : null;
+              const kpInfo = kpProgress[kp.id];
               return (
                 <Link
                   key={kp.id}
@@ -235,9 +279,10 @@ function Index() {
                               ? `暂无题目（${c.draft} 道待审核）`
                               : "暂无题目"}
                         </span>
-                        {acc !== null ? (
+                        {kpInfo && n > 0 ? (
                           <span className="text-primary font-medium">
-                            正确率 {acc}% · {p!.attempts} 次
+                            {kpInfo.round > 1 ? `第${kpInfo.round}轮 ` : ""}
+                            {kpInfo.done}/{kpInfo.total}
                           </span>
                         ) : (
                           <span className="text-muted-foreground">未开始</span>

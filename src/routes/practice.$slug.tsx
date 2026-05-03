@@ -64,7 +64,6 @@ function Practice() {
   const [termDict, setTermDict] = useState<Record<string, TermInfo>>({});
   const [loading, setLoading] = useState(true);
   const [wrongSet, setWrongSet] = useState<Set<string>>(new Set());
-  const [answeredSet, setAnsweredSet] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     (async () => {
@@ -97,17 +96,15 @@ function Practice() {
       setIdx(0);
       setPicked(null);
       setSubmitted(false);
-      // Load existing wrong-book + answered records to dedupe
+      // Load existing wrong-book to dedupe the bookmark button
       if (user) {
-        const [{ data: wrongs }, { data: attempts }] = await Promise.all([
-          supabase.from("wrong_questions").select("question_id").eq("user_id", user.id),
-          supabase.from("answer_attempts").select("question_id").eq("user_id", user.id),
-        ]);
+        const { data: wrongs } = await supabase
+          .from("wrong_questions")
+          .select("question_id")
+          .eq("user_id", user.id);
         setWrongSet(new Set((wrongs ?? []).map((r) => r.question_id)));
-        setAnsweredSet(new Set((attempts ?? []).map((r) => r.question_id)));
       } else {
         setWrongSet(new Set(getWrong()));
-        setAnsweredSet(new Set());
       }
       setLoading(false);
     })();
@@ -120,23 +117,17 @@ function Practice() {
     setSavingAnswer(true);
     const ok = picked === cur.correct_answer;
     if (ok) playCorrect(); else playWrong();
-    const alreadyAnswered = answeredSet.has(cur.id);
-    if (!alreadyAnswered) {
-      recordAnswer(cur.knowledge_point_id, ok);
-    }
+    recordAnswer(cur.knowledge_point_id, ok);
     if (!ok && !wrongSet.has(cur.id)) addWrong(cur.id);
     if (user) {
-      if (!alreadyAnswered) {
-        await supabase.from("answer_attempts").insert({
-          user_id: user.id,
-          question_id: cur.id,
-          knowledge_point_id: cur.knowledge_point_id,
-          picked_answer: picked,
-          is_correct: ok,
-          mode: "practice",
-        });
-        setAnsweredSet((s) => new Set(s).add(cur.id));
-      }
+      await supabase.from("answer_attempts").insert({
+        user_id: user.id,
+        question_id: cur.id,
+        knowledge_point_id: cur.knowledge_point_id,
+        picked_answer: picked,
+        is_correct: ok,
+        mode: "practice",
+      });
       if (!ok && !wrongSet.has(cur.id)) {
         await supabase.from("wrong_questions").upsert(
           { user_id: user.id, question_id: cur.id },
