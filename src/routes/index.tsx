@@ -2,7 +2,6 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getProgress, type ProgressMap } from "@/lib/storage";
 import { ChevronRight, Sparkles } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -38,7 +37,6 @@ function Index() {
   const [kps, setKps] = useState<Kp[]>([]);
   const [counts, setCounts] = useState<Counts>({});
   const [progress, setProgress] = useState<ProgressMap>({});
-  const [tab, setTab] = useState<"basic" | "application" | "pitfall">("basic");
   const [loading, setLoading] = useState(true);
   const [unit, setUnit] = useState<number | null>(null);
   const { user } = useAuth();
@@ -190,16 +188,6 @@ function Index() {
           </div>
         )}
 
-        <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)} className="mb-6">
-          <div className="overflow-x-auto -mx-1 px-1">
-            <TabsList className="w-max">
-              <TabsTrigger value="basic">基础题（概念）</TabsTrigger>
-              <TabsTrigger value="application">应用题（情境）</TabsTrigger>
-              <TabsTrigger value="pitfall">易错题（常见坑）</TabsTrigger>
-            </TabsList>
-          </div>
-        </Tabs>
-
         {loading ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -210,7 +198,7 @@ function Index() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {visibleKps.map((kp) => {
               const c = counts[kp.id] ?? { basic: 0, application: 0, pitfall: 0, total: 0, draft: 0 };
-              const n = c[tab];
+              const n = c.total;
               const p = progress[kp.id];
               const acc = p && p.attempts > 0 ? Math.round((p.correct / p.attempts) * 100) : null;
               return (
@@ -218,7 +206,7 @@ function Index() {
                   key={kp.id}
                   to="/practice/$slug"
                   params={{ slug: kp.slug }}
-                  search={{ type: tab }}
+                  search={{}}
                   className="group"
                 >
                   <Card className="h-full transition-all hover:border-primary/50 hover:shadow-md">
