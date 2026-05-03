@@ -234,7 +234,7 @@ function Practice() {
               toast.success("已加入错题本");
             }}
           >
-            <Bookmark className="h-4 w-4" /> 标记
+            <Bookmark className="h-4 w-4" /> 加入错题本
           </Button>
           {!submitted ? (
             <Button onClick={submit} disabled={!picked || savingAnswer}>{savingAnswer ? "保存中…" : "提交"}</Button>
