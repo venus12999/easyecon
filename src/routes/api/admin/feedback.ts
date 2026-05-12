@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { verifyToken } from "@/lib/admin-token.server";
+import { verifyAdminRequest } from "@/lib/admin-auth.server";
 
 function unauth() {
   return new Response(JSON.stringify({ error: "unauthorized" }), {
@@ -13,7 +13,7 @@ export const Route = createFileRoute("/api/admin/feedback")({
   server: {
     handlers: {
       GET: async ({ request }) => {
-        if (!verifyToken(request.headers.get("x-admin-token"))) return unauth();
+        if (!(await verifyAdminRequest(request))) return unauth();
         const { data, error } = await supabaseAdmin
           .from("feedback")
           .select("*")
@@ -22,7 +22,7 @@ export const Route = createFileRoute("/api/admin/feedback")({
         return Response.json({ items: data ?? [] });
       },
       PUT: async ({ request }) => {
-        if (!verifyToken(request.headers.get("x-admin-token"))) return unauth();
+        if (!(await verifyAdminRequest(request))) return unauth();
         const { id, status, admin_note } = await request.json();
         if (!id) return new Response(JSON.stringify({ error: "missing id" }), { status: 400 });
         const patch: { status?: "new" | "in_progress" | "resolved"; admin_note?: string } = {};
@@ -38,7 +38,7 @@ export const Route = createFileRoute("/api/admin/feedback")({
         return Response.json(data);
       },
       DELETE: async ({ request }) => {
-        if (!verifyToken(request.headers.get("x-admin-token"))) return unauth();
+        if (!(await verifyAdminRequest(request))) return unauth();
         const { id } = await request.json();
         if (!id) return new Response(JSON.stringify({ error: "missing id" }), { status: 400 });
         const { error } = await supabaseAdmin.from("feedback").delete().eq("id", id);

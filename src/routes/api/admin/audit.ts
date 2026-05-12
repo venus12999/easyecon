@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { verifyToken } from "@/lib/admin-token.server";
+import { verifyAdminRequest } from "@/lib/admin-auth.server";
 
 type AuditFinding = {
   question_id: string;
@@ -30,7 +30,7 @@ export const Route = createFileRoute("/api/admin/audit")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        if (!verifyToken(request.headers.get("x-admin-token"))) return unauth();
+        if (!(await verifyAdminRequest(request))) return unauth();
 
         const apiKey = process.env.LOVABLE_API_KEY;
         if (!apiKey) {

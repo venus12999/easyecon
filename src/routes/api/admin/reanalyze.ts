@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { verifyToken } from "@/lib/admin-token.server";
+import { verifyAdminRequest } from "@/lib/admin-auth.server";
 
 function unauth() {
   return new Response(JSON.stringify({ error: "unauthorized" }), {
@@ -12,7 +12,7 @@ export const Route = createFileRoute("/api/admin/reanalyze")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        if (!verifyToken(request.headers.get("x-admin-token"))) return unauth();
+        if (!(await verifyAdminRequest(request))) return unauth();
         try {
           const body = (await request.json()) as {
             stem: string;

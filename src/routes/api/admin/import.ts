@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { verifyToken } from "@/lib/admin-token.server";
+import { verifyAdminRequest } from "@/lib/admin-auth.server";
 
 type Item = {
   knowledge_point_slug: string;
@@ -23,7 +23,7 @@ export const Route = createFileRoute("/api/admin/import")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        if (!verifyToken(request.headers.get("x-admin-token"))) {
+        if (!(await verifyAdminRequest(request))) {
           return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
         }
         const { items } = (await request.json()) as { items: Item[] };

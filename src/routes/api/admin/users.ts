@@ -1,12 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { verifyToken } from "@/lib/admin-token.server";
+import { verifyAdminRequest } from "@/lib/admin-auth.server";
 
 export const Route = createFileRoute("/api/admin/users")({
   server: {
     handlers: {
       GET: async ({ request }) => {
-        if (!verifyToken(request.headers.get("x-admin-token"))) {
+        if (!(await verifyAdminRequest(request))) {
           return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
         }
         const url = new URL(request.url);
