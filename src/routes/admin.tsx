@@ -123,6 +123,23 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<Q | null>(null);
   const [creating, setCreating] = useState(false);
+  const [papers, setPapers] = useState<{ id: string; slug: string; title: string }[]>([]);
+  const [paperMap, setPaperMap] = useState<Record<string, Set<string>>>({}); // paperId -> set(questionId)
+
+  useEffect(() => {
+    (async () => {
+      const [{ data: p }, { data: pq }] = await Promise.all([
+        supabase.from("mock_papers").select("id,slug,title").order("sort_order"),
+        supabase.from("paper_questions").select("paper_id,question_id"),
+      ]);
+      setPapers(p ?? []);
+      const m: Record<string, Set<string>> = {};
+      (pq ?? []).forEach((r: { paper_id: string; question_id: string }) => {
+        (m[r.paper_id] ??= new Set()).add(r.question_id);
+      });
+      setPaperMap(m);
+    })();
+  }, []);
 
   const reload = useCallback(async () => {
     const res = await fetch("/api/admin/questions", { headers: { Authorization: `Bearer ${token}` } });
@@ -139,7 +156,11 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
   useEffect(() => { reload(); }, [reload]);
 
   const filtered = questions.filter((q) => {
-    if (filterUnit !== "all") {
+    if (filterUnit.startsWith("paper:")) {
+      const pid = filterUnit.slice(6);
+      const set = paperMap[pid];
+      if (!set || !set.has(q.id)) return false;
+    } else if (filterUnit !== "all") {
       const kp = kps.find((k) => k.id === q.knowledge_point_id);
       if (!kp || String(kp.unit) !== filterUnit) return false;
     }
@@ -176,10 +197,13 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
           <TabsContent value="list" className="mt-4">
             <div className="flex flex-wrap gap-2 mb-4 items-center">
               <Select value={filterUnit} onValueChange={(v) => { setFilterUnit(v); setFilterKp("all"); }}>
-                <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">全部单元</SelectItem>
                   {units.map((u) => <SelectItem key={u} value={String(u)}>Unit {u}</SelectItem>)}
+                  {papers.map((p) => (
+                    <SelectItem key={p.id} value={`paper:${p.id}`}>真题·{p.title}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <Select value={filterKp} onValueChange={setFilterKp}>
