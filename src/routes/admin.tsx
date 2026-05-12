@@ -124,18 +124,18 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
   const [editing, setEditing] = useState<Q | null>(null);
   const [creating, setCreating] = useState(false);
   const [papers, setPapers] = useState<{ id: string; slug: string; title: string }[]>([]);
-  const [paperMap, setPaperMap] = useState<Record<string, Set<string>>>({}); // paperId -> set(questionId)
+  const [paperMap, setPaperMap] = useState<Record<string, Map<string, number>>>({}); // paperId -> map(questionId, sort_order)
 
   useEffect(() => {
     (async () => {
       const [{ data: p }, { data: pq }] = await Promise.all([
         supabase.from("mock_papers").select("id,slug,title").order("sort_order"),
-        supabase.from("paper_questions").select("paper_id,question_id"),
+        supabase.from("paper_questions").select("paper_id,question_id,sort_order"),
       ]);
       setPapers(p ?? []);
-      const m: Record<string, Set<string>> = {};
-      (pq ?? []).forEach((r: { paper_id: string; question_id: string }) => {
-        (m[r.paper_id] ??= new Set()).add(r.question_id);
+      const m: Record<string, Map<string, number>> = {};
+      (pq ?? []).forEach((r: { paper_id: string; question_id: string; sort_order: number }) => {
+        (m[r.paper_id] ??= new Map()).set(r.question_id, r.sort_order);
       });
       setPaperMap(m);
     })();
@@ -155,11 +155,11 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
 
   useEffect(() => { reload(); }, [reload]);
 
-  const filtered = questions.filter((q) => {
-    if (filterUnit.startsWith("paper:")) {
-      const pid = filterUnit.slice(6);
-      const set = paperMap[pid];
-      if (!set || !set.has(q.id)) return false;
+  const activePaperId = filterUnit.startsWith("paper:") ? filterUnit.slice(6) : null;
+  const activePaperMap = activePaperId ? paperMap[activePaperId] : null;
+  let filtered = questions.filter((q) => {
+    if (activePaperId) {
+      if (!activePaperMap || !activePaperMap.has(q.id)) return false;
     } else if (filterUnit !== "all") {
       const kp = kps.find((k) => k.id === q.knowledge_point_id);
       if (!kp || String(kp.unit) !== filterUnit) return false;
@@ -171,6 +171,11 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
     if (search && !q.stem.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
+  if (activePaperMap) {
+    filtered = [...filtered].sort(
+      (a, b) => (activePaperMap.get(a.id) ?? 0) - (activePaperMap.get(b.id) ?? 0),
+    );
+  }
 
   const imageCount = questions.filter((q) => hasImageMarker(q.stem)).length;
   const units = Array.from(new Set(kps.map((k) => k.unit))).sort((a, b) => a - b);
@@ -241,6 +246,11 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
                   <CardContent className="p-4 flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
+                        {activePaperMap && activePaperMap.has(q.id) && (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-primary text-primary-foreground font-bold font-mono">
+                            #{activePaperMap.get(q.id)}
+                          </span>
+                        )}
                         <span className="text-xs px-1.5 py-0.5 rounded bg-secondary">{q.type}</span>
                         <span className="text-xs text-muted-foreground">{kps.find((k) => k.id === q.knowledge_point_id)?.name_zh}</span>
                         <span className={`text-xs px-1.5 py-0.5 rounded ${q.status === "published" ? "bg-success/15 text-success" : "bg-warning/15 text-warning-foreground"}`}>

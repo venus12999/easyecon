@@ -250,7 +250,9 @@ function PaperRunner() {
     return (
       <main className="mx-auto max-w-3xl px-4 py-6 pb-24">
         <div className="mb-4 flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">{idx + 1} / {questions.length}</div>
+          <div className="text-sm text-muted-foreground">
+            第 <span className="font-bold text-foreground">{idx + 1}</span> 题 / 共 {questions.length} 题
+          </div>
           <div className={`flex items-center gap-1.5 text-sm font-mono ${lowTime ? "text-destructive font-bold" : ""}`}>
             <Clock className={`h-4 w-4 ${lowTime ? "text-destructive" : "text-primary"}`} />
             {mm}:{ss}
@@ -259,6 +261,9 @@ function PaperRunner() {
         <Progress value={((idx + 1) / questions.length) * 100} className="mb-6" />
         <Card>
           <CardContent className="p-6 space-y-5">
+            <div className="text-xs font-semibold text-primary uppercase tracking-wide">
+              Question {idx + 1}
+            </div>
             <p className="text-base leading-relaxed">
               {renderStemWithTerms(cur.stem, cur.term_tags ?? [], termDict)}
             </p>
