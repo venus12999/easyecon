@@ -48,49 +48,27 @@ type Q = {
 function Admin() {
   const { user, loading: authLoading } = useAuth();
   const [token, setToken] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const [denied, setDenied] = useState(false);
 
+  // 已登录且邮箱在白名单 → 直接拿 Supabase JWT 作为后台请求凭证。
   useEffect(() => {
-    const t = sessionStorage.getItem("admin_token");
-    if (t) setToken(t);
-  }, []);
-
-  // 已登录且在白名单 → 自动用 supabase JWT 换 admin token
-  useEffect(() => {
-    if (authLoading || token) return;
-    if (!user) return;
+    if (authLoading || !user) return;
     if (!isAdminEmail(user.email)) {
       setDenied(true);
+      setToken(null);
       return;
     }
-    (async () => {
-      setLoading(true);
-      try {
-        const { data: sess } = await supabase.auth.getSession();
-        const jwt = sess.session?.access_token;
-        if (!jwt) {
-          setDenied(true);
-          return;
-        }
-        const res = await fetch("/api/admin/login", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${jwt}` },
-        });
-        if (!res.ok) {
-          setDenied(true);
-          return;
-        }
-        const j = await res.json();
-        sessionStorage.setItem("admin_token", j.token);
-        setToken(j.token);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [user, authLoading, token]);
+    setDenied(false);
+    supabase.auth.getSession().then(({ data }) => {
+      setToken(data.session?.access_token ?? null);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
+      setToken(s?.access_token ?? null);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, [user, authLoading]);
 
-  if (authLoading || (user && isAdminEmail(user.email) && loading && !token)) {
+  if (authLoading) {
     return (
       <main className="mx-auto max-w-sm px-4 py-16 text-center">
         <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
@@ -132,7 +110,7 @@ function Admin() {
     );
   }
 
-  return <AdminPanel token={token} onLogout={() => { sessionStorage.removeItem("admin_token"); setToken(null); }} />;
+  return <AdminPanel token={token} onLogout={() => { supabase.auth.signOut(); }} />;
 }
 
 function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }) {
