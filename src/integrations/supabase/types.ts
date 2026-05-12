@@ -170,6 +170,110 @@ export type Database = {
         }
         Relationships: []
       }
+      mock_papers: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          slug: string
+          sort_order: number
+          title: string
+          total_seconds: number
+          year: number | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          slug: string
+          sort_order?: number
+          title: string
+          total_seconds?: number
+          year?: number | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          slug?: string
+          sort_order?: number
+          title?: string
+          total_seconds?: number
+          year?: number | null
+        }
+        Relationships: []
+      }
+      paper_frqs: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          image_url: string | null
+          paper_id: string
+          sort_order: number
+          title: string | null
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          paper_id: string
+          sort_order: number
+          title?: string | null
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          paper_id?: string
+          sort_order?: number
+          title?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "paper_frqs_paper_id_fkey"
+            columns: ["paper_id"]
+            isOneToOne: false
+            referencedRelation: "mock_papers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      paper_questions: {
+        Row: {
+          paper_id: string
+          question_id: string
+          sort_order: number
+        }
+        Insert: {
+          paper_id: string
+          question_id: string
+          sort_order: number
+        }
+        Update: {
+          paper_id?: string
+          question_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "paper_questions_paper_id_fkey"
+            columns: ["paper_id"]
+            isOneToOne: false
+            referencedRelation: "mock_papers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "paper_questions_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "questions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
