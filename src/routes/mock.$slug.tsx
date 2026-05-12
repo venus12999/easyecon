@@ -94,7 +94,7 @@ function PaperRunner() {
           .order("sort_order", { ascending: true }),
         supabase.from("terms").select("term_en,term_zh,definition"),
       ]);
-      const qs = (pqs ?? []).map((row: { questions: Q }) => row.questions);
+      const qs = ((pqs ?? []) as unknown as Array<{ questions: Q }>).map((row) => row.questions);
       setQuestions(qs);
       setFrqs((fr ?? []) as Frq[]);
       const d: Record<string, TermInfo> = {};

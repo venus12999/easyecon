@@ -17,6 +17,7 @@ import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PracticeSlugRouteImport } from './routes/practice.$slug'
 import { Route as MockRandomRouteImport } from './routes/mock.random'
+import { Route as MockSlugRouteImport } from './routes/mock.$slug'
 import { Route as ApiFeedbackRouteImport } from './routes/api/feedback'
 import { Route as ApiAiExplainRouteImport } from './routes/api/ai-explain'
 import { Route as ApiAdminUsersRouteImport } from './routes/api/admin/users'
@@ -66,6 +67,11 @@ const PracticeSlugRoute = PracticeSlugRouteImport.update({
 const MockRandomRoute = MockRandomRouteImport.update({
   id: '/random',
   path: '/random',
+  getParentRoute: () => MockRoute,
+} as any)
+const MockSlugRoute = MockSlugRouteImport.update({
+  id: '/$slug',
+  path: '/$slug',
   getParentRoute: () => MockRoute,
 } as any)
 const ApiFeedbackRoute = ApiFeedbackRouteImport.update({
@@ -128,6 +134,7 @@ export interface FileRoutesByFullPath {
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/api/feedback': typeof ApiFeedbackRoute
+  '/mock/$slug': typeof MockSlugRoute
   '/mock/random': typeof MockRandomRoute
   '/practice/$slug': typeof PracticeSlugRoute
   '/api/admin/audit': typeof ApiAdminAuditRoute
@@ -148,6 +155,7 @@ export interface FileRoutesByTo {
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/api/feedback': typeof ApiFeedbackRoute
+  '/mock/$slug': typeof MockSlugRoute
   '/mock/random': typeof MockRandomRoute
   '/practice/$slug': typeof PracticeSlugRoute
   '/api/admin/audit': typeof ApiAdminAuditRoute
@@ -169,6 +177,7 @@ export interface FileRoutesById {
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/api/feedback': typeof ApiFeedbackRoute
+  '/mock/$slug': typeof MockSlugRoute
   '/mock/random': typeof MockRandomRoute
   '/practice/$slug': typeof PracticeSlugRoute
   '/api/admin/audit': typeof ApiAdminAuditRoute
@@ -191,6 +200,7 @@ export interface FileRouteTypes {
     | '/wrong'
     | '/api/ai-explain'
     | '/api/feedback'
+    | '/mock/$slug'
     | '/mock/random'
     | '/practice/$slug'
     | '/api/admin/audit'
@@ -211,6 +221,7 @@ export interface FileRouteTypes {
     | '/wrong'
     | '/api/ai-explain'
     | '/api/feedback'
+    | '/mock/$slug'
     | '/mock/random'
     | '/practice/$slug'
     | '/api/admin/audit'
@@ -231,6 +242,7 @@ export interface FileRouteTypes {
     | '/wrong'
     | '/api/ai-explain'
     | '/api/feedback'
+    | '/mock/$slug'
     | '/mock/random'
     | '/practice/$slug'
     | '/api/admin/audit'
@@ -321,6 +333,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MockRandomRouteImport
       parentRoute: typeof MockRoute
     }
+    '/mock/$slug': {
+      id: '/mock/$slug'
+      path: '/$slug'
+      fullPath: '/mock/$slug'
+      preLoaderRoute: typeof MockSlugRouteImport
+      parentRoute: typeof MockRoute
+    }
     '/api/feedback': {
       id: '/api/feedback'
       path: '/api/feedback'
@@ -395,10 +414,12 @@ declare module '@tanstack/react-router' {
 }
 
 interface MockRouteChildren {
+  MockSlugRoute: typeof MockSlugRoute
   MockRandomRoute: typeof MockRandomRoute
 }
 
 const MockRouteChildren: MockRouteChildren = {
+  MockSlugRoute: MockSlugRoute,
   MockRandomRoute: MockRandomRoute,
 }
 
