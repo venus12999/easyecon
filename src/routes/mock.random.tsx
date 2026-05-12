@@ -10,7 +10,7 @@ import { addWrong, recordAnswer } from "@/lib/storage";
 import { Clock, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
-export const Route = createFileRoute("/mock")({
+export const Route = createFileRoute("/mock/random")({
   head: () => ({ meta: [{ title: "模考模式 · AP 微观经济" }] }),
   component: Mock,
 });
