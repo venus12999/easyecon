@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { verifyToken } from "@/lib/admin-token.server";
+import { verifyAdminRequest } from "@/lib/admin-auth.server";
 
 const ALLOWED = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 const MAX = 5 * 1024 * 1024; // 5MB
@@ -13,7 +13,7 @@ export const Route = createFileRoute("/api/admin/upload-image")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        if (!verifyToken(request.headers.get("x-admin-token"))) return err("unauthorized", 401);
+        if (!(await verifyAdminRequest(request))) return err("unauthorized", 401);
 
         const form = await request.formData();
         const file = form.get("file");
@@ -46,7 +46,7 @@ export const Route = createFileRoute("/api/admin/upload-image")({
         return Response.json({ image_url });
       },
       DELETE: async ({ request }) => {
-        if (!verifyToken(request.headers.get("x-admin-token"))) return err("unauthorized", 401);
+        if (!(await verifyAdminRequest(request))) return err("unauthorized", 401);
         const { id } = await request.json();
         if (!id) return err("missing id");
         const { error } = await supabaseAdmin.from("questions").update({ image_url: null }).eq("id", id);

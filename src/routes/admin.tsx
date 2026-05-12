@@ -48,49 +48,27 @@ type Q = {
 function Admin() {
   const { user, loading: authLoading } = useAuth();
   const [token, setToken] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const [denied, setDenied] = useState(false);
 
+  // 已登录且邮箱在白名单 → 直接拿 Supabase JWT 作为后台请求凭证。
   useEffect(() => {
-    const t = sessionStorage.getItem("admin_token");
-    if (t) setToken(t);
-  }, []);
-
-  // 已登录且在白名单 → 自动用 supabase JWT 换 admin token
-  useEffect(() => {
-    if (authLoading || token) return;
-    if (!user) return;
+    if (authLoading || !user) return;
     if (!isAdminEmail(user.email)) {
       setDenied(true);
+      setToken(null);
       return;
     }
-    (async () => {
-      setLoading(true);
-      try {
-        const { data: sess } = await supabase.auth.getSession();
-        const jwt = sess.session?.access_token;
-        if (!jwt) {
-          setDenied(true);
-          return;
-        }
-        const res = await fetch("/api/admin/login", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${jwt}` },
-        });
-        if (!res.ok) {
-          setDenied(true);
-          return;
-        }
-        const j = await res.json();
-        sessionStorage.setItem("admin_token", j.token);
-        setToken(j.token);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [user, authLoading, token]);
+    setDenied(false);
+    supabase.auth.getSession().then(({ data }) => {
+      setToken(data.session?.access_token ?? null);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
+      setToken(s?.access_token ?? null);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, [user, authLoading]);
 
-  if (authLoading || (user && isAdminEmail(user.email) && loading && !token)) {
+  if (authLoading) {
     return (
       <main className="mx-auto max-w-sm px-4 py-16 text-center">
         <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
@@ -132,7 +110,7 @@ function Admin() {
     );
   }
 
-  return <AdminPanel token={token} onLogout={() => { sessionStorage.removeItem("admin_token"); setToken(null); }} />;
+  return <AdminPanel token={token} onLogout={() => { supabase.auth.signOut(); }} />;
 }
 
 function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }) {
@@ -147,7 +125,7 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
   const [creating, setCreating] = useState(false);
 
   const reload = useCallback(async () => {
-    const res = await fetch("/api/admin/questions", { headers: { "x-admin-token": token } });
+    const res = await fetch("/api/admin/questions", { headers: { Authorization: `Bearer ${token}` } });
     if (res.status === 401) {
       toast.error("会话过期，请重新登录");
       onLogout();
@@ -271,7 +249,7 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
                         if (!confirm("确认删除？")) return;
                         const r = await fetch("/api/admin/questions", {
                           method: "DELETE",
-                          headers: { "Content-Type": "application/json", "x-admin-token": token },
+                          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
                           body: JSON.stringify({ id: q.id }),
                         });
                         if (r.ok) { toast.success("已删除"); reload(); }
@@ -344,7 +322,7 @@ function ImportPanel({ token, kps, onDone }: { token: string; kps: Kp[]; onDone:
       if (!Array.isArray(arr)) throw new Error("应为 JSON 数组");
       const r = await fetch("/api/admin/import", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-admin-token": token },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ items: arr }),
       });
       const j = await r.json();
@@ -414,7 +392,7 @@ function EditDialog({ kps, initial, token, onClose, onSaved }: {
     try {
       const r = await fetch("/api/admin/reanalyze", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-admin-token": token },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           stem: form.stem,
           option_a: form.option_a,
@@ -467,7 +445,7 @@ function EditDialog({ kps, initial, token, onClose, onSaved }: {
       }
       const r = await fetch("/api/admin/questions", {
         method: initial ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json", "x-admin-token": token },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(payload),
       });
       if (!r.ok) throw new Error("保存失败");
@@ -576,7 +554,7 @@ function ImageUploadButton({ questionId, token, hasImage, onChanged }: {
       fd.append("question_id", questionId);
       const r = await fetch("/api/admin/upload-image", {
         method: "POST",
-        headers: { "x-admin-token": token },
+        headers: { Authorization: `Bearer ${token}` },
         body: fd,
       });
       const j = await r.json();
@@ -597,7 +575,7 @@ function ImageUploadButton({ questionId, token, hasImage, onChanged }: {
     try {
       const r = await fetch("/api/admin/upload-image", {
         method: "DELETE",
-        headers: { "Content-Type": "application/json", "x-admin-token": token },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ id: questionId }),
       });
       if (!r.ok) throw new Error();
@@ -681,7 +659,7 @@ function AuditPanel({
         const slice = questions.slice(i, i + BATCH).map((q) => q.id);
         const r = await fetch("/api/admin/audit", {
           method: "POST",
-          headers: { "x-admin-token": token, "Content-Type": "application/json" },
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
           body: JSON.stringify({ question_ids: slice }),
         });
         const text = await r.text();
@@ -722,7 +700,7 @@ function AuditPanel({
       }
       const r = await fetch("/api/admin/questions", {
         method: "PUT",
-        headers: { "Content-Type": "application/json", "x-admin-token": token },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(payload),
       });
       if (!r.ok) throw new Error("应用失败");
@@ -892,7 +870,7 @@ function FeedbackPanel({ token }: { token: string }) {
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await fetch("/api/admin/feedback", { headers: { "x-admin-token": token } });
+      const r = await fetch("/api/admin/feedback", { headers: { Authorization: `Bearer ${token}` } });
       const j = await r.json();
       setItems(j.items ?? []);
     } finally {
@@ -910,7 +888,7 @@ function FeedbackPanel({ token }: { token: string }) {
   async function update(id: string, patch: Partial<Pick<FeedbackItem, "status" | "admin_note">>) {
     const r = await fetch("/api/admin/feedback", {
       method: "PUT",
-      headers: { "Content-Type": "application/json", "x-admin-token": token },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ id, ...patch }),
     });
     if (r.ok) {
@@ -923,7 +901,7 @@ function FeedbackPanel({ token }: { token: string }) {
     if (!confirm("确认删除？")) return;
     const r = await fetch("/api/admin/feedback", {
       method: "DELETE",
-      headers: { "Content-Type": "application/json", "x-admin-token": token },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ id }),
     });
     if (r.ok) {
@@ -1047,7 +1025,7 @@ function UsersPanel({ token }: { token: string }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/admin/users", { headers: { "x-admin-token": token } })
+    fetch("/api/admin/users", { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.json())
       .then((j) => { setUsers(j.users ?? []); setLoading(false); });
   }, [token]);
@@ -1055,7 +1033,7 @@ function UsersPanel({ token }: { token: string }) {
   async function open(uid: string) {
     setPicked(uid);
     setDetail(null);
-    const r = await fetch(`/api/admin/users?user_id=${uid}`, { headers: { "x-admin-token": token } });
+    const r = await fetch(`/api/admin/users?user_id=${uid}`, { headers: { Authorization: `Bearer ${token}` } });
     setDetail(await r.json());
   }
 
