@@ -61,6 +61,14 @@ function PaperRunner() {
   const [answers, setAnswers] = useState<Record<string, OptKey>>({});
   const [idx, setIdx] = useState(0);
   const [seconds, setSeconds] = useState(0);
+  const [marked, setMarked] = useState<Set<string>>(new Set());
+  const [crossed, setCrossed] = useState<Record<string, Set<OptKey>>>({});
+  const [eliminateMode, setEliminateMode] = useState(false);
+  const [hideTime, setHideTime] = useState(false);
+  const [showNav, setShowNav] = useState(false);
+  const [showCalc, setShowCalc] = useState(false);
+  const [showDirections, setShowDirections] = useState(false);
+  const [confirmSubmit, setConfirmSubmit] = useState(false);
 
   const remaining = paper ? Math.max(0, paper.total_seconds - seconds) : 0;
   const timeUp = phase === "running" && remaining === 0;
