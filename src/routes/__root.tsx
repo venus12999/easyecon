@@ -2,7 +2,6 @@ import { Outlet, Link, createRootRoute, HeadContent, Scripts, useRouterState } f
 
 import appCss from "../styles.css?url";
 import { Toaster } from "@/components/ui/sonner";
-import { FeedbackWidget } from "@/components/FeedbackWidget";
 import { AuthProvider } from "@/hooks/use-auth";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -99,7 +98,6 @@ function RootComponent() {
           </div>
         </div>
         <Toaster richColors position="top-center" />
-        <FeedbackWidget />
       </SidebarProvider>
     </AuthProvider>
   );

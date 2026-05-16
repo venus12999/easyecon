@@ -1,18 +1,18 @@
 import { useState } from "react";
-import { useLocation } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { MessageSquarePlus, Loader2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-export function FeedbackWidget() {
-  const location = useLocation();
-  // 不在 admin 页显示
-  if (location.pathname.startsWith("/admin")) return null;
-
-  const [open, setOpen] = useState(false);
+export function FeedbackWidget({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
   const [category, setCategory] = useState<"bug" | "suggestion">("bug");
   const [message, setMessage] = useState("");
   const [contact, setContact] = useState("");
@@ -42,7 +42,7 @@ export function FeedbackWidget() {
       toast.success("反馈已收到，谢谢！");
       setMessage("");
       setContact("");
-      setOpen(false);
+      onOpenChange(false);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "提交失败");
     } finally {
@@ -51,17 +51,7 @@ export function FeedbackWidget() {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button
-          size="sm"
-          className="fixed bottom-4 right-4 z-50 shadow-lg gap-1.5"
-          aria-label="反馈"
-        >
-          <MessageSquarePlus className="h-4 w-4" />
-          反馈
-        </Button>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>报告问题或提建议</DialogTitle>
@@ -109,7 +99,7 @@ export function FeedbackWidget() {
           />
         </div>
         <DialogFooter>
-          <Button variant="ghost" onClick={() => setOpen(false)} disabled={submitting}>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={submitting}>
             取消
           </Button>
           <Button onClick={submit} disabled={submitting}>

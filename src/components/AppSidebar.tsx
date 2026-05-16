@@ -1,5 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { BookOpen, ListChecks, Library, GraduationCap, LogOut, Bookmark, Shield } from "lucide-react";
+import { BookOpen, ListChecks, Library, GraduationCap, LogOut, Bookmark, Shield, MessageSquarePlus } from "lucide-react";
+import { useState } from "react";
 import {
   Sidebar,
   SidebarContent,
@@ -16,6 +17,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { isAdminEmail } from "@/lib/admin-emails";
+import { FeedbackWidget } from "@/components/FeedbackWidget";
 
 const practiceItems = [
   { title: "刷题", url: "/", icon: BookOpen, exact: true },
@@ -31,6 +33,8 @@ export function AppSidebar() {
   const path = useRouterState({ select: (r) => r.location.pathname });
   const { user, signOut } = useAuth();
   const showAdmin = isAdminEmail(user?.email);
+  const [fbOpen, setFbOpen] = useState(false);
+  const showFeedback = !path.startsWith("/admin");
 
   const isActive = (url: string, exact?: boolean) => (exact ? path === url : path === url || path.startsWith(url + "/"));
 
@@ -67,6 +71,14 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              {showFeedback && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton onClick={() => setFbOpen(true)} className="flex items-center gap-2">
+                    <MessageSquarePlus className="h-4 w-4" />
+                    {!collapsed && <span>反馈</span>}
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -124,6 +136,7 @@ export function AppSidebar() {
           </Button>
         )}
       </SidebarFooter>
+      {showFeedback && <FeedbackWidget open={fbOpen} onOpenChange={setFbOpen} />}
     </Sidebar>
   );
 }
