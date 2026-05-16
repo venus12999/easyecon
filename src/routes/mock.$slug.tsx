@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { renderStemWithTerms, type TermInfo } from "@/lib/term-render";
 import { optionStyles, type OptKey } from "@/lib/option-colors";
 import { addWrong, recordAnswer } from "@/lib/storage";
-import { Loader2, ArrowLeft, Bookmark, ChevronDown, ChevronUp, X, MoreVertical, Highlighter, Calculator as CalcIcon, MapPin, Eye, EyeOff } from "lucide-react";
+import { Loader2, ArrowLeft, Bookmark, ChevronDown, ChevronUp, X, MoreVertical, Highlighter, Calculator as CalcIcon, MapPin, Move, Delete } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 
