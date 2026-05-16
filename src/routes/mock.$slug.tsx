@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -69,6 +69,61 @@ function PaperRunner() {
   const [showCalc, setShowCalc] = useState(false);
   const [showDirections, setShowDirections] = useState(false);
   const [confirmSubmit, setConfirmSubmit] = useState(false);
+
+  // Highlighter (yellow / pink / blue)
+  const stemRef = useRef<HTMLDivElement | null>(null);
+  const [hlPopup, setHlPopup] = useState<{ x: number; y: number } | null>(null);
+  type HlColor = "yellow" | "pink" | "blue";
+  const HL_BG: Record<HlColor, string> = {
+    yellow: "#fde68a",
+    pink: "#fbcfe8",
+    blue: "#bfdbfe",
+  };
+
+  function onStemMouseUp(e: React.MouseEvent) {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
+      setHlPopup(null);
+      return;
+    }
+    const range = sel.getRangeAt(0);
+    const container = stemRef.current;
+    if (!container || !container.contains(range.commonAncestorContainer)) {
+      setHlPopup(null);
+      return;
+    }
+    const rect = range.getBoundingClientRect();
+    setHlPopup({ x: rect.left + rect.width / 2, y: rect.top - 8 });
+  }
+
+  function applyHighlight(color: HlColor | "erase") {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0) return setHlPopup(null);
+    const range = sel.getRangeAt(0);
+    const container = stemRef.current;
+    if (!container || !container.contains(range.commonAncestorContainer)) return setHlPopup(null);
+    if (color === "erase") {
+      // unwrap any highlight spans intersecting the selection
+      const spans = Array.from(container.querySelectorAll<HTMLSpanElement>("span[data-hl]"));
+      spans.forEach((s) => {
+        if (range.intersectsNode(s)) {
+          const parent = s.parentNode!;
+          while (s.firstChild) parent.insertBefore(s.firstChild, s);
+          parent.removeChild(s);
+        }
+      });
+    } else {
+      const frag = range.extractContents();
+      const span = document.createElement("span");
+      span.setAttribute("data-hl", color);
+      span.style.backgroundColor = HL_BG[color];
+      span.style.borderRadius = "2px";
+      span.appendChild(frag);
+      range.insertNode(span);
+    }
+    sel.removeAllRanges();
+    setHlPopup(null);
+  }
 
   const remaining = paper ? Math.max(0, paper.total_seconds - seconds) : 0;
   const timeUp = phase === "running" && remaining === 0;
@@ -362,7 +417,11 @@ function PaperRunner() {
             </div>
 
             {/* Stem */}
-            <div className="text-[17px] leading-relaxed mb-6">
+            <div
+              ref={stemRef}
+              onMouseUp={onStemMouseUp}
+              className="text-[17px] leading-relaxed mb-6 select-text"
+            >
               {renderStemWithTerms(cur.stem, cur.term_tags ?? [], termDict)}
             </div>
             {cur.image_url && (
@@ -556,6 +615,33 @@ function PaperRunner() {
 
         {/* Calculator modal */}
         {showCalc && <CalculatorModal onClose={() => setShowCalc(false)} />}
+
+        {/* Highlight color picker */}
+        {hlPopup && (
+          <div
+            className="fixed z-[70] -translate-x-1/2 -translate-y-full bg-white border border-slate-300 shadow-lg rounded-full flex items-center gap-1 px-2 py-1.5"
+            style={{ left: hlPopup.x, top: hlPopup.y }}
+            onMouseDown={(e) => e.preventDefault()}
+          >
+            {(["yellow", "pink", "blue"] as HlColor[]).map((c) => (
+              <button
+                key={c}
+                onClick={() => applyHighlight(c)}
+                className="w-6 h-6 rounded-full border border-slate-300 hover:scale-110 transition-transform"
+                style={{ backgroundColor: HL_BG[c] }}
+                title={c}
+              />
+            ))}
+            <div className="w-px h-5 bg-slate-300 mx-0.5" />
+            <button
+              onClick={() => applyHighlight("erase")}
+              className="text-[11px] font-semibold text-slate-700 hover:text-slate-900 px-2"
+              title="移除高亮"
+            >
+              清除
+            </button>
+          </div>
+        )}
 
         {/* Submit confirm */}
         {confirmSubmit && (

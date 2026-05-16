@@ -65,9 +65,9 @@ const PracticeSlugRoute = PracticeSlugRouteImport.update({
   getParentRoute: () => rootRouteImport,
 } as any)
 const MockRandomRoute = MockRandomRouteImport.update({
-  id: '/random',
-  path: '/random',
-  getParentRoute: () => MockRoute,
+  id: '/mock/random',
+  path: '/mock/random',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const MockSlugRoute = MockSlugRouteImport.update({
   id: '/mock/$slug',
@@ -264,6 +264,7 @@ export interface RootRouteChildren {
   ApiAiExplainRoute: typeof ApiAiExplainRoute
   ApiFeedbackRoute: typeof ApiFeedbackRoute
   MockSlugRoute: typeof MockSlugRoute
+  MockRandomRoute: typeof MockRandomRoute
   PracticeSlugRoute: typeof PracticeSlugRoute
   MockIndexRoute: typeof MockIndexRoute
   ApiAdminAuditRoute: typeof ApiAdminAuditRoute
@@ -329,10 +330,10 @@ declare module '@tanstack/react-router' {
     }
     '/mock/random': {
       id: '/mock/random'
-      path: '/random'
+      path: '/mock/random'
       fullPath: '/mock/random'
       preLoaderRoute: typeof MockRandomRouteImport
-      parentRoute: typeof MockRoute
+      parentRoute: typeof rootRouteImport
     }
     '/mock/$slug': {
       id: '/mock/$slug'
@@ -423,6 +424,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAiExplainRoute: ApiAiExplainRoute,
   ApiFeedbackRoute: ApiFeedbackRoute,
   MockSlugRoute: MockSlugRoute,
+  MockRandomRoute: MockRandomRoute,
   PracticeSlugRoute: PracticeSlugRoute,
   MockIndexRoute: MockIndexRoute,
   ApiAdminAuditRoute: ApiAdminAuditRoute,
@@ -437,12 +439,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}
