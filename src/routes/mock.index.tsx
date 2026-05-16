@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Clock, FileText, Shuffle, ChevronRight, Loader2 } from "lucide-react";
 
-export const Route = createFileRoute("/mock")({
+export const Route = createFileRoute("/mock/")({
   head: () => ({ meta: [{ title: "模考 · 真题卷库" }] }),
   component: MockLibrary,
 });

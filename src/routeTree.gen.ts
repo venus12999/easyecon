@@ -11,10 +11,10 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WrongRouteImport } from './routes/wrong'
 import { Route as TermsRouteImport } from './routes/terms'
-import { Route as MockRouteImport } from './routes/mock'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as MockIndexRouteImport } from './routes/mock.index'
 import { Route as PracticeSlugRouteImport } from './routes/practice.$slug'
 import { Route as MockRandomRouteImport } from './routes/mock.random'
 import { Route as MockSlugRouteImport } from './routes/mock.$slug'
@@ -39,11 +39,6 @@ const TermsRoute = TermsRouteImport.update({
   path: '/terms',
   getParentRoute: () => rootRouteImport,
 } as any)
-const MockRoute = MockRouteImport.update({
-  id: '/mock',
-  path: '/mock',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
@@ -59,6 +54,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MockIndexRoute = MockIndexRouteImport.update({
+  id: '/mock/',
+  path: '/mock/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PracticeSlugRoute = PracticeSlugRouteImport.update({
   id: '/practice/$slug',
   path: '/practice/$slug',
@@ -70,9 +70,9 @@ const MockRandomRoute = MockRandomRouteImport.update({
   getParentRoute: () => MockRoute,
 } as any)
 const MockSlugRoute = MockSlugRouteImport.update({
-  id: '/$slug',
-  path: '/$slug',
-  getParentRoute: () => MockRoute,
+  id: '/mock/$slug',
+  path: '/mock/$slug',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiFeedbackRoute = ApiFeedbackRouteImport.update({
   id: '/api/feedback',
@@ -129,7 +129,6 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
-  '/mock': typeof MockRouteWithChildren
   '/terms': typeof TermsRoute
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
@@ -137,6 +136,7 @@ export interface FileRoutesByFullPath {
   '/mock/$slug': typeof MockSlugRoute
   '/mock/random': typeof MockRandomRoute
   '/practice/$slug': typeof PracticeSlugRoute
+  '/mock/': typeof MockIndexRoute
   '/api/admin/audit': typeof ApiAdminAuditRoute
   '/api/admin/feedback': typeof ApiAdminFeedbackRoute
   '/api/admin/import': typeof ApiAdminImportRoute
@@ -150,7 +150,6 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
-  '/mock': typeof MockRouteWithChildren
   '/terms': typeof TermsRoute
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
@@ -158,6 +157,7 @@ export interface FileRoutesByTo {
   '/mock/$slug': typeof MockSlugRoute
   '/mock/random': typeof MockRandomRoute
   '/practice/$slug': typeof PracticeSlugRoute
+  '/mock': typeof MockIndexRoute
   '/api/admin/audit': typeof ApiAdminAuditRoute
   '/api/admin/feedback': typeof ApiAdminFeedbackRoute
   '/api/admin/import': typeof ApiAdminImportRoute
@@ -172,7 +172,6 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
-  '/mock': typeof MockRouteWithChildren
   '/terms': typeof TermsRoute
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
@@ -180,6 +179,7 @@ export interface FileRoutesById {
   '/mock/$slug': typeof MockSlugRoute
   '/mock/random': typeof MockRandomRoute
   '/practice/$slug': typeof PracticeSlugRoute
+  '/mock/': typeof MockIndexRoute
   '/api/admin/audit': typeof ApiAdminAuditRoute
   '/api/admin/feedback': typeof ApiAdminFeedbackRoute
   '/api/admin/import': typeof ApiAdminImportRoute
@@ -195,7 +195,6 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/auth'
-    | '/mock'
     | '/terms'
     | '/wrong'
     | '/api/ai-explain'
@@ -203,6 +202,7 @@ export interface FileRouteTypes {
     | '/mock/$slug'
     | '/mock/random'
     | '/practice/$slug'
+    | '/mock/'
     | '/api/admin/audit'
     | '/api/admin/feedback'
     | '/api/admin/import'
@@ -216,7 +216,6 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/auth'
-    | '/mock'
     | '/terms'
     | '/wrong'
     | '/api/ai-explain'
@@ -224,6 +223,7 @@ export interface FileRouteTypes {
     | '/mock/$slug'
     | '/mock/random'
     | '/practice/$slug'
+    | '/mock'
     | '/api/admin/audit'
     | '/api/admin/feedback'
     | '/api/admin/import'
@@ -237,7 +237,6 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/auth'
-    | '/mock'
     | '/terms'
     | '/wrong'
     | '/api/ai-explain'
@@ -245,6 +244,7 @@ export interface FileRouteTypes {
     | '/mock/$slug'
     | '/mock/random'
     | '/practice/$slug'
+    | '/mock/'
     | '/api/admin/audit'
     | '/api/admin/feedback'
     | '/api/admin/import'
@@ -259,12 +259,13 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
   AuthRoute: typeof AuthRoute
-  MockRoute: typeof MockRouteWithChildren
   TermsRoute: typeof TermsRoute
   WrongRoute: typeof WrongRoute
   ApiAiExplainRoute: typeof ApiAiExplainRoute
   ApiFeedbackRoute: typeof ApiFeedbackRoute
+  MockSlugRoute: typeof MockSlugRoute
   PracticeSlugRoute: typeof PracticeSlugRoute
+  MockIndexRoute: typeof MockIndexRoute
   ApiAdminAuditRoute: typeof ApiAdminAuditRoute
   ApiAdminFeedbackRoute: typeof ApiAdminFeedbackRoute
   ApiAdminImportRoute: typeof ApiAdminImportRoute
@@ -291,13 +292,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/mock': {
-      id: '/mock'
-      path: '/mock'
-      fullPath: '/mock'
-      preLoaderRoute: typeof MockRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/auth': {
       id: '/auth'
       path: '/auth'
@@ -319,6 +313,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/mock/': {
+      id: '/mock/'
+      path: '/mock'
+      fullPath: '/mock/'
+      preLoaderRoute: typeof MockIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/practice/$slug': {
       id: '/practice/$slug'
       path: '/practice/$slug'
@@ -335,10 +336,10 @@ declare module '@tanstack/react-router' {
     }
     '/mock/$slug': {
       id: '/mock/$slug'
-      path: '/$slug'
+      path: '/mock/$slug'
       fullPath: '/mock/$slug'
       preLoaderRoute: typeof MockSlugRouteImport
-      parentRoute: typeof MockRoute
+      parentRoute: typeof rootRouteImport
     }
     '/api/feedback': {
       id: '/api/feedback'
@@ -413,28 +414,17 @@ declare module '@tanstack/react-router' {
   }
 }
 
-interface MockRouteChildren {
-  MockSlugRoute: typeof MockSlugRoute
-  MockRandomRoute: typeof MockRandomRoute
-}
-
-const MockRouteChildren: MockRouteChildren = {
-  MockSlugRoute: MockSlugRoute,
-  MockRandomRoute: MockRandomRoute,
-}
-
-const MockRouteWithChildren = MockRoute._addFileChildren(MockRouteChildren)
-
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
   AuthRoute: AuthRoute,
-  MockRoute: MockRouteWithChildren,
   TermsRoute: TermsRoute,
   WrongRoute: WrongRoute,
   ApiAiExplainRoute: ApiAiExplainRoute,
   ApiFeedbackRoute: ApiFeedbackRoute,
+  MockSlugRoute: MockSlugRoute,
   PracticeSlugRoute: PracticeSlugRoute,
+  MockIndexRoute: MockIndexRoute,
   ApiAdminAuditRoute: ApiAdminAuditRoute,
   ApiAdminFeedbackRoute: ApiAdminFeedbackRoute,
   ApiAdminImportRoute: ApiAdminImportRoute,
@@ -447,3 +437,12 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}
