@@ -632,3 +632,65 @@ function PaperRunner() {
     </main>
   );
 }
+
+function CalculatorModal({ onClose }: { onClose: () => void }) {
+  const [expr, setExpr] = useState("");
+  const [result, setResult] = useState<string>("");
+  const press = (s: string) => setExpr((e) => e + s);
+  const evalExpr = () => {
+    try {
+      // 仅允许数字与基本运算符
+      const safe = expr.replace(/[^0-9+\-*/().√ ]/g, "").replace(/√/g, "Math.sqrt");
+      // eslint-disable-next-line no-new-func
+      const v = Function(`"use strict"; return (${safe})`)();
+      setResult(String(v));
+    } catch {
+      setResult("Error");
+    }
+  };
+  const keys = [
+    ["(", ")", "√", "÷"],
+    ["7", "8", "9", "×"],
+    ["4", "5", "6", "−"],
+    ["1", "2", "3", "+"],
+    ["0", ".", "ans", "="],
+  ];
+  const map: Record<string, string> = { "÷": "/", "×": "*", "−": "-" };
+  return (
+    <div className="fixed top-20 right-6 z-[55] w-[340px] bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden">
+      <div className="bg-slate-900 text-white px-3 py-2 flex items-center justify-between">
+        <span className="font-semibold text-sm">Calculator</span>
+        <button onClick={onClose}><X className="h-4 w-4" /></button>
+      </div>
+      <div className="p-3 space-y-2 bg-slate-50">
+        <div className="h-9 bg-white border border-slate-300 rounded px-2 text-right text-sm font-mono flex items-center justify-end overflow-x-auto">{expr || "\u00A0"}</div>
+        <div className="h-12 bg-white border-2 border-blue-600 rounded px-2 text-right text-lg font-mono flex items-center justify-end overflow-x-auto">{result || "\u00A0"}</div>
+        <div className="flex items-center justify-between px-1">
+          <button onClick={() => setExpr("")} className="text-xs text-slate-600 hover:text-slate-900">clear all</button>
+          <button onClick={() => setExpr((e) => e.slice(0, -1))} className="text-slate-600 hover:text-slate-900"><Delete className="h-4 w-4" /></button>
+        </div>
+        <div className="grid grid-cols-4 gap-1.5">
+          {keys.flat().map((k) => {
+            const isOp = ["÷", "×", "−", "+", "=", "√", "(", ")"].includes(k);
+            return (
+              <button
+                key={k}
+                onClick={() => {
+                  if (k === "=") return evalExpr();
+                  if (k === "ans") return setExpr((e) => e + result);
+                  press(map[k] ?? k);
+                }}
+                className={cn(
+                  "h-10 rounded text-sm font-semibold",
+                  k === "=" ? "bg-blue-600 text-white hover:bg-blue-700" : isOp ? "bg-white border border-slate-300 hover:bg-slate-100" : "bg-slate-200 hover:bg-slate-300",
+                )}
+              >
+                {k}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
