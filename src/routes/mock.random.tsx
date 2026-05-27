@@ -28,6 +28,7 @@ type Q = {
   correct_answer: OptKey;
   explanation: string;
   term_tags: string[] | null;
+  image_url: string | null;
   knowledge_points: { name_zh: string; unit: number } | null;
 };
 
@@ -88,7 +89,7 @@ function Mock() {
     setShortageNote(null);
     const { data } = await supabase
       .from("questions")
-      .select("id,knowledge_point_id,stem,option_a,option_b,option_c,option_d,option_e,correct_answer,explanation,term_tags,knowledge_points!inner(name_zh,unit)")
+      .select("id,knowledge_point_id,stem,option_a,option_b,option_c,option_d,option_e,correct_answer,explanation,image_url,term_tags,knowledge_points!inner(name_zh,unit)")
       .eq("status", "published");
     const all = ((data ?? []) as unknown as Q[]).map((q) => ({
       ...q,
@@ -258,6 +259,13 @@ function Mock() {
               <p className="text-base leading-relaxed">
                 {renderStemWithTerms(cur.stem, cur.term_tags ?? [], termDict)}
               </p>
+              {cur.image_url && (
+                <img
+                  src={cur.image_url}
+                  alt="题图"
+                  className="max-h-80 w-auto rounded border border-border"
+                />
+              )}
               <div className="space-y-2">
                 {opts.map((o) => {
                   const picked = answers[cur.id] === o.k;
