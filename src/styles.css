@@ -68,29 +68,29 @@
 :root {
   --radius: 0.625rem;
   /* 全部使用 hex 以兼容旧版 Windows 浏览器（不支持 oklch()） */
-  --background: #fafbfd;
-  --foreground: #1a2238;
+  --background: #fbfcfd;
+  --foreground: #161d2e;
   --card: #ffffff;
-  --card-foreground: #1a2238;
+  --card-foreground: #161d2e;
   --popover: #ffffff;
-  --popover-foreground: #1a2238;
-  --primary: #3b6fe0;
-  --primary-foreground: #ffffff;
-  --secondary: #eef1f7;
-  --secondary-foreground: #2a3b5e;
-  --muted: #eef1f7;
-  --muted-foreground: #6b7a99;
-  --accent: #c5e8f0;
-  --accent-foreground: #2a3b5e;
-  --destructive: #d23a3a;
-  --destructive-foreground: #ffffff;
-  --border: #e3e7ef;
-  --input: #e3e7ef;
-  --ring: #3b6fe0;
-  --success: #2fa56a;
-  --success-foreground: #ffffff;
-  --warning: #e3a23a;
-  --warning-foreground: #3a2a10;
+  --popover-foreground: #161d2e;
+  --primary: #2266e0;
+  --primary-foreground: #fcfcfd;
+  --secondary: #f0f2f7;
+  --secondary-foreground: #2a3454;
+  --muted: #f0f3f7;
+  --muted-foreground: #6c7691;
+  --accent: #bce5ef;
+  --accent-foreground: #2a3454;
+  --destructive: #d4382a;
+  --destructive-foreground: #fafbfc;
+  --border: #e2e5ec;
+  --input: #e2e5ec;
+  --ring: #2266e0;
+  --success: #1fa063;
+  --success-foreground: #fcfcfd;
+  --warning: #e0a23a;
+  --warning-foreground: #2a1f0a;
   /* Soft 4-color palette for MCQ options A/B/C/D — 天蓝 / 薄荷 / 桃粉 / 淡紫
    * 使用 hex 以兼容不支持 oklch() 的旧版 Windows 浏览器内核。 */
   --opt-a: #7cb6e6;
@@ -113,14 +113,14 @@
   --chart-3: #2d5a8a;
   --chart-4: #e8c34a;
   --chart-5: #d89a4a;
-  --sidebar: #f5f7fa;
-  --sidebar-foreground: #1a2238;
-  --sidebar-primary: #1f2a44;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #eef1f7;
-  --sidebar-accent-foreground: #1f2a44;
+  --sidebar: #f7f8fa;
+  --sidebar-foreground: #0d1220;
+  --sidebar-primary: #1c2438;
+  --sidebar-primary-foreground: #fafbfc;
+  --sidebar-accent: #f1f3f7;
+  --sidebar-accent-foreground: #1c2438;
   --sidebar-border: #e3e7ef;
-  --sidebar-ring: #8a99b8;
+  --sidebar-ring: #a3acbf;
 }
 
 .dark {
