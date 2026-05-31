@@ -197,6 +197,7 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
             <TabsTrigger value="audit">AI 审核</TabsTrigger>
             <TabsTrigger value="feedback">用户反馈</TabsTrigger>
             <TabsTrigger value="users">用户数据</TabsTrigger>
+            <TabsTrigger value="frq">FRQ 评分</TabsTrigger>
           </TabsList>
 
           <TabsContent value="list" className="mt-4">
@@ -310,6 +311,10 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
 
           <TabsContent value="users" className="mt-4">
             <UsersPanel token={token} />
+          </TabsContent>
+
+          <TabsContent value="frq" className="mt-4">
+            <FrqPanel token={token} />
           </TabsContent>
         </Tabs>
 
@@ -1152,6 +1157,212 @@ function UsersPanel({ token }: { token: string }) {
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+type FrqPaper = { id: string; slug: string; title: string; total_seconds: number; frq_seconds: number; break_seconds: number };
+type FrqRow = { id: string; paper_id: string; sort_order: number; title: string | null; content: string; image_url: string | null; image_text: string | null; max_score: number; rubric_note: string | null };
+
+function FrqPanel({ token }: { token: string }) {
+  const [papers, setPapers] = useState<FrqPaper[]>([]);
+  const [frqs, setFrqs] = useState<FrqRow[]>([]);
+  const [prompt, setPrompt] = useState("");
+  const [defaultPrompt, setDefaultPrompt] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [savingPrompt, setSavingPrompt] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const r = await fetch("/api/admin/frqs", { headers: { Authorization: `Bearer ${token}` } });
+    const j = await r.json();
+    if (!r.ok) {
+      toast.error(j.error || "加载失败");
+      setLoading(false);
+      return;
+    }
+    setPapers(j.papers);
+    setFrqs(j.frqs);
+    setPrompt(j.grader_prompt);
+    setDefaultPrompt(j.default_prompt);
+    setLoading(false);
+  }, [token]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  async function savePrompt() {
+    setSavingPrompt(true);
+    const r = await fetch("/api/admin/frqs", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ target: "prompt", grader_prompt: prompt }),
+    });
+    setSavingPrompt(false);
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      toast.error(j.error || "保存失败");
+    } else toast.success("已保存");
+  }
+
+  async function patchFrq(id: string, patch: Partial<FrqRow>) {
+    const r = await fetch("/api/admin/frqs", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ target: "frq", id, ...patch }),
+    });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      toast.error(j.error || "保存失败");
+    } else toast.success("已保存");
+  }
+
+  async function patchPaper(id: string, patch: { frq_seconds?: number; break_seconds?: number }) {
+    const r = await fetch("/api/admin/frqs", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ target: "paper", id, ...patch }),
+    });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      toast.error(j.error || "保存失败");
+    } else toast.success("已保存");
+  }
+
+  async function extractText(id: string) {
+    toast.info("正在提取图中文字…");
+    const r = await fetch("/api/admin/frqs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ id }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      toast.error(j.error || "提取失败");
+      return;
+    }
+    setFrqs((arr) => arr.map((f) => (f.id === id ? { ...f, image_text: j.image_text } : f)));
+    toast.success("已提取并保存");
+  }
+
+  if (loading) {
+    return <div className="py-10 text-center"><Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" /></div>;
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardContent className="p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold">FRQ 评分 Prompt（全局）</h2>
+            <Button variant="ghost" size="sm" onClick={() => setPrompt(defaultPrompt)}>恢复默认</Button>
+          </div>
+          <p className="text-xs text-muted-foreground">系统将以此 prompt 作为 system message，调用 google/gemini-2.5-pro 评分。</p>
+          <Textarea rows={14} value={prompt} onChange={(e) => setPrompt(e.target.value)} className="font-mono text-xs" />
+          <Button onClick={savePrompt} disabled={savingPrompt}>
+            {savingPrompt ? <Loader2 className="h-4 w-4 animate-spin" /> : null} 保存 Prompt
+          </Button>
+        </CardContent>
+      </Card>
+
+      {papers.map((p) => {
+        const list = frqs.filter((f) => f.paper_id === p.id);
+        return (
+          <Card key={p.id}>
+            <CardContent className="p-5 space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <h3 className="font-semibold">{p.title}</h3>
+                  <p className="text-xs text-muted-foreground">{list.length} 道 FRQ</p>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <label className="flex items-center gap-1">
+                    FRQ 时长(秒)
+                    <Input
+                      type="number"
+                      defaultValue={p.frq_seconds}
+                      className="w-24 h-8"
+                      onBlur={(e) => {
+                        const v = Number(e.target.value);
+                        if (v > 0 && v !== p.frq_seconds) void patchPaper(p.id, { frq_seconds: v });
+                      }}
+                    />
+                  </label>
+                  <label className="flex items-center gap-1">
+                    休息时长(秒)
+                    <Input
+                      type="number"
+                      defaultValue={p.break_seconds}
+                      className="w-24 h-8"
+                      onBlur={(e) => {
+                        const v = Number(e.target.value);
+                        if (v >= 0 && v !== p.break_seconds) void patchPaper(p.id, { break_seconds: v });
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {list.length === 0 && <p className="text-xs text-muted-foreground">暂无 FRQ。</p>}
+
+              {list.map((f, i) => (
+                <div key={f.id} className="border rounded-md p-3 space-y-2">
+                  <div className="font-semibold text-sm">Q{i + 1}{f.title ? ` · ${f.title}` : ""}</div>
+                  <p className="text-xs whitespace-pre-wrap text-muted-foreground">{f.content}</p>
+                  {f.image_url && (
+                    <div className="flex items-start gap-3">
+                      <img src={f.image_url} alt="" className="max-h-32 rounded border border-border" />
+                      <Button size="sm" variant="outline" onClick={() => void extractText(f.id)}>
+                        <Sparkles className="h-4 w-4" /> 提取图片文字
+                      </Button>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="text-xs flex flex-col gap-1">
+                      满分
+                      <Input
+                        type="number"
+                        defaultValue={f.max_score}
+                        onBlur={(e) => {
+                          const v = Number(e.target.value);
+                          if (v > 0 && v !== f.max_score) void patchFrq(f.id, { max_score: v });
+                        }}
+                      />
+                    </label>
+                    <label className="text-xs flex flex-col gap-1">
+                      Rubric 备注（可选，喂给 AI 评分）
+                      <Input
+                        defaultValue={f.rubric_note ?? ""}
+                        onBlur={(e) => {
+                          const v = e.target.value;
+                          if ((v || null) !== (f.rubric_note ?? null)) void patchFrq(f.id, { rubric_note: v || null });
+                        }}
+                      />
+                    </label>
+                  </div>
+                  <label className="text-xs flex flex-col gap-1">
+                    图中文字（OCR 结果，可手工修正）
+                    <Textarea
+                      rows={4}
+                      defaultValue={f.image_text ?? ""}
+                      className="font-mono text-[11px]"
+                      onBlur={(e) => {
+                        const v = e.target.value;
+                        if ((v || null) !== (f.image_text ?? null)) void patchFrq(f.id, { image_text: v || null });
+                      }}
+                    />
+                  </label>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        );
+      })}
+
+      {papers.length === 0 && (
+        <div className="py-10 text-center text-sm text-muted-foreground">
+          <Inbox className="h-8 w-8 mx-auto mb-2" /> 还没有真题卷
+        </div>
+      )}
     </div>
   );
 }
