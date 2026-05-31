@@ -20,6 +20,7 @@ import { Route as MockRandomRouteImport } from './routes/mock.random'
 import { Route as MockSlugRouteImport } from './routes/mock.$slug'
 import { Route as ApiFeedbackRouteImport } from './routes/api/feedback'
 import { Route as ApiAiExplainRouteImport } from './routes/api/ai-explain'
+import { Route as ApiFrqUploadRouteImport } from './routes/api/frq/upload'
 import { Route as ApiAdminUsersRouteImport } from './routes/api/admin/users'
 import { Route as ApiAdminUploadImageRouteImport } from './routes/api/admin/upload-image'
 import { Route as ApiAdminReanalyzeRouteImport } from './routes/api/admin/reanalyze'
@@ -83,6 +84,11 @@ const ApiFeedbackRoute = ApiFeedbackRouteImport.update({
 const ApiAiExplainRoute = ApiAiExplainRouteImport.update({
   id: '/api/ai-explain',
   path: '/api/ai-explain',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiFrqUploadRoute = ApiFrqUploadRouteImport.update({
+  id: '/api/frq/upload',
+  path: '/api/frq/upload',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAdminUsersRoute = ApiAdminUsersRouteImport.update({
@@ -152,6 +158,7 @@ export interface FileRoutesByFullPath {
   '/api/admin/reanalyze': typeof ApiAdminReanalyzeRoute
   '/api/admin/upload-image': typeof ApiAdminUploadImageRoute
   '/api/admin/users': typeof ApiAdminUsersRoute
+  '/api/frq/upload': typeof ApiFrqUploadRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -174,6 +181,7 @@ export interface FileRoutesByTo {
   '/api/admin/reanalyze': typeof ApiAdminReanalyzeRoute
   '/api/admin/upload-image': typeof ApiAdminUploadImageRoute
   '/api/admin/users': typeof ApiAdminUsersRoute
+  '/api/frq/upload': typeof ApiFrqUploadRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -197,6 +205,7 @@ export interface FileRoutesById {
   '/api/admin/reanalyze': typeof ApiAdminReanalyzeRoute
   '/api/admin/upload-image': typeof ApiAdminUploadImageRoute
   '/api/admin/users': typeof ApiAdminUsersRoute
+  '/api/frq/upload': typeof ApiFrqUploadRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -221,6 +230,7 @@ export interface FileRouteTypes {
     | '/api/admin/reanalyze'
     | '/api/admin/upload-image'
     | '/api/admin/users'
+    | '/api/frq/upload'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -243,6 +253,7 @@ export interface FileRouteTypes {
     | '/api/admin/reanalyze'
     | '/api/admin/upload-image'
     | '/api/admin/users'
+    | '/api/frq/upload'
   id:
     | '__root__'
     | '/'
@@ -265,6 +276,7 @@ export interface FileRouteTypes {
     | '/api/admin/reanalyze'
     | '/api/admin/upload-image'
     | '/api/admin/users'
+    | '/api/frq/upload'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -288,6 +300,7 @@ export interface RootRouteChildren {
   ApiAdminReanalyzeRoute: typeof ApiAdminReanalyzeRoute
   ApiAdminUploadImageRoute: typeof ApiAdminUploadImageRoute
   ApiAdminUsersRoute: typeof ApiAdminUsersRoute
+  ApiFrqUploadRoute: typeof ApiFrqUploadRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -367,6 +380,13 @@ declare module '@tanstack/react-router' {
       path: '/api/ai-explain'
       fullPath: '/api/ai-explain'
       preLoaderRoute: typeof ApiAiExplainRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/frq/upload': {
+      id: '/api/frq/upload'
+      path: '/api/frq/upload'
+      fullPath: '/api/frq/upload'
+      preLoaderRoute: typeof ApiFrqUploadRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/admin/users': {
@@ -456,7 +476,17 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAdminReanalyzeRoute: ApiAdminReanalyzeRoute,
   ApiAdminUploadImageRoute: ApiAdminUploadImageRoute,
   ApiAdminUsersRoute: ApiAdminUsersRoute,
+  ApiFrqUploadRoute: ApiFrqUploadRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}
