@@ -9,6 +9,9 @@ import { addWrong, recordAnswer } from "@/lib/storage";
 import { Loader2, ArrowLeft, Bookmark, ChevronDown, ChevronUp, X, MoreVertical, Highlighter, Calculator as CalcIcon, MapPin, Move, Delete } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
+import { FrqAnswerBox, EMPTY_ANSWER, type FrqAnswerState } from "@/components/frq/FrqAnswerBox";
+import { FrqGradeCard, type GradeResult } from "@/components/frq/FrqGradeCard";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/mock/$slug")({
   head: () => ({ meta: [{ title: "真题卷 · AP 微观经济" }] }),
@@ -20,6 +23,8 @@ type Paper = {
   slug: string;
   title: string;
   total_seconds: number;
+  frq_seconds: number;
+  break_seconds: number;
   description: string | null;
 };
 
@@ -44,6 +49,8 @@ type Frq = {
   title: string | null;
   content: string;
   image_url: string | null;
+  image_text: string | null;
+  max_score: number;
   sort_order: number;
 };
 
@@ -57,7 +64,14 @@ function PaperRunner() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
-  const [phase, setPhase] = useState<"idle" | "running" | "done">("idle");
+  const [mode, setMode] = useState<"exam" | "practice">("practice");
+  const [phase, setPhase] = useState<"idle" | "running" | "break" | "frq" | "done">("idle");
+  const [breakSeconds, setBreakSeconds] = useState(0);
+  const [frqSeconds, setFrqSeconds] = useState(0);
+  const [frqAnswers, setFrqAnswers] = useState<Record<string, FrqAnswerState>>({});
+  const [frqGrades, setFrqGrades] = useState<Record<string, GradeResult>>({});
+  const [grading, setGrading] = useState<Record<string, boolean>>({});
+  const [frqSubmitted, setFrqSubmitted] = useState(false);
   const [answers, setAnswers] = useState<Record<string, OptKey>>({});
   const [idx, setIdx] = useState(0);
   const [seconds, setSeconds] = useState(0);
@@ -133,7 +147,7 @@ function PaperRunner() {
       setLoading(true);
       const { data: p } = await supabase
         .from("mock_papers")
-        .select("id,slug,title,total_seconds,description")
+        .select("id,slug,title,total_seconds,frq_seconds,break_seconds,description")
         .eq("slug", slug)
         .maybeSingle();
       if (!p) {
@@ -152,7 +166,7 @@ function PaperRunner() {
           .order("sort_order", { ascending: true }),
         supabase
           .from("paper_frqs")
-          .select("id,title,content,image_url,sort_order")
+          .select("id,title,content,image_url,image_text,max_score,sort_order")
           .eq("paper_id", p.id)
           .order("sort_order", { ascending: true }),
         supabase.from("terms").select("term_en,term_zh,definition"),
