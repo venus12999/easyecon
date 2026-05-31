@@ -1,4 +1,4 @@
-import { Children, isValidElement, cloneElement, type ReactNode } from "react";
+import { isValidElement, cloneElement, type ReactNode } from "react";
 
 /**
  * 在已经被其他工具加工过的 ReactNode 树中（例如 colorizeExplanation 的输出）
