@@ -903,29 +903,92 @@ function PaperRunner() {
         </CardContent>
       </Card>
 
-      {frqs.length > 0 && (
+      {frqSubmitted ? (
         <>
-          <h2 className="font-semibold mb-3">简答题（FRQ）</h2>
-          <p className="text-xs text-muted-foreground mb-3">
-            FRQ 暂仅展示题目，请自行作答后比对官方评分指南。
-          </p>
-          <div className="space-y-3 mb-6">
-            {frqs.map((f, i) => (
-              <Card key={f.id}>
-                <CardContent className="p-5 space-y-3">
-                  <div className="font-semibold">
-                    Question {i + 1}
-                    {f.title ? ` · ${f.title}` : ""}
-                  </div>
-                  <p className="text-sm whitespace-pre-wrap leading-relaxed">{f.content}</p>
-                  {f.image_url && (
-                    <img src={f.image_url} alt="FRQ 图" className="max-h-80 w-auto rounded border border-border" />
-                  )}
-                </CardContent>
-              </Card>
-            ))}
+          <h2 className="font-semibold mb-3">选择题（MCQ）详解</h2>
+          <div className="space-y-3 mb-8">
+            {questions.map((q, i) => {
+              const picked = answers[q.id];
+              const ok = picked === q.correct_answer;
+              return (
+                <Card key={q.id}>
+                  <CardContent className="p-4 space-y-2">
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="font-mono font-bold">#{i + 1}</span>
+                      <span
+                        className={cn(
+                          "text-xs px-1.5 py-0.5 rounded",
+                          ok ? "bg-success/15 text-success" : "bg-destructive/15 text-destructive",
+                        )}
+                      >
+                        {ok ? "正确" : picked ? "错误" : "未作答"}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        你的答案：{picked ?? "—"}　正确答案：{q.correct_answer}
+                      </span>
+                    </div>
+                    <div className="text-sm leading-relaxed">
+                      {renderStemWithTerms(q.stem, q.term_tags ?? [], termDict)}
+                    </div>
+                    <details className="text-sm">
+                      <summary className="cursor-pointer text-primary text-xs">查看解析</summary>
+                      <div className="mt-2 p-3 bg-muted rounded text-xs whitespace-pre-wrap leading-relaxed">
+                        {q.explanation}
+                      </div>
+                    </details>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
+
+          {frqs.length > 0 && (
+            <>
+              <h2 className="font-semibold mb-3">简答题（FRQ）· AI 评分</h2>
+              <div className="space-y-3 mb-6">
+                {frqs.map((f, i) => {
+                  const grade = frqGrades[f.id];
+                  const ans = frqAnswers[f.id] ?? EMPTY_ANSWER;
+                  return (
+                    <Card key={f.id}>
+                      <CardContent className="p-5 space-y-3">
+                        <div className="font-semibold">
+                          Question {i + 1}
+                          {f.title ? ` · ${f.title}` : ""}
+                          <span className="ml-2 text-xs text-muted-foreground">满分 {f.max_score} 分</span>
+                        </div>
+                        <p className="text-sm whitespace-pre-wrap leading-relaxed">{f.content}</p>
+                        {ans.text && (
+                          <details className="text-xs">
+                            <summary className="cursor-pointer text-muted-foreground">你的作答</summary>
+                            <pre className="mt-2 p-2 bg-muted rounded whitespace-pre-wrap text-[12px]">{ans.text}</pre>
+                          </details>
+                        )}
+                        {ans.fileUrl && (
+                          <a
+                            href={ans.fileUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs text-primary underline"
+                          >
+                            查看上传文件
+                          </a>
+                        )}
+                        {grade ? (
+                          <FrqGradeCard grade={grade} />
+                        ) : (
+                          <p className="text-xs text-muted-foreground">本题未提交作答，未评分。</p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </>
+      ) : (
+        <p className="text-sm text-muted-foreground mb-6">提交 FRQ 后将显示 MCQ 解析与 FRQ 评分。</p>
       )}
 
       <div className="flex gap-2">
