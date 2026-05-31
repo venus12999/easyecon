@@ -20,12 +20,15 @@ import { Route as MockRandomRouteImport } from './routes/mock.random'
 import { Route as MockSlugRouteImport } from './routes/mock.$slug'
 import { Route as ApiFeedbackRouteImport } from './routes/api/feedback'
 import { Route as ApiAiExplainRouteImport } from './routes/api/ai-explain'
+import { Route as ApiFrqUploadRouteImport } from './routes/api/frq/upload'
+import { Route as ApiFrqGradeRouteImport } from './routes/api/frq/grade'
 import { Route as ApiAdminUsersRouteImport } from './routes/api/admin/users'
 import { Route as ApiAdminUploadImageRouteImport } from './routes/api/admin/upload-image'
 import { Route as ApiAdminReanalyzeRouteImport } from './routes/api/admin/reanalyze'
 import { Route as ApiAdminQuestionsRouteImport } from './routes/api/admin/questions'
 import { Route as ApiAdminLoginRouteImport } from './routes/api/admin/login'
 import { Route as ApiAdminImportRouteImport } from './routes/api/admin/import'
+import { Route as ApiAdminFrqsRouteImport } from './routes/api/admin/frqs'
 import { Route as ApiAdminFeedbackRouteImport } from './routes/api/admin/feedback'
 import { Route as ApiAdminAuditRouteImport } from './routes/api/admin/audit'
 
@@ -84,6 +87,16 @@ const ApiAiExplainRoute = ApiAiExplainRouteImport.update({
   path: '/api/ai-explain',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiFrqUploadRoute = ApiFrqUploadRouteImport.update({
+  id: '/api/frq/upload',
+  path: '/api/frq/upload',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiFrqGradeRoute = ApiFrqGradeRouteImport.update({
+  id: '/api/frq/grade',
+  path: '/api/frq/grade',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAdminUsersRoute = ApiAdminUsersRouteImport.update({
   id: '/api/admin/users',
   path: '/api/admin/users',
@@ -114,6 +127,11 @@ const ApiAdminImportRoute = ApiAdminImportRouteImport.update({
   path: '/api/admin/import',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAdminFrqsRoute = ApiAdminFrqsRouteImport.update({
+  id: '/api/admin/frqs',
+  path: '/api/admin/frqs',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAdminFeedbackRoute = ApiAdminFeedbackRouteImport.update({
   id: '/api/admin/feedback',
   path: '/api/admin/feedback',
@@ -139,12 +157,15 @@ export interface FileRoutesByFullPath {
   '/mock/': typeof MockIndexRoute
   '/api/admin/audit': typeof ApiAdminAuditRoute
   '/api/admin/feedback': typeof ApiAdminFeedbackRoute
+  '/api/admin/frqs': typeof ApiAdminFrqsRoute
   '/api/admin/import': typeof ApiAdminImportRoute
   '/api/admin/login': typeof ApiAdminLoginRoute
   '/api/admin/questions': typeof ApiAdminQuestionsRoute
   '/api/admin/reanalyze': typeof ApiAdminReanalyzeRoute
   '/api/admin/upload-image': typeof ApiAdminUploadImageRoute
   '/api/admin/users': typeof ApiAdminUsersRoute
+  '/api/frq/grade': typeof ApiFrqGradeRoute
+  '/api/frq/upload': typeof ApiFrqUploadRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -160,12 +181,15 @@ export interface FileRoutesByTo {
   '/mock': typeof MockIndexRoute
   '/api/admin/audit': typeof ApiAdminAuditRoute
   '/api/admin/feedback': typeof ApiAdminFeedbackRoute
+  '/api/admin/frqs': typeof ApiAdminFrqsRoute
   '/api/admin/import': typeof ApiAdminImportRoute
   '/api/admin/login': typeof ApiAdminLoginRoute
   '/api/admin/questions': typeof ApiAdminQuestionsRoute
   '/api/admin/reanalyze': typeof ApiAdminReanalyzeRoute
   '/api/admin/upload-image': typeof ApiAdminUploadImageRoute
   '/api/admin/users': typeof ApiAdminUsersRoute
+  '/api/frq/grade': typeof ApiFrqGradeRoute
+  '/api/frq/upload': typeof ApiFrqUploadRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -182,12 +206,15 @@ export interface FileRoutesById {
   '/mock/': typeof MockIndexRoute
   '/api/admin/audit': typeof ApiAdminAuditRoute
   '/api/admin/feedback': typeof ApiAdminFeedbackRoute
+  '/api/admin/frqs': typeof ApiAdminFrqsRoute
   '/api/admin/import': typeof ApiAdminImportRoute
   '/api/admin/login': typeof ApiAdminLoginRoute
   '/api/admin/questions': typeof ApiAdminQuestionsRoute
   '/api/admin/reanalyze': typeof ApiAdminReanalyzeRoute
   '/api/admin/upload-image': typeof ApiAdminUploadImageRoute
   '/api/admin/users': typeof ApiAdminUsersRoute
+  '/api/frq/grade': typeof ApiFrqGradeRoute
+  '/api/frq/upload': typeof ApiFrqUploadRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -205,12 +232,15 @@ export interface FileRouteTypes {
     | '/mock/'
     | '/api/admin/audit'
     | '/api/admin/feedback'
+    | '/api/admin/frqs'
     | '/api/admin/import'
     | '/api/admin/login'
     | '/api/admin/questions'
     | '/api/admin/reanalyze'
     | '/api/admin/upload-image'
     | '/api/admin/users'
+    | '/api/frq/grade'
+    | '/api/frq/upload'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -226,12 +256,15 @@ export interface FileRouteTypes {
     | '/mock'
     | '/api/admin/audit'
     | '/api/admin/feedback'
+    | '/api/admin/frqs'
     | '/api/admin/import'
     | '/api/admin/login'
     | '/api/admin/questions'
     | '/api/admin/reanalyze'
     | '/api/admin/upload-image'
     | '/api/admin/users'
+    | '/api/frq/grade'
+    | '/api/frq/upload'
   id:
     | '__root__'
     | '/'
@@ -247,12 +280,15 @@ export interface FileRouteTypes {
     | '/mock/'
     | '/api/admin/audit'
     | '/api/admin/feedback'
+    | '/api/admin/frqs'
     | '/api/admin/import'
     | '/api/admin/login'
     | '/api/admin/questions'
     | '/api/admin/reanalyze'
     | '/api/admin/upload-image'
     | '/api/admin/users'
+    | '/api/frq/grade'
+    | '/api/frq/upload'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -269,12 +305,15 @@ export interface RootRouteChildren {
   MockIndexRoute: typeof MockIndexRoute
   ApiAdminAuditRoute: typeof ApiAdminAuditRoute
   ApiAdminFeedbackRoute: typeof ApiAdminFeedbackRoute
+  ApiAdminFrqsRoute: typeof ApiAdminFrqsRoute
   ApiAdminImportRoute: typeof ApiAdminImportRoute
   ApiAdminLoginRoute: typeof ApiAdminLoginRoute
   ApiAdminQuestionsRoute: typeof ApiAdminQuestionsRoute
   ApiAdminReanalyzeRoute: typeof ApiAdminReanalyzeRoute
   ApiAdminUploadImageRoute: typeof ApiAdminUploadImageRoute
   ApiAdminUsersRoute: typeof ApiAdminUsersRoute
+  ApiFrqGradeRoute: typeof ApiFrqGradeRoute
+  ApiFrqUploadRoute: typeof ApiFrqUploadRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -356,6 +395,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAiExplainRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/frq/upload': {
+      id: '/api/frq/upload'
+      path: '/api/frq/upload'
+      fullPath: '/api/frq/upload'
+      preLoaderRoute: typeof ApiFrqUploadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/frq/grade': {
+      id: '/api/frq/grade'
+      path: '/api/frq/grade'
+      fullPath: '/api/frq/grade'
+      preLoaderRoute: typeof ApiFrqGradeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/admin/users': {
       id: '/api/admin/users'
       path: '/api/admin/users'
@@ -398,6 +451,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAdminImportRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/admin/frqs': {
+      id: '/api/admin/frqs'
+      path: '/api/admin/frqs'
+      fullPath: '/api/admin/frqs'
+      preLoaderRoute: typeof ApiAdminFrqsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/admin/feedback': {
       id: '/api/admin/feedback'
       path: '/api/admin/feedback'
@@ -429,22 +489,16 @@ const rootRouteChildren: RootRouteChildren = {
   MockIndexRoute: MockIndexRoute,
   ApiAdminAuditRoute: ApiAdminAuditRoute,
   ApiAdminFeedbackRoute: ApiAdminFeedbackRoute,
+  ApiAdminFrqsRoute: ApiAdminFrqsRoute,
   ApiAdminImportRoute: ApiAdminImportRoute,
   ApiAdminLoginRoute: ApiAdminLoginRoute,
   ApiAdminQuestionsRoute: ApiAdminQuestionsRoute,
   ApiAdminReanalyzeRoute: ApiAdminReanalyzeRoute,
   ApiAdminUploadImageRoute: ApiAdminUploadImageRoute,
   ApiAdminUsersRoute: ApiAdminUsersRoute,
+  ApiFrqGradeRoute: ApiFrqGradeRoute,
+  ApiFrqUploadRoute: ApiFrqUploadRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}

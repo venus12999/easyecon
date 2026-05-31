@@ -17,18 +17,21 @@ export type Database = {
       admin_settings: {
         Row: {
           created_at: string
+          frq_grader_prompt: string | null
           id: number
           password_hash: string
           updated_at: string
         }
         Insert: {
           created_at?: string
+          frq_grader_prompt?: string | null
           id?: number
           password_hash: string
           updated_at?: string
         }
         Update: {
           created_at?: string
+          frq_grader_prompt?: string | null
           id?: number
           password_hash?: string
           updated_at?: string
@@ -104,6 +107,57 @@ export type Database = {
         }
         Relationships: []
       }
+      frq_submissions: {
+        Row: {
+          ai_breakdown: Json | null
+          ai_max_score: number | null
+          ai_overall: string | null
+          ai_score: number | null
+          ai_suggestions: string | null
+          answer_file_kind: string | null
+          answer_file_url: string | null
+          answer_text: string | null
+          created_at: string
+          frq_id: string
+          id: string
+          mode: string
+          paper_id: string
+          user_id: string
+        }
+        Insert: {
+          ai_breakdown?: Json | null
+          ai_max_score?: number | null
+          ai_overall?: string | null
+          ai_score?: number | null
+          ai_suggestions?: string | null
+          answer_file_kind?: string | null
+          answer_file_url?: string | null
+          answer_text?: string | null
+          created_at?: string
+          frq_id: string
+          id?: string
+          mode: string
+          paper_id: string
+          user_id: string
+        }
+        Update: {
+          ai_breakdown?: Json | null
+          ai_max_score?: number | null
+          ai_overall?: string | null
+          ai_score?: number | null
+          ai_suggestions?: string | null
+          answer_file_kind?: string | null
+          answer_file_url?: string | null
+          answer_text?: string | null
+          created_at?: string
+          frq_id?: string
+          id?: string
+          mode?: string
+          paper_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       knowledge_points: {
         Row: {
           created_at: string
@@ -172,8 +226,10 @@ export type Database = {
       }
       mock_papers: {
         Row: {
+          break_seconds: number
           created_at: string
           description: string | null
+          frq_seconds: number
           id: string
           slug: string
           sort_order: number
@@ -182,8 +238,10 @@ export type Database = {
           year: number | null
         }
         Insert: {
+          break_seconds?: number
           created_at?: string
           description?: string | null
+          frq_seconds?: number
           id?: string
           slug: string
           sort_order?: number
@@ -192,8 +250,10 @@ export type Database = {
           year?: number | null
         }
         Update: {
+          break_seconds?: number
           created_at?: string
           description?: string | null
+          frq_seconds?: number
           id?: string
           slug?: string
           sort_order?: number
@@ -208,8 +268,11 @@ export type Database = {
           content: string
           created_at: string
           id: string
+          image_text: string | null
           image_url: string | null
+          max_score: number
           paper_id: string
+          rubric_note: string | null
           sort_order: number
           title: string | null
         }
@@ -217,8 +280,11 @@ export type Database = {
           content: string
           created_at?: string
           id?: string
+          image_text?: string | null
           image_url?: string | null
+          max_score?: number
           paper_id: string
+          rubric_note?: string | null
           sort_order: number
           title?: string | null
         }
@@ -226,8 +292,11 @@ export type Database = {
           content?: string
           created_at?: string
           id?: string
+          image_text?: string | null
           image_url?: string | null
+          max_score?: number
           paper_id?: string
+          rubric_note?: string | null
           sort_order?: number
           title?: string | null
         }

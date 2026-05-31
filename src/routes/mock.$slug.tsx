@@ -9,6 +9,9 @@ import { addWrong, recordAnswer } from "@/lib/storage";
 import { Loader2, ArrowLeft, Bookmark, ChevronDown, ChevronUp, X, MoreVertical, Highlighter, Calculator as CalcIcon, MapPin, Move, Delete } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
+import { FrqAnswerBox, EMPTY_ANSWER, type FrqAnswerState } from "@/components/frq/FrqAnswerBox";
+import { FrqGradeCard, type GradeResult } from "@/components/frq/FrqGradeCard";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/mock/$slug")({
   head: () => ({ meta: [{ title: "真题卷 · AP 微观经济" }] }),
@@ -20,6 +23,8 @@ type Paper = {
   slug: string;
   title: string;
   total_seconds: number;
+  frq_seconds: number;
+  break_seconds: number;
   description: string | null;
 };
 
@@ -44,6 +49,8 @@ type Frq = {
   title: string | null;
   content: string;
   image_url: string | null;
+  image_text: string | null;
+  max_score: number;
   sort_order: number;
 };
 
@@ -57,7 +64,14 @@ function PaperRunner() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
-  const [phase, setPhase] = useState<"idle" | "running" | "done">("idle");
+  const [mode, setMode] = useState<"exam" | "practice">("practice");
+  const [phase, setPhase] = useState<"idle" | "running" | "break" | "frq" | "done">("idle");
+  const [breakSeconds, setBreakSeconds] = useState(0);
+  const [frqSeconds, setFrqSeconds] = useState(0);
+  const [frqAnswers, setFrqAnswers] = useState<Record<string, FrqAnswerState>>({});
+  const [frqGrades, setFrqGrades] = useState<Record<string, GradeResult>>({});
+  const [grading, setGrading] = useState<Record<string, boolean>>({});
+  const [frqSubmitted, setFrqSubmitted] = useState(false);
   const [answers, setAnswers] = useState<Record<string, OptKey>>({});
   const [idx, setIdx] = useState(0);
   const [seconds, setSeconds] = useState(0);
@@ -126,14 +140,14 @@ function PaperRunner() {
   }
 
   const remaining = paper ? Math.max(0, paper.total_seconds - seconds) : 0;
-  const timeUp = phase === "running" && remaining === 0;
+  const timeUp = phase === "running" && mode === "exam" && remaining === 0;
 
   useEffect(() => {
     (async () => {
       setLoading(true);
       const { data: p } = await supabase
         .from("mock_papers")
-        .select("id,slug,title,total_seconds,description")
+        .select("id,slug,title,total_seconds,frq_seconds,break_seconds,description")
         .eq("slug", slug)
         .maybeSingle();
       if (!p) {
@@ -152,7 +166,7 @@ function PaperRunner() {
           .order("sort_order", { ascending: true }),
         supabase
           .from("paper_frqs")
-          .select("id,title,content,image_url,sort_order")
+          .select("id,title,content,image_url,image_text,max_score,sort_order")
           .eq("paper_id", p.id)
           .order("sort_order", { ascending: true }),
         supabase.from("terms").select("term_en,term_zh,definition"),
@@ -182,7 +196,14 @@ function PaperRunner() {
     setAnswers({});
     setIdx(0);
     setSeconds(0);
+    setFrqAnswers({});
+    setFrqGrades({});
+    setFrqSubmitted(false);
     setPhase("running");
+    if (paper) {
+      setBreakSeconds(paper.break_seconds ?? 600);
+      setFrqSeconds(paper.frq_seconds ?? 3600);
+    }
   }
 
   function submit() {
@@ -229,6 +250,81 @@ function PaperRunner() {
           .upsert(wrongRows, { onConflict: "user_id,question_id" });
       }
     }
+    // 有 FRQ 则进入大题阶段；仿真模式先走休息，练习模式直接进 FRQ
+    if (frqs.length > 0) {
+      setPhase(mode === "exam" ? "break" : "frq");
+    } else {
+      setFrqSubmitted(true);
+      setPhase("done");
+    }
+  }
+
+  // 休息倒计时（仅仿真模式）
+  useEffect(() => {
+    if (phase !== "break") return;
+    if (breakSeconds <= 0) {
+      setPhase("frq");
+      return;
+    }
+    const t = setInterval(() => setBreakSeconds((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(t);
+  }, [phase, breakSeconds]);
+
+  // FRQ 倒计时（仅仿真模式）
+  useEffect(() => {
+    if (phase !== "frq" || mode !== "exam") return;
+    if (frqSeconds <= 0) {
+      void submitAllFrqs();
+      return;
+    }
+    const t = setInterval(() => setFrqSeconds((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, mode, frqSeconds]);
+
+  async function gradeOneFrq(f: Frq): Promise<void> {
+    if (!paper) return;
+    const ans = frqAnswers[f.id] ?? EMPTY_ANSWER;
+    if (!ans.text.trim() && !ans.fileUrl) return; // 未作答跳过
+    setGrading((g) => ({ ...g, [f.id]: true }));
+    try {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) {
+        toast.error("请先登录");
+        return;
+      }
+      const r = await fetch("/api/frq/grade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          frq_id: f.id,
+          paper_id: paper.id,
+          mode,
+          answer_text: ans.text || null,
+          answer_file_url: ans.fileUrl,
+          answer_file_kind: ans.fileKind,
+        }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        toast.error(j.error || "AI 评分失败");
+        return;
+      }
+      const grade = (await r.json()) as GradeResult;
+      setFrqGrades((g) => ({ ...g, [f.id]: grade }));
+    } finally {
+      setGrading((g) => ({ ...g, [f.id]: false }));
+    }
+  }
+
+  async function submitAllFrqs() {
+    for (const f of frqs) {
+      if (!frqGrades[f.id]) {
+        await gradeOneFrq(f);
+      }
+    }
+    setFrqSubmitted(true);
     setPhase("done");
   }
 
@@ -272,6 +368,40 @@ function PaperRunner() {
         {paper.description && (
           <p className="text-sm text-muted-foreground mb-6">{paper.description}</p>
         )}
+        <div className="grid sm:grid-cols-2 gap-3 mb-4">
+          <button
+            onClick={() => setMode("exam")}
+            className={cn(
+              "text-left rounded-xl border-2 p-4 transition-colors",
+              mode === "exam" ? "border-primary bg-primary/5" : "border-border hover:border-primary/40",
+            )}
+          >
+            <div className="font-semibold mb-1 flex items-center gap-2">
+              <span className="px-1.5 py-0.5 rounded bg-primary text-primary-foreground text-xs">仿真</span>
+              仿真模式
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              严格按真实 AP 考试：MCQ 限 {Math.round(paper.total_seconds / 60)} 分钟，
+              休息 {Math.round((paper.break_seconds ?? 600) / 60)} 分钟（可跳过），
+              再 FRQ 限 {Math.round((paper.frq_seconds ?? 3600) / 60)} 分钟。提交后才显示成绩与解析。
+            </p>
+          </button>
+          <button
+            onClick={() => setMode("practice")}
+            className={cn(
+              "text-left rounded-xl border-2 p-4 transition-colors",
+              mode === "practice" ? "border-primary bg-primary/5" : "border-border hover:border-primary/40",
+            )}
+          >
+            <div className="font-semibold mb-1 flex items-center gap-2">
+              <span className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground text-xs">练习</span>
+              练习模式
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              无时间限制：自由作答 MCQ，随时进入 FRQ。提交 FRQ 之后才会显示 MCQ 正确答案与 AI 解析。
+            </p>
+          </button>
+        </div>
         <Card>
           <CardContent className="p-6 space-y-4">
             <div className="grid grid-cols-3 gap-3 text-center text-sm">
@@ -289,10 +419,99 @@ function PaperRunner() {
               </div>
             </div>
             <Button onClick={start} disabled={questions.length === 0} className="w-full">
-              开始作答
+              开始作答（{mode === "exam" ? "仿真模式" : "练习模式"}）
             </Button>
           </CardContent>
         </Card>
+      </main>
+    );
+  }
+
+  if (phase === "break") {
+    const mm = String(Math.floor(breakSeconds / 60)).padStart(2, "0");
+    const ss = String(breakSeconds % 60).padStart(2, "0");
+    return (
+      <main className="mx-auto max-w-md px-4 py-16 text-center space-y-6">
+        <h1 className="text-2xl font-bold">休息时间</h1>
+        <p className="text-sm text-muted-foreground">距离 Section II（FRQ）开始还有</p>
+        <div className="text-6xl font-bold font-mono text-primary">{mm}:{ss}</div>
+        <Button onClick={() => setPhase("frq")}>跳过休息，立即开始 FRQ</Button>
+      </main>
+    );
+  }
+
+  if (phase === "frq") {
+    const mm = String(Math.floor(frqSeconds / 60)).padStart(2, "0");
+    const ss = String(frqSeconds % 60).padStart(2, "0");
+    const allGrading = Object.values(grading).some(Boolean);
+    return (
+      <main className="mx-auto max-w-3xl px-4 py-8 space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Section II · FRQ</h1>
+            <p className="text-xs text-muted-foreground">
+              {mode === "exam" ? "仿真模式：到点自动交卷" : "练习模式：无时间限制"}
+            </p>
+          </div>
+          {mode === "exam" && (
+            <div className="text-right">
+              <div className="font-mono text-lg tabular-nums text-primary">{mm}:{ss}</div>
+              <div className="text-xs text-muted-foreground">剩余时间</div>
+            </div>
+          )}
+        </div>
+
+        {frqs.map((f, i) => {
+          const ans = frqAnswers[f.id] ?? EMPTY_ANSWER;
+          const grade = frqGrades[f.id];
+          return (
+            <Card key={f.id}>
+              <CardContent className="p-5 space-y-4">
+                <div className="font-semibold">
+                  Question {i + 1}
+                  {f.title ? ` · ${f.title}` : ""}
+                  <span className="ml-2 text-xs text-muted-foreground">满分 {f.max_score} 分</span>
+                </div>
+                <p className="text-sm whitespace-pre-wrap leading-relaxed">{f.content}</p>
+                {f.image_url && (
+                  <img src={f.image_url} alt="FRQ 图" className="max-h-80 w-auto rounded border border-border" />
+                )}
+                {f.image_text && (
+                  <details className="text-xs">
+                    <summary className="cursor-pointer text-muted-foreground hover:text-foreground">查看题图中的文字</summary>
+                    <pre className="mt-2 p-2 bg-muted rounded whitespace-pre-wrap font-mono text-[11px] leading-relaxed">{f.image_text}</pre>
+                  </details>
+                )}
+                <FrqAnswerBox
+                  paperId={paper.id}
+                  frqId={f.id}
+                  value={ans}
+                  onChange={(v) => setFrqAnswers((s) => ({ ...s, [f.id]: v }))}
+                  disabled={!!grade}
+                />
+                {!grade && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void gradeOneFrq(f)}
+                    disabled={grading[f.id] || (!ans.text.trim() && !ans.fileUrl)}
+                  >
+                    {grading[f.id] ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    单独评分本题
+                  </Button>
+                )}
+                {grade && <FrqGradeCard grade={grade} />}
+              </CardContent>
+            </Card>
+          );
+        })}
+
+        <div className="flex justify-end gap-2">
+          <Button onClick={() => void submitAllFrqs()} disabled={allGrading}>
+            {allGrading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            交卷并查看全部成绩
+          </Button>
+        </div>
       </main>
     );
   }
