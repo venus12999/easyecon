@@ -1,3 +1,28 @@
+import { Children, isValidElement, cloneElement, type ReactNode } from "react";
+
+/**
+ * 在已经被其他工具加工过的 ReactNode 树中（例如 colorizeExplanation 的输出）
+ * 对所有字符串子节点再叠加术语高亮。
+ */
+export function highlightTermsInNodes(nodes: ReactNode, dict: TermDict): ReactNode {
+  if (nodes == null || typeof nodes === "boolean") return nodes;
+  if (typeof nodes === "string") return renderWithTerms(nodes, dict);
+  if (typeof nodes === "number") return nodes;
+  if (Array.isArray(nodes)) {
+    return nodes.map((n, i) => <Wrap key={i}>{highlightTermsInNodes(n, dict)}</Wrap>);
+  }
+  if (isValidElement(nodes)) {
+    const el = nodes as React.ReactElement<{ children?: ReactNode }>;
+    const children = el.props?.children;
+    if (children === undefined) return el;
+    return cloneElement(el, undefined, highlightTermsInNodes(children, dict));
+  }
+  return nodes;
+}
+
+function Wrap({ children }: { children: ReactNode }) {
+  return <>{children}</>;
+}
 import { useMemo, useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
