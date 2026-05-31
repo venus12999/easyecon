@@ -80,7 +80,11 @@ export const Route = createFileRoute("/api/admin/frqs")({
         }
         if (body.target === "frq") {
           if (!body.id) return err("missing id");
-          const patch: Record<string, unknown> = {};
+          const patch: {
+            image_text?: string | null;
+            max_score?: number;
+            rubric_note?: string | null;
+          } = {};
           if (body.image_text !== undefined) patch.image_text = body.image_text;
           if (body.max_score !== undefined) patch.max_score = body.max_score;
           if (body.rubric_note !== undefined) patch.rubric_note = body.rubric_note;
@@ -91,7 +95,7 @@ export const Route = createFileRoute("/api/admin/frqs")({
         }
         if (body.target === "paper") {
           if (!body.id) return err("missing id");
-          const patch: Record<string, unknown> = {};
+          const patch: { frq_seconds?: number; break_seconds?: number } = {};
           if (body.frq_seconds !== undefined) patch.frq_seconds = body.frq_seconds;
           if (body.break_seconds !== undefined) patch.break_seconds = body.break_seconds;
           if (Object.keys(patch).length === 0) return err("nothing to update");

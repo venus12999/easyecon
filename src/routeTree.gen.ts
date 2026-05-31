@@ -26,6 +26,7 @@ import { Route as ApiAdminReanalyzeRouteImport } from './routes/api/admin/reanal
 import { Route as ApiAdminQuestionsRouteImport } from './routes/api/admin/questions'
 import { Route as ApiAdminLoginRouteImport } from './routes/api/admin/login'
 import { Route as ApiAdminImportRouteImport } from './routes/api/admin/import'
+import { Route as ApiAdminFrqsRouteImport } from './routes/api/admin/frqs'
 import { Route as ApiAdminFeedbackRouteImport } from './routes/api/admin/feedback'
 import { Route as ApiAdminAuditRouteImport } from './routes/api/admin/audit'
 
@@ -114,6 +115,11 @@ const ApiAdminImportRoute = ApiAdminImportRouteImport.update({
   path: '/api/admin/import',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAdminFrqsRoute = ApiAdminFrqsRouteImport.update({
+  id: '/api/admin/frqs',
+  path: '/api/admin/frqs',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAdminFeedbackRoute = ApiAdminFeedbackRouteImport.update({
   id: '/api/admin/feedback',
   path: '/api/admin/feedback',
@@ -139,6 +145,7 @@ export interface FileRoutesByFullPath {
   '/mock/': typeof MockIndexRoute
   '/api/admin/audit': typeof ApiAdminAuditRoute
   '/api/admin/feedback': typeof ApiAdminFeedbackRoute
+  '/api/admin/frqs': typeof ApiAdminFrqsRoute
   '/api/admin/import': typeof ApiAdminImportRoute
   '/api/admin/login': typeof ApiAdminLoginRoute
   '/api/admin/questions': typeof ApiAdminQuestionsRoute
@@ -160,6 +167,7 @@ export interface FileRoutesByTo {
   '/mock': typeof MockIndexRoute
   '/api/admin/audit': typeof ApiAdminAuditRoute
   '/api/admin/feedback': typeof ApiAdminFeedbackRoute
+  '/api/admin/frqs': typeof ApiAdminFrqsRoute
   '/api/admin/import': typeof ApiAdminImportRoute
   '/api/admin/login': typeof ApiAdminLoginRoute
   '/api/admin/questions': typeof ApiAdminQuestionsRoute
@@ -182,6 +190,7 @@ export interface FileRoutesById {
   '/mock/': typeof MockIndexRoute
   '/api/admin/audit': typeof ApiAdminAuditRoute
   '/api/admin/feedback': typeof ApiAdminFeedbackRoute
+  '/api/admin/frqs': typeof ApiAdminFrqsRoute
   '/api/admin/import': typeof ApiAdminImportRoute
   '/api/admin/login': typeof ApiAdminLoginRoute
   '/api/admin/questions': typeof ApiAdminQuestionsRoute
@@ -205,6 +214,7 @@ export interface FileRouteTypes {
     | '/mock/'
     | '/api/admin/audit'
     | '/api/admin/feedback'
+    | '/api/admin/frqs'
     | '/api/admin/import'
     | '/api/admin/login'
     | '/api/admin/questions'
@@ -226,6 +236,7 @@ export interface FileRouteTypes {
     | '/mock'
     | '/api/admin/audit'
     | '/api/admin/feedback'
+    | '/api/admin/frqs'
     | '/api/admin/import'
     | '/api/admin/login'
     | '/api/admin/questions'
@@ -247,6 +258,7 @@ export interface FileRouteTypes {
     | '/mock/'
     | '/api/admin/audit'
     | '/api/admin/feedback'
+    | '/api/admin/frqs'
     | '/api/admin/import'
     | '/api/admin/login'
     | '/api/admin/questions'
@@ -269,6 +281,7 @@ export interface RootRouteChildren {
   MockIndexRoute: typeof MockIndexRoute
   ApiAdminAuditRoute: typeof ApiAdminAuditRoute
   ApiAdminFeedbackRoute: typeof ApiAdminFeedbackRoute
+  ApiAdminFrqsRoute: typeof ApiAdminFrqsRoute
   ApiAdminImportRoute: typeof ApiAdminImportRoute
   ApiAdminLoginRoute: typeof ApiAdminLoginRoute
   ApiAdminQuestionsRoute: typeof ApiAdminQuestionsRoute
@@ -398,6 +411,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAdminImportRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/admin/frqs': {
+      id: '/api/admin/frqs'
+      path: '/api/admin/frqs'
+      fullPath: '/api/admin/frqs'
+      preLoaderRoute: typeof ApiAdminFrqsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/admin/feedback': {
       id: '/api/admin/feedback'
       path: '/api/admin/feedback'
@@ -429,6 +449,7 @@ const rootRouteChildren: RootRouteChildren = {
   MockIndexRoute: MockIndexRoute,
   ApiAdminAuditRoute: ApiAdminAuditRoute,
   ApiAdminFeedbackRoute: ApiAdminFeedbackRoute,
+  ApiAdminFrqsRoute: ApiAdminFrqsRoute,
   ApiAdminImportRoute: ApiAdminImportRoute,
   ApiAdminLoginRoute: ApiAdminLoginRoute,
   ApiAdminQuestionsRoute: ApiAdminQuestionsRoute,
