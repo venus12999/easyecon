@@ -1,70 +1,139 @@
+## 目标
 
-# AP 微观经济刷题平台 — Phase 1 MVP
+把每份真题卷拆成「仿真模式」和「练习模式」两种作答方式，并为 FRQ 大题增加图片文字提取、用户作答提交（文字/文件/图片）以及 AI 评分（按 AP 评分标准）。管理后台可配置评分 prompt。
 
-针对中国 AP 学生的经济刷题工具，MVP 跑通 Unit 2（Supply and Demand）的完整做题闭环。
+适用范围：仅 **真题卷（mock/$slug）**。随机模考与刷题不变。
 
-## 核心体验
+---
 
-**首页 / 知识点选择**
-- 顶部品牌区（中文 UI）+ 当前学科标签：AP Microeconomics
-- Unit 2 知识点卡片列表（如 Demand、Supply、Market Equilibrium、Price Elasticity、Government Intervention 等）
-- 每个知识点卡片显示：题目数量、已做/正确率（游客存本地）
-- 三种题型 Tab：基础题（概念）/ 应用题（情境）/ 易错题（常见坑）
+## 一、两种作答模式（mock/$slug）
 
-**做题界面（核心）**
-- 顶部进度条 + 题号
-- 题干英文呈现，关键学术术语带虚线下划线，悬停或点击弹出中英对照气泡（如 "equilibrium → 均衡 / 市场上供给量等于需求量的状态"）
-- 4 个选项（A/B/C/D），单选
-- 提交后即时判题：正确✓/错误✗ + 高亮正确选项
-- 解析区（中文）：考点定位 → 正确思路 → 干扰项分析 → 易混淆词提醒（如 "movement along vs shift of curve"）
-- 底部"上一题 / 下一题 / 标记"按钮
+入口页（idle 阶段）改成"选择模式"页面，并在右上角始终显示模式徽章。
 
-**AI 追问助手**
-- 解析下方有"还有疑问？问 AI"输入框
-- 学生可问"为什么不选 B？" "shift 和 movement 区别？"
-- AI 基于本题的题干、正确答案、官方解析作为上下文回答（中文回复，保持准确性）
-- 不让 AI 改判答案，只解释，避免幻觉误导
+### 仿真模式（Exam Simulation）
+严格按真实 AP 考试流程：
 
-**模考模式**（轻量版）
-- 按知识点占比随机抽取 N 题（如 15 题），计时
-- 交卷后显示总分、按知识点的得分分布、错题列表
+1. **Section I · MCQ**：限时（卷的 `total_seconds`，默认 70 分钟），时间到自动收卷。
+2. **休息阶段**：10 分钟倒计时屏，提供「跳过休息」按钮。
+3. **Section II · FRQ**：限时（按 AP 微观规则默认 60 分钟，存到 `mock_papers.frq_seconds`，可在管理后台改），到点自动提交。允许打字 / 上传图片 / 上传文件作为答案。
+4. **结果页**：交完 FRQ 后才显示 MCQ 总分、每题正误、AI 解析，以及每道 FRQ 的 AI 评分（分数 + 评语 + 按 rubric 拆解）。
 
-**学习记录（游客本地）**
-- 错题本：自动收集做错的题，可重做
-- 进度：每个知识点的练习数、正确率
-- 数据存浏览器 localStorage；提示"注册后可云端同步"（按钮预留，Phase 3 启用）
+中途禁止返回修改 Section I。
 
-## 题库管理后台（内置）
+### 练习模式（Practice）
+无时间限制：
 
-- 隐藏路径 `/admin`，密码进入（MVP 用单一管理员密码，存为 secret）
-- 题目列表：筛选 Unit / 知识点 / 题型，搜索题干
-- 新建/编辑题目表单：
-  - Unit、知识点（下拉）、题型（基础/应用/易错）、难度
-  - 题干（富文本）、4 个选项、正确答案
-  - 官方解析（中文）、易错点提示、相关术语标签
-- 批量导入：粘贴 JSON 或上传 Excel（提供模板下载）
-- 发布/草稿状态
+1. **Section I**：自由作答，可任意切换、跳题。
+2. 60 题全部完成后，出现「进入大题」按钮（也可手动点击「跳到大题」）。
+3. **Section II**：同样三种提交方式，无时间限制。
+4. 提交 FRQ 之后，再一次性展示 MCQ 正确答案与解析、FRQ 的 AI 评分。
 
-## 术语词典（轻量内置）
+两种模式共用同一套 MCQ / FRQ 渲染组件，只在外层加阶段状态机（`mcq → break → frq → result`）。
 
-- 题目里被点击的术语集中收录
-- 独立"术语速查"页面，按字母/Unit 分类
-- 每条：英文术语、中文翻译、定义、易混词链接
+---
 
-## 技术与数据
+## 二、FRQ 图片文字提取（管理后台触发）
 
-- **前端**：TanStack Start + Tailwind + shadcn/ui，简洁卡片式布局
-- **后端**：Lovable Cloud
-  - 表：`questions`、`knowledge_points`、`terms`、`admin_users`
-  - 游客做题数据存 localStorage，不进数据库
-- **AI 追问**：Lovable AI（google/gemini-3-flash-preview），通过 server function 调用，注入题目上下文 + 系统提示词约束（"只解释不改判，用中文，引用 AP 大纲"）
-- **可信度保障**：解析以题库内人工写的为主，AI 仅做追问扩展
+- 在 `admin.tsx` 的 FRQ 编辑面板，每条 FRQ 旁加「提取图片文字」按钮（仅当 `image_url` 不为空时显示）。
+- 点击后调用新的服务端函数 `extractFrqImageText`，用 `google/gemini-2.5-pro` 视觉识别图中所有文字（保留原文、不缩写，符合现有 memory 规则），结果写入 `paper_frqs.image_text`。
+- 前台 FRQ 渲染：若有 `image_text`，在图片下方显示「图中文字」展开块。
 
-## Phase 1 不做（已规划，后续接入）
+---
 
-- 用户注册登录、云端同步（Phase 3）
-- Unit 1/3/4/5/6 内容（Phase 2）
-- FRQ 简答题（后续）
-- 学习数据可视化图表（后续）
+## 三、FRQ 作答 + AI 评分
 
-完成后你能：导入 Unit 2 题库 → 学生匿名进入做题 → 体验完整刷题+解析+AI 追问闭环。
+### 用户作答
+每道 FRQ 下方加一个"作答区"组件，支持：
+- 直接打字（Textarea）
+- 上传图片（手写答案拍照）
+- 上传 PDF / docx 文件
+
+文件 / 图片上传到 `question-images` bucket（新建子目录 `frq-answers/<user_id>/<paper_id>/<frq_id>/`），存 URL。
+
+### AI 评分
+- 新服务端函数 `gradeFrq`：输入 = FRQ 题干 + image_text + 用户答案（文本或文件 URL，图片直接喂给多模态模型，PDF 用 document parsing 先抽文本）。
+- 用 `google/gemini-2.5-pro`，system prompt = 管理后台配置的「FRQ 评分 Prompt」，user prompt 拼装 rubric 上下文（满分、题号、题目原文、图中文字、学生答案）。
+- 要求模型返回结构化 JSON：`{ total_score, max_score, breakdown: [{point, awarded, comment}], overall_comment, suggestions }`。
+- 结果写入 `frq_submissions` 表，并在结果页展示。
+
+---
+
+## 四、管理后台
+
+在 `admin.tsx` Tabs 增加 **「FRQ 评分」** 标签页：
+- 一个大 Textarea，编辑全局「FRQ 评分 Prompt」（存在 `admin_settings.frq_grader_prompt`）。
+- 一个 Textarea 编辑「默认 FRQ 总分」（默认 9 分，可被每道 FRQ 自定义覆盖）。
+- 提供「恢复默认 prompt」按钮（默认 prompt 内置：要求模型扮演 AP 阅卷官，按官方 rubric 逐项给分，输出指定 JSON 结构）。
+- 现有 FRQ 编辑器加：`max_score`、（可选）`rubric_note` 输入项。
+
+---
+
+## 五、技术细节
+
+### 数据库变更（migration）
+```sql
+-- mock_papers: 增加 FRQ 时长
+ALTER TABLE public.mock_papers
+  ADD COLUMN frq_seconds integer NOT NULL DEFAULT 3600,
+  ADD COLUMN break_seconds integer NOT NULL DEFAULT 600;
+
+-- paper_frqs: 图中文字 + 每题分值 + rubric 备注
+ALTER TABLE public.paper_frqs
+  ADD COLUMN image_text text,
+  ADD COLUMN max_score integer NOT NULL DEFAULT 9,
+  ADD COLUMN rubric_note text;
+
+-- admin_settings: 评分 prompt
+ALTER TABLE public.admin_settings
+  ADD COLUMN frq_grader_prompt text;
+
+-- 新表：FRQ 提交与评分历史
+CREATE TABLE public.frq_submissions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  paper_id uuid NOT NULL,
+  frq_id uuid NOT NULL,
+  mode text NOT NULL CHECK (mode IN ('exam','practice')),
+  answer_text text,
+  answer_file_url text,
+  answer_file_kind text, -- 'image' | 'pdf' | 'docx' | 'text'
+  ai_score integer,
+  ai_max_score integer,
+  ai_breakdown jsonb,
+  ai_overall text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+GRANT SELECT, INSERT ON public.frq_submissions TO authenticated;
+GRANT ALL ON public.frq_submissions TO service_role;
+ALTER TABLE public.frq_submissions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "users read own frq submissions" ON public.frq_submissions
+  FOR SELECT TO authenticated USING (auth.uid() = user_id);
+CREATE POLICY "users insert own frq submissions" ON public.frq_submissions
+  FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+```
+
+### 新增/修改文件
+- `src/routes/mock.$slug.tsx`：重写阶段状态机，加模式选择 + 休息屏 + FRQ 作答 + 结果区。
+- `src/components/frq/FrqAnswerBox.tsx`：FRQ 作答与上传组件。
+- `src/components/frq/FrqGradeCard.tsx`：评分结果展示。
+- `src/lib/frq.functions.ts`：`extractFrqImageText`、`gradeFrq`、`getGraderPrompt` 三个 `createServerFn`，都用 `requireSupabaseAuth` + Lovable AI Gateway（`google/gemini-2.5-pro`）。
+- `src/lib/ai-gateway.server.ts`：复用现有（若无则新增）provider helper。
+- `src/routes/api/admin/grader-prompt.ts`：管理员读写 `admin_settings.frq_grader_prompt` 和 `paper_frqs.image_text / max_score / rubric_note`（沿用现有 admin token 鉴权方式）。
+- `src/routes/admin.tsx`：新增 **FRQ 评分** Tab，FRQ 编辑器加按钮和字段。
+- `start.ts`：确认 `attachSupabaseAuth` 已挂载（若已存在则不改）。
+
+### 内置默认 grader prompt（中文）
+要点：扮演 AP Microeconomics 阅卷官；严格按官方 rubric 逐项判分；列出每个 scoring point 是否得分及原因；最后给总分（分子/分母）；输出 JSON `{ total_score, max_score, breakdown:[{point, awarded:boolean, comment}], overall_comment, suggestions }`；用中文写评语，但保留专业术语英文原文（呼应现有 memory：不缩写术语）。
+
+### 现有 memory 兼容
+- 「真题卷解析不得敷衍」memory：MCQ explanation 仍按现有 AI 解析逻辑；FRQ 现在直接由 AI 出完整评分与讲解，符合规则。
+
+---
+
+## 实施顺序（一次性提交）
+
+1. 数据库 migration（新表 + 新列 + RLS + GRANT）。
+2. 服务端函数 + admin API。
+3. 重写 `mock.$slug.tsx` 状态机与 UI。
+4. 管理后台 FRQ Tab 与 FRQ 行内「提取图片文字」按钮。
+5. 写一个默认 grader prompt 的 seed（migration 里 `UPDATE admin_settings SET frq_grader_prompt = ...`）。
