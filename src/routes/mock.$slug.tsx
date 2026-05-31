@@ -169,7 +169,7 @@ function PaperRunner() {
           .select("id,title,content,image_url,image_text,max_score,sort_order")
           .eq("paper_id", p.id)
           .order("sort_order", { ascending: true }),
-        supabase.from("terms").select("term_en,term_zh,definition"),
+        supabase.from("terms").select("term_en,term_zh,definition,confusable_with"),
       ]);
       const qs = ((pqs ?? []) as unknown as Array<{ questions: Q }>).map((row) => row.questions);
       setQuestions(qs);
@@ -933,7 +933,7 @@ function PaperRunner() {
                     <details className="text-sm">
                       <summary className="cursor-pointer text-primary text-xs">查看解析</summary>
                       <div className="mt-2 p-3 bg-muted rounded text-xs whitespace-pre-wrap leading-relaxed">
-                        {q.explanation}
+                        {renderStemWithTerms(q.explanation, q.term_tags ?? [], termDict)}
                       </div>
                     </details>
                   </CardContent>
