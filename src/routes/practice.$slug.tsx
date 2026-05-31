@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Textarea } from "@/components/ui/textarea";
-import { renderStemWithTerms, type TermInfo } from "@/lib/term-render";
+import { renderStemWithTerms, highlightTermsInNodes, type TermInfo } from "@/lib/term-render";
 import { optionStyles, colorizeExplanation, type OptKey } from "@/lib/option-colors";
 import { recordAnswer, addWrong, getWrong } from "@/lib/storage";
 import { Check, X, ChevronLeft, ChevronRight, Bookmark, Loader2, Sparkles, Home } from "lucide-react";
@@ -379,11 +379,11 @@ function QuestionCard({
                 </span>
               </div>
               <div className="prose prose-sm max-w-none whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-                {colorizeExplanation(q.explanation)}
+                {highlightTermsInNodes(colorizeExplanation(q.explanation), termDict)}
               </div>
               {q.pitfall_note && (
                 <div className="rounded-md bg-warning/15 border border-warning/30 px-3 py-2 text-sm">
-                  {q.pitfall_note}
+                  {renderStemWithTerms(q.pitfall_note, tags, termDict)}
                 </div>
               )}
             </CardContent>
