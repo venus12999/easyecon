@@ -85,7 +85,7 @@ function Practice() {
         .order("difficulty");
       if (type) q = q.eq("type", type);
       const { data: qData } = await q;
-      const { data: tData } = await supabase.from("terms").select("term_en,term_zh,definition");
+      const { data: tData } = await supabase.from("terms").select("term_en,term_zh,definition,confusable_with");
       const dict: Record<string, TermInfo> = {};
       (tData ?? []).forEach((t) => {
         dict[t.term_en.toLowerCase()] = t as TermInfo;

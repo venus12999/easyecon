@@ -169,7 +169,7 @@ function PaperRunner() {
           .select("id,title,content,image_url,image_text,max_score,sort_order")
           .eq("paper_id", p.id)
           .order("sort_order", { ascending: true }),
-        supabase.from("terms").select("term_en,term_zh,definition"),
+        supabase.from("terms").select("term_en,term_zh,definition,confusable_with"),
       ]);
       const qs = ((pqs ?? []) as unknown as Array<{ questions: Q }>).map((row) => row.questions);
       setQuestions(qs);

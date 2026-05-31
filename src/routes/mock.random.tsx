@@ -64,7 +64,7 @@ function Mock() {
   useEffect(() => {
     supabase
       .from("terms")
-      .select("term_en,term_zh,definition")
+      .select("term_en,term_zh,definition,confusable_with")
       .then(({ data }) => {
         const d: Record<string, TermInfo> = {};
         (data ?? []).forEach((t) => (d[t.term_en.toLowerCase()] = t as TermInfo));
