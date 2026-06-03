@@ -437,12 +437,14 @@ function PaperRunner() {
     const mm = String(Math.floor(breakSeconds / 60)).padStart(2, "0");
     const ss = String(breakSeconds % 60).padStart(2, "0");
     return (
-      <main className="mx-auto max-w-md px-4 py-16 text-center space-y-6">
-        <h1 className="text-2xl font-bold">休息时间</h1>
-        <p className="text-sm text-muted-foreground">距离 Section II（FRQ）开始还有</p>
-        <div className="text-6xl font-bold font-mono text-primary">{mm}:{ss}</div>
-        <Button onClick={() => setPhase("frq")}>跳过休息，立即开始 FRQ</Button>
-      </main>
+      <div className="min-h-screen bg-[linear-gradient(135deg,#f0fdf4_0%,#ecfdf5_50%,#d1fae5_100%)]">
+        <main className="mx-auto max-w-md px-4 py-16 text-center space-y-6">
+          <h1 className="text-2xl font-bold">休息时间</h1>
+          <p className="text-sm text-muted-foreground">距离 Section II（FRQ）开始还有</p>
+          <div className="text-6xl font-bold font-mono text-primary">{mm}:{ss}</div>
+          <Button onClick={() => setPhase("frq")}>跳过休息，立即开始 FRQ</Button>
+        </main>
+      </div>
     );
   }
 
