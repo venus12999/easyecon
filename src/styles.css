@@ -68,7 +68,7 @@
 :root {
   --radius: 0.625rem;
   /* 全部使用 hex 以兼容旧版 Windows 浏览器（不支持 oklch()） */
-  --background: #fbfcfd;
+  --background: #F5F9FF;
   --foreground: #161d2e;
   --card: #ffffff;
   --card-foreground: #161d2e;
