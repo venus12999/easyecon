@@ -348,12 +348,14 @@ function PaperRunner() {
 
   if (notFound || !paper) {
     return (
-      <main className="mx-auto max-w-md px-4 py-16 text-center space-y-4">
-        <h1 className="text-xl font-bold">未找到该真题卷</h1>
-        <Button asChild variant="outline">
-          <Link to="/mock">返回卷库</Link>
-        </Button>
-      </main>
+      <div className="min-h-screen bg-[linear-gradient(135deg,#f0fdf4_0%,#ecfdf5_50%,#d1fae5_100%)]">
+        <main className="mx-auto max-w-md px-4 py-16 text-center space-y-4">
+          <h1 className="text-xl font-bold">未找到该真题卷</h1>
+          <Button asChild variant="outline">
+            <Link to="/mock">返回卷库</Link>
+          </Button>
+        </main>
+      </div>
     );
   }
 
