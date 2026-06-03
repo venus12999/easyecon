@@ -194,7 +194,7 @@ function Mock() {
 
   if (phase === "idle") {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-[linear-gradient(135deg,#f0fdf4_0%,#ecfdf5_50%,#d1fae5_100%)]">
         
         <main className="mx-auto max-w-2xl px-4 py-12">
           <h1 className="text-2xl font-bold mb-2">完整模考（AP 官方比例）</h1>
