@@ -162,7 +162,7 @@ function Practice() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-[linear-gradient(135deg,#f0fdf4_0%,#ecfdf5_50%,#d1fae5_100%)]">
         
         <main className="mx-auto max-w-3xl px-4 py-12 text-center text-muted-foreground">
           <Loader2 className="h-6 w-6 animate-spin mx-auto" />
@@ -172,7 +172,7 @@ function Practice() {
   }
   if (!kp) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-[linear-gradient(135deg,#f0fdf4_0%,#ecfdf5_50%,#d1fae5_100%)]">
         
         <main className="mx-auto max-w-3xl px-4 py-12 text-center">
           <p>知识点不存在</p>
@@ -183,7 +183,7 @@ function Practice() {
   }
   if (questions.length === 0) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-[linear-gradient(135deg,#f0fdf4_0%,#ecfdf5_50%,#d1fae5_100%)]">
         
         <main className="mx-auto max-w-3xl px-4 py-12 text-center">
           <h1 className="text-xl font-semibold">{kp.name_zh} · {kp.name_en}</h1>
@@ -197,7 +197,7 @@ function Practice() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-[linear-gradient(135deg,#f0fdf4_0%,#ecfdf5_50%,#d1fae5_100%)]">
       
       <main className="mx-auto max-w-3xl px-4 py-6 pb-24">
         <div className="mb-4">
