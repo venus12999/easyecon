@@ -238,7 +238,7 @@ function Mock() {
     const ss = String(remainingSeconds % 60).padStart(2, "0");
     const lowTime = remainingSeconds <= 5 * 60;
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-[linear-gradient(135deg,#f0fdf4_0%,#ecfdf5_50%,#d1fae5_100%)]">
         
         <main className="mx-auto max-w-3xl px-4 py-6 pb-24">
           {shortageNote && (
