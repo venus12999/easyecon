@@ -68,8 +68,8 @@
 :root {
   --radius: 0.625rem;
   /* 全部使用 hex 以兼容旧版 Windows 浏览器（不支持 oklch()） */
-  --background: #fbfcfd;
-  --foreground: #161d2e;
+  --background: #0f3d2e;
+  --foreground: #f1f7f3;
   --card: #ffffff;
   --card-foreground: #161d2e;
   --popover: #ffffff;
