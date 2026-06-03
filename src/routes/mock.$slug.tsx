@@ -338,9 +338,11 @@ function PaperRunner() {
 
   if (loading) {
     return (
-      <main className="mx-auto max-w-sm px-4 py-16 text-center">
-        <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
-      </main>
+      <div className="min-h-screen bg-[linear-gradient(135deg,#f0fdf4_0%,#ecfdf5_50%,#d1fae5_100%)]">
+        <main className="mx-auto max-w-sm px-4 py-16 text-center">
+          <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
+        </main>
+      </div>
     );
   }
 
