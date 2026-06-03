@@ -361,73 +361,75 @@ function PaperRunner() {
 
   if (phase === "idle") {
     return (
-      <main className="mx-auto max-w-2xl px-4 py-10">
-        <Link
-          to="/mock"
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" /> 卷库
-        </Link>
-        <h1 className="text-2xl font-bold mb-2">{paper.title}</h1>
-        {paper.description && (
-          <p className="text-sm text-muted-foreground mb-6">{paper.description}</p>
-        )}
-        <div className="grid sm:grid-cols-2 gap-3 mb-4">
-          <button
-            onClick={() => setMode("exam")}
-            className={cn(
-              "text-left rounded-xl border-2 p-4 transition-colors",
-              mode === "exam" ? "border-primary bg-primary/5" : "border-border hover:border-primary/40",
-            )}
+      <div className="min-h-screen bg-[linear-gradient(135deg,#f0fdf4_0%,#ecfdf5_50%,#d1fae5_100%)]">
+        <main className="mx-auto max-w-2xl px-4 py-10">
+          <Link
+            to="/mock"
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
           >
-            <div className="font-semibold mb-1 flex items-center gap-2">
-              <span className="px-1.5 py-0.5 rounded bg-primary text-primary-foreground text-xs">仿真</span>
-              仿真模式
-            </div>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              严格按真实 AP 考试：MCQ 限 {Math.round(paper.total_seconds / 60)} 分钟，
-              休息 {Math.round((paper.break_seconds ?? 600) / 60)} 分钟（可跳过），
-              再 FRQ 限 {Math.round((paper.frq_seconds ?? 3600) / 60)} 分钟。提交后才显示成绩与解析。
-            </p>
-          </button>
-          <button
-            onClick={() => setMode("practice")}
-            className={cn(
-              "text-left rounded-xl border-2 p-4 transition-colors",
-              mode === "practice" ? "border-primary bg-primary/5" : "border-border hover:border-primary/40",
-            )}
-          >
-            <div className="font-semibold mb-1 flex items-center gap-2">
-              <span className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground text-xs">练习</span>
-              练习模式
-            </div>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              无时间限制：自由作答 MCQ，随时进入 FRQ。提交 FRQ 之后才会显示 MCQ 正确答案与 AI 解析。
-            </p>
-          </button>
-        </div>
-        <Card>
-          <CardContent className="p-6 space-y-4">
-            <div className="grid grid-cols-3 gap-3 text-center text-sm">
-              <div className="border rounded-md py-3">
-                <div className="text-2xl font-bold text-primary">{questions.length}</div>
-                <div className="text-xs text-muted-foreground mt-0.5">选择题</div>
+            <ArrowLeft className="h-3.5 w-3.5" /> 卷库
+          </Link>
+          <h1 className="text-2xl font-bold mb-2">{paper.title}</h1>
+          {paper.description && (
+            <p className="text-sm text-muted-foreground mb-6">{paper.description}</p>
+          )}
+          <div className="grid sm:grid-cols-2 gap-3 mb-4">
+            <button
+              onClick={() => setMode("exam")}
+              className={cn(
+                "text-left rounded-xl border-2 p-4 transition-colors",
+                mode === "exam" ? "border-primary bg-primary/5" : "border-border hover:border-primary/40",
+              )}
+            >
+              <div className="font-semibold mb-1 flex items-center gap-2">
+                <span className="px-1.5 py-0.5 rounded bg-primary text-primary-foreground text-xs">仿真</span>
+                仿真模式
               </div>
-              <div className="border rounded-md py-3">
-                <div className="text-2xl font-bold text-primary">{frqs.length}</div>
-                <div className="text-xs text-muted-foreground mt-0.5">简答题</div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                严格按真实 AP 考试：MCQ 限 {Math.round(paper.total_seconds / 60)} 分钟，
+                休息 {Math.round((paper.break_seconds ?? 600) / 60)} 分钟（可跳过），
+                再 FRQ 限 {Math.round((paper.frq_seconds ?? 3600) / 60)} 分钟。提交后才显示成绩与解析。
+              </p>
+            </button>
+            <button
+              onClick={() => setMode("practice")}
+              className={cn(
+                "text-left rounded-xl border-2 p-4 transition-colors",
+                mode === "practice" ? "border-primary bg-primary/5" : "border-border hover:border-primary/40",
+              )}
+            >
+              <div className="font-semibold mb-1 flex items-center gap-2">
+                <span className="px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground text-xs">练习</span>
+                练习模式
               </div>
-              <div className="border rounded-md py-3">
-                <div className="text-2xl font-bold text-primary">{Math.round(paper.total_seconds / 60)}</div>
-                <div className="text-xs text-muted-foreground mt-0.5">分钟</div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                无时间限制：自由作答 MCQ，随时进入 FRQ。提交 FRQ 之后才会显示 MCQ 正确答案与 AI 解析。
+              </p>
+            </button>
+          </div>
+          <Card>
+            <CardContent className="p-6 space-y-4">
+              <div className="grid grid-cols-3 gap-3 text-center text-sm">
+                <div className="border rounded-md py-3">
+                  <div className="text-2xl font-bold text-primary">{questions.length}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">选择题</div>
+                </div>
+                <div className="border rounded-md py-3">
+                  <div className="text-2xl font-bold text-primary">{frqs.length}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">简答题</div>
+                </div>
+                <div className="border rounded-md py-3">
+                  <div className="text-2xl font-bold text-primary">{Math.round(paper.total_seconds / 60)}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">分钟</div>
+                </div>
               </div>
-            </div>
-            <Button onClick={start} disabled={questions.length === 0} className="w-full">
-              开始作答（{mode === "exam" ? "仿真模式" : "练习模式"}）
-            </Button>
-          </CardContent>
-        </Card>
-      </main>
+              <Button onClick={start} disabled={questions.length === 0} className="w-full">
+                开始作答（{mode === "exam" ? "仿真模式" : "练习模式"}）
+              </Button>
+            </CardContent>
+          </Card>
+        </main>
+      </div>
     );
   }
 
