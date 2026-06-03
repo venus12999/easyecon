@@ -453,74 +453,76 @@ function PaperRunner() {
     const ss = String(frqSeconds % 60).padStart(2, "0");
     const allGrading = Object.values(grading).some(Boolean);
     return (
-      <main className="mx-auto max-w-3xl px-4 py-8 space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">Section II · FRQ</h1>
-            <p className="text-xs text-muted-foreground">
-              {mode === "exam" ? "仿真模式：到点自动交卷" : "练习模式：无时间限制"}
-            </p>
-          </div>
-          {mode === "exam" && (
-            <div className="text-right">
-              <div className="font-mono text-lg tabular-nums text-primary">{mm}:{ss}</div>
-              <div className="text-xs text-muted-foreground">剩余时间</div>
+      <div className="min-h-screen bg-[linear-gradient(135deg,#f0fdf4_0%,#ecfdf5_50%,#d1fae5_100%)]">
+        <main className="mx-auto max-w-3xl px-4 py-8 space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold">Section II · FRQ</h1>
+              <p className="text-xs text-muted-foreground">
+                {mode === "exam" ? "仿真模式：到点自动交卷" : "练习模式：无时间限制"}
+              </p>
             </div>
-          )}
-        </div>
+            {mode === "exam" && (
+              <div className="text-right">
+                <div className="font-mono text-lg tabular-nums text-primary">{mm}:{ss}</div>
+                <div className="text-xs text-muted-foreground">剩余时间</div>
+              </div>
+            )}
+          </div>
 
-        {frqs.map((f, i) => {
-          const ans = frqAnswers[f.id] ?? EMPTY_ANSWER;
-          const grade = frqGrades[f.id];
-          return (
-            <Card key={f.id}>
-              <CardContent className="p-5 space-y-4">
-                <div className="font-semibold">
-                  Question {i + 1}
-                  {f.title ? ` · ${f.title}` : ""}
-                  <span className="ml-2 text-xs text-muted-foreground">满分 {f.max_score} 分</span>
-                </div>
-                <p className="text-sm whitespace-pre-wrap leading-relaxed">{f.content}</p>
-                {f.image_url && (
-                  <img src={f.image_url} alt="FRQ 图" className="max-h-80 w-auto rounded border border-border" />
-                )}
-                {f.image_text && (
-                  <details className="text-xs">
-                    <summary className="cursor-pointer text-muted-foreground hover:text-foreground">查看题图中的文字</summary>
-                    <pre className="mt-2 p-2 bg-muted rounded whitespace-pre-wrap font-mono text-[11px] leading-relaxed">{f.image_text}</pre>
-                  </details>
-                )}
-                <FrqAnswerBox
-                  paperId={paper.id}
-                  frqId={f.id}
-                  value={ans}
-                  onChange={(v) => setFrqAnswers((s) => ({ ...s, [f.id]: v }))}
-                  disabled={!!grade}
-                />
-                {!grade && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void gradeOneFrq(f)}
-                    disabled={grading[f.id] || (!ans.text.trim() && !ans.fileUrl)}
-                  >
-                    {grading[f.id] ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                    单独评分本题
-                  </Button>
-                )}
-                {grade && <FrqGradeCard grade={grade} />}
-              </CardContent>
-            </Card>
-          );
-        })}
+          {frqs.map((f, i) => {
+            const ans = frqAnswers[f.id] ?? EMPTY_ANSWER;
+            const grade = frqGrades[f.id];
+            return (
+              <Card key={f.id}>
+                <CardContent className="p-5 space-y-4">
+                  <div className="font-semibold">
+                    Question {i + 1}
+                    {f.title ? ` · ${f.title}` : ""}
+                    <span className="ml-2 text-xs text-muted-foreground">满分 {f.max_score} 分</span>
+                  </div>
+                  <p className="text-sm whitespace-pre-wrap leading-relaxed">{f.content}</p>
+                  {f.image_url && (
+                    <img src={f.image_url} alt="FRQ 图" className="max-h-80 w-auto rounded border border-border" />
+                  )}
+                  {f.image_text && (
+                    <details className="text-xs">
+                      <summary className="cursor-pointer text-muted-foreground hover:text-foreground">查看题图中的文字</summary>
+                      <pre className="mt-2 p-2 bg-muted rounded whitespace-pre-wrap font-mono text-[11px] leading-relaxed">{f.image_text}</pre>
+                    </details>
+                  )}
+                  <FrqAnswerBox
+                    paperId={paper.id}
+                    frqId={f.id}
+                    value={ans}
+                    onChange={(v) => setFrqAnswers((s) => ({ ...s, [f.id]: v }))}
+                    disabled={!!grade}
+                  />
+                  {!grade && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void gradeOneFrq(f)}
+                      disabled={grading[f.id] || (!ans.text.trim() && !ans.fileUrl)}
+                    >
+                      {grading[f.id] ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                      单独评分本题
+                    </Button>
+                  )}
+                  {grade && <FrqGradeCard grade={grade} />}
+                </CardContent>
+              </Card>
+            );
+          })}
 
-        <div className="flex justify-end gap-2">
-          <Button onClick={() => void submitAllFrqs()} disabled={allGrading}>
-            {allGrading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            交卷并查看全部成绩
-          </Button>
-        </div>
-      </main>
+          <div className="flex justify-end gap-2">
+            <Button onClick={() => void submitAllFrqs()} disabled={allGrading}>
+              {allGrading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              交卷并查看全部成绩
+            </Button>
+          </div>
+        </main>
+      </div>
     );
   }
 
