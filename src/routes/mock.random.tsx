@@ -314,7 +314,7 @@ function Mock() {
   if (!stats) return null;
   const pct = Math.round((stats.correct / stats.total) * 100);
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-[linear-gradient(135deg,#f0fdf4_0%,#ecfdf5_50%,#d1fae5_100%)]">
       
       <main className="mx-auto max-w-3xl px-4 py-8">
         <h1 className="text-2xl font-bold mb-2">模考结果</h1>
