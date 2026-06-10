@@ -84,9 +84,9 @@ function PaperRunner() {
   const [showDirections, setShowDirections] = useState(false);
   const [confirmSubmit, setConfirmSubmit] = useState(false);
 
-  // Highlighter (yellow / pink / blue)
+  // Highlighter
   const stemRef = useRef<HTMLDivElement | null>(null);
-  const [hlPopup, setHlPopup] = useState<{ x: number; y: number } | null>(null);
+  const [highlightActive, setHighlightActive] = useState(false);
   type HlColor = "yellow" | "pink" | "blue";
   const HL_BG: Record<HlColor, string> = {
     yellow: "#fde68a",
@@ -94,28 +94,25 @@ function PaperRunner() {
     blue: "#bfdbfe",
   };
 
-  function onStemMouseUp(e: React.MouseEvent) {
+  function onHighlightableMouseUp(container: HTMLDivElement | null) {
+    if (!highlightActive) return;
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
-      setHlPopup(null);
       return;
     }
     const range = sel.getRangeAt(0);
-    const container = stemRef.current;
     if (!container || !container.contains(range.commonAncestorContainer)) {
-      setHlPopup(null);
       return;
     }
-    const rect = range.getBoundingClientRect();
-    setHlPopup({ x: rect.left + rect.width / 2, y: rect.top - 8 });
+    applyHighlight("yellow", container);
   }
 
-  function applyHighlight(color: HlColor | "erase") {
+  function applyHighlight(color: HlColor | "erase", targetContainer?: HTMLDivElement | null) {
     const sel = window.getSelection();
-    if (!sel || sel.isCollapsed || sel.rangeCount === 0) return setHlPopup(null);
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
     const range = sel.getRangeAt(0);
-    const container = stemRef.current;
-    if (!container || !container.contains(range.commonAncestorContainer)) return setHlPopup(null);
+    const container = targetContainer ?? stemRef.current;
+    if (!container || !container.contains(range.commonAncestorContainer)) return;
     if (color === "erase") {
       // unwrap any highlight spans intersecting the selection
       const spans = Array.from(container.querySelectorAll<HTMLSpanElement>("span[data-hl]"));
@@ -136,7 +133,6 @@ function PaperRunner() {
       range.insertNode(span);
     }
     sel.removeAllRanges();
-    setHlPopup(null);
   }
 
   const remaining = paper ? Math.max(0, paper.total_seconds - seconds) : 0;
@@ -457,13 +453,23 @@ function PaperRunner() {
     const allGrading = Object.values(grading).some(Boolean);
     return (
       <main className="mx-auto max-w-3xl px-4 py-8 space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold">Section II · FRQ</h1>
             <p className="text-xs text-muted-foreground">
               {mode === "exam" ? "仿真模式：到点自动交卷" : "练习模式：无时间限制"}
             </p>
           </div>
+          <button
+            onClick={() => setHighlightActive((v) => !v)}
+            className={cn(
+              "flex flex-col items-center gap-0.5 text-[11px] transition-colors",
+              highlightActive ? "text-primary font-semibold" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Highlighter className="h-5 w-5" />
+            <span>Highlights</span>
+          </button>
           {mode === "exam" && (
             <div className="text-right">
               <div className="font-mono text-lg tabular-nums text-primary">{mm}:{ss}</div>
@@ -483,7 +489,15 @@ function PaperRunner() {
                   {f.title ? ` · ${f.title}` : ""}
                   <span className="ml-2 text-xs text-muted-foreground">满分 {f.max_score} 分</span>
                 </div>
-                <p className="text-sm whitespace-pre-wrap leading-relaxed">{f.content}</p>
+                <div
+                  onMouseUp={(e) => onHighlightableMouseUp(e.currentTarget)}
+                  className={cn(
+                    "text-sm whitespace-pre-wrap leading-relaxed select-text",
+                    highlightActive && "cursor-text",
+                  )}
+                >
+                  {f.content}
+                </div>
                 {f.image_url && (
                   <img src={f.image_url} alt="FRQ 图" className="max-h-80 w-auto rounded border border-border" />
                 )}
@@ -589,9 +603,15 @@ function PaperRunner() {
             </button>
           </div>
           <div className="flex-1 flex items-center justify-end gap-5 text-[11px]">
-            <button className="flex flex-col items-center gap-0.5 text-slate-700 hover:text-slate-900">
+            <button
+              onClick={() => setHighlightActive((v) => !v)}
+              className={cn(
+                "flex flex-col items-center gap-0.5 transition-colors",
+                highlightActive ? "text-[#1a2b6b] font-bold" : "text-slate-700 hover:text-slate-900",
+              )}
+            >
               <Highlighter className="h-5 w-5" />
-              <span>Highlights & Notes</span>
+              <span>Highlights</span>
             </button>
             <button
               onClick={() => setShowCalc(true)}
@@ -650,8 +670,8 @@ function PaperRunner() {
             <div
               key={cur.id}
               ref={stemRef}
-              onMouseUp={onStemMouseUp}
-              className="text-[17px] leading-relaxed mb-6 select-text"
+              onMouseUp={() => onHighlightableMouseUp(stemRef.current)}
+              className={cn("text-[17px] leading-relaxed mb-6 select-text", highlightActive && "cursor-text")}
             >
               {renderStemWithTerms(cur.stem, cur.term_tags ?? [], termDict)}
             </div>
@@ -846,33 +866,6 @@ function PaperRunner() {
 
         {/* Calculator modal */}
         {showCalc && <CalculatorModal onClose={() => setShowCalc(false)} />}
-
-        {/* Highlight color picker */}
-        {hlPopup && (
-          <div
-            className="fixed z-[70] -translate-x-1/2 -translate-y-full bg-white border border-slate-300 shadow-lg rounded-full flex items-center gap-1 px-2 py-1.5"
-            style={{ left: hlPopup.x, top: hlPopup.y }}
-            onMouseDown={(e) => e.preventDefault()}
-          >
-            {(["yellow", "pink", "blue"] as HlColor[]).map((c) => (
-              <button
-                key={c}
-                onClick={() => applyHighlight(c)}
-                className="w-6 h-6 rounded-full border border-slate-300 hover:scale-110 transition-transform"
-                style={{ backgroundColor: HL_BG[c] }}
-                title={c}
-              />
-            ))}
-            <div className="w-px h-5 bg-slate-300 mx-0.5" />
-            <button
-              onClick={() => applyHighlight("erase")}
-              className="text-[11px] font-semibold text-slate-700 hover:text-slate-900 px-2"
-              title="移除高亮"
-            >
-              清除
-            </button>
-          </div>
-        )}
 
         {/* Submit confirm */}
         {confirmSubmit && (
