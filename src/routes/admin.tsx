@@ -188,6 +188,23 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
   const imageCount = questions.filter((q) => hasImageMarker(q.stem)).length;
   const units = Array.from(new Set(kps.map((k) => k.unit))).sort((a, b) => a - b);
   const visibleKps = filterUnit === "all" ? kps : kps.filter((k) => String(k.unit) === filterUnit);
+  const paperTitleMap = new Map(papers.map((p) => [p.id, p.title]));
+  const showMcq = filterScope !== "frq";
+  const showFrq = filterScope !== "mcq";
+  const mcqList = showMcq ? filtered : [];
+  const frqList = showFrq
+    ? frqs.filter((f) => {
+        // FRQ 没有 knowledge_point / type / image marker，受 unit/kp/type/image 过滤时只在 "all" 下显示
+        if (filterUnit !== "all" && !filterUnit.startsWith("paper:")) return false;
+        if (filterUnit.startsWith("paper:") && f.paper_id !== filterUnit.slice(6)) return false;
+        if (filterKp !== "all") return false;
+        if (filterType !== "all") return false;
+        if (filterImage === "noimage" && f.image_url) return false;
+        if (filterImage === "image" && !f.image_url) return false;
+        if (search && !f.content.toLowerCase().includes(search.toLowerCase())) return false;
+        return true;
+      })
+    : [];
 
   return (
     <div className="min-h-screen bg-background">
