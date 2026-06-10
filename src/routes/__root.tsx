@@ -102,7 +102,7 @@ function RootComponent() {
           src={mascotUrl}
           alt=""
           aria-hidden="true"
-          className="pointer-events-none fixed top-2 left-2 z-50 h-16 w-16 select-none animate-[float_3s_ease-in-out_infinite] drop-shadow-lg"
+          className="pointer-events-none fixed top-3 right-3 z-50 h-20 w-20 select-none animate-[float_3s_ease-in-out_infinite] drop-shadow-lg"
           style={{ imageRendering: "pixelated" }}
         />
         <Toaster richColors position="top-center" />
