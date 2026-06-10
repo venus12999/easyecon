@@ -1,0 +1,1 @@
+DROP POLICY IF EXISTS "question-images public read" ON storage.objects;
