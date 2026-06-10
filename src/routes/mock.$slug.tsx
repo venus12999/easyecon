@@ -199,10 +199,15 @@ function PaperRunner() {
     setFrqAnswers({});
     setFrqGrades({});
     setFrqSubmitted(false);
-    setPhase("running");
     if (paper) {
       setBreakSeconds(paper.break_seconds ?? 600);
       setFrqSeconds(paper.frq_seconds ?? 3600);
+    }
+    // 仅含 FRQ 的卷子直接进入 Section II
+    if (questions.length === 0 && frqs.length > 0) {
+      setPhase("frq");
+    } else {
+      setPhase("running");
     }
   }
 
