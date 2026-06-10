@@ -199,10 +199,15 @@ function PaperRunner() {
     setFrqAnswers({});
     setFrqGrades({});
     setFrqSubmitted(false);
-    setPhase("running");
     if (paper) {
       setBreakSeconds(paper.break_seconds ?? 600);
       setFrqSeconds(paper.frq_seconds ?? 3600);
+    }
+    // 仅含 FRQ 的卷子直接进入 Section II
+    if (questions.length === 0 && frqs.length > 0) {
+      setPhase("frq");
+    } else {
+      setPhase("running");
     }
   }
 
@@ -418,8 +423,14 @@ function PaperRunner() {
                 <div className="text-xs text-muted-foreground mt-0.5">分钟</div>
               </div>
             </div>
-            <Button onClick={start} disabled={questions.length === 0} className="w-full">
-              开始作答（{mode === "exam" ? "仿真模式" : "练习模式"}）
+            <Button
+              onClick={start}
+              disabled={questions.length === 0 && frqs.length === 0}
+              className="w-full"
+            >
+              {questions.length === 0 && frqs.length > 0
+                ? "开始作答（仅 FRQ 大题）"
+                : `开始作答（${mode === "exam" ? "仿真模式" : "练习模式"}）`}
             </Button>
           </CardContent>
         </Card>
