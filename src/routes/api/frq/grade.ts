@@ -140,7 +140,7 @@ export const Route = createFileRoute("/api/frq/grade")({
             total_score: 0,
             max_score: maxScore,
             breakdown: [],
-            overall_comment: raw.slice(0, 2000),
+            overall_comment: "AI 评分返回的内容不是规范的 JSON，已为你保留 0 分占位。请稍后重试，或换一种方式提交答案（例如把图片换成清晰版本，或补充文字说明）。",
             suggestions: "AI 返回格式异常，请重试或联系管理员。",
           });
         }
