@@ -648,6 +648,7 @@ function PaperRunner() {
 
             {/* Stem */}
             <div
+              key={cur.id}
               ref={stemRef}
               onMouseUp={onStemMouseUp}
               className="text-[17px] leading-relaxed mb-6 select-text"
