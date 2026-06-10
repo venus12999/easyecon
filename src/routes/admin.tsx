@@ -120,19 +120,27 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
   const [filterUnit, setFilterUnit] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
   const [filterImage, setFilterImage] = useState<string>("all");
+  const [filterScope, setFilterScope] = useState<"all" | "mcq" | "frq">("all");
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<Q | null>(null);
   const [creating, setCreating] = useState(false);
   const [papers, setPapers] = useState<{ id: string; slug: string; title: string }[]>([]);
   const [paperMap, setPaperMap] = useState<Record<string, Map<string, number>>>({}); // paperId -> map(questionId, sort_order)
+  const [frqs, setFrqs] = useState<FrqRow[]>([]);
+  const [tab, setTab] = useState<string>("list");
 
   useEffect(() => {
     (async () => {
-      const [{ data: p }, { data: pq }] = await Promise.all([
+      const [{ data: p }, { data: pq }, { data: fq }] = await Promise.all([
         supabase.from("mock_papers").select("id,slug,title").order("sort_order"),
         supabase.from("paper_questions").select("paper_id,question_id,sort_order"),
+        supabase
+          .from("paper_frqs")
+          .select("id,paper_id,sort_order,title,content,image_url,image_text,max_score,rubric_note")
+          .order("sort_order", { ascending: true }),
       ]);
       setPapers(p ?? []);
+      setFrqs((fq ?? []) as FrqRow[]);
       const m: Record<string, Map<string, number>> = {};
       (pq ?? []).forEach((r: { paper_id: string; question_id: string; sort_order: number }) => {
         (m[r.paper_id] ??= new Map()).set(r.question_id, r.sort_order);
