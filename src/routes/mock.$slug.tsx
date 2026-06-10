@@ -639,6 +639,29 @@ function PaperRunner() {
               <Highlighter className="h-5 w-5" />
               <span>Highlights</span>
             </button>
+            {highlightActive && (
+              <div className="flex items-center gap-1.5">
+                {(["yellow", "pink", "blue"] as HlColor[]).map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setHlColor(c)}
+                    title={c}
+                    className={cn(
+                      "h-4 w-4 rounded-full border-2 transition-all",
+                      hlColor === c ? "border-slate-900 scale-110" : "border-transparent",
+                    )}
+                    style={{ backgroundColor: HL_BG[c] }}
+                  />
+                ))}
+                <button
+                  onClick={() => applyHighlight("erase", stemRef.current)}
+                  className="text-[10px] px-1.5 py-0.5 rounded border border-slate-400 hover:bg-slate-100"
+                  title="清除所选高亮"
+                >
+                  擦除
+                </button>
+              </div>
+            )}
             <button
               onClick={() => setShowCalc(true)}
               className="flex flex-col items-center gap-0.5 text-slate-700 hover:text-slate-900"
