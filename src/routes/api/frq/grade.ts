@@ -29,10 +29,15 @@ type Grade = {
 
 function tryParseJson(raw: string): Grade | null {
   const stripped = raw.replace(/```json\s*/gi, "").replace(/```/g, "").trim();
-  const attempts = [stripped];
+  const attempts: string[] = [stripped];
   const s = stripped.indexOf("{");
   const e = stripped.lastIndexOf("}");
   if (s !== -1 && e > s) attempts.push(stripped.substring(s, e + 1));
+  // 尝试修复常见尾随逗号
+  attempts.forEach((a) => {
+    const fixed = a.replace(/,(\s*[}\]])/g, "$1");
+    if (fixed !== a) attempts.push(fixed);
+  });
   for (const a of attempts) {
     try {
       const obj = JSON.parse(a);
@@ -91,7 +96,11 @@ export const Route = createFileRoute("/api/frq/grade")({
             userTextParts.push(`【学生上传的答案文件 URL】\n${body.answer_file_url}\n（若你无法读取，请基于已提供的文字答案评分；若无文字答案则按"未作答"扣分。）`);
           }
         }
-        userTextParts.push(`【输出要求】严格按系统提示的 JSON 结构输出，max_score 必须等于 ${maxScore}。`);
+        userTextParts.push(
+          `【输出要求】仅输出一个 JSON 对象（不要 Markdown、不要 \`\`\` 代码块、不要解释文字），结构示例：\n` +
+            `{"total_score": 数字, "max_score": ${maxScore}, "breakdown": [{"point":"得分点","awarded":true,"comment":"解释"}], "overall_comment":"中文整体评语", "suggestions":"中文改进建议"}\n` +
+            `max_score 必须等于 ${maxScore}。`,
+        );
         const userText = userTextParts.join("\n\n");
 
         const userContent: unknown =
@@ -123,6 +132,7 @@ export const Route = createFileRoute("/api/frq/grade")({
               { role: "user", content: userContent },
             ],
             max_tokens: 3072,
+            response_format: { type: "json_object" },
           }),
         });
         if (upstream.status === 429) return err("rate_limited", 429);
