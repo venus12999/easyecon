@@ -198,7 +198,7 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
           <Button variant="outline" size="sm" onClick={onLogout}>退出</Button>
         </div>
 
-        <Tabs defaultValue="list">
+        <Tabs value={tab} onValueChange={setTab}>
           <TabsList>
             <TabsTrigger value="list">题目列表</TabsTrigger>
             <TabsTrigger value="import">批量导入</TabsTrigger>
@@ -210,6 +210,14 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
 
           <TabsContent value="list" className="mt-4">
             <div className="flex flex-wrap gap-2 mb-4 items-center">
+              <Select value={filterScope} onValueChange={(v) => setFilterScope(v as "all" | "mcq" | "frq")}>
+                <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部题型</SelectItem>
+                  <SelectItem value="mcq">仅 MCQ</SelectItem>
+                  <SelectItem value="frq">仅 FRQ</SelectItem>
+                </SelectContent>
+              </Select>
               <Select value={filterUnit} onValueChange={(v) => { setFilterUnit(v); setFilterKp("all"); }}>
                 <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
                 <SelectContent>
