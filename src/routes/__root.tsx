@@ -5,7 +5,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/hooks/use-auth";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
-import mascotUrl from "@/assets/mascot.png";
+import { FloatingMascot } from "@/components/FloatingMascot";
 
 function NotFoundComponent() {
   return (
@@ -98,13 +98,7 @@ function RootComponent() {
             </main>
           </div>
         </div>
-        <img
-          src={mascotUrl}
-          alt=""
-          aria-hidden="true"
-          className="pointer-events-none fixed top-3 right-3 z-50 h-20 w-20 select-none animate-[float_3s_ease-in-out_infinite] drop-shadow-lg"
-          style={{ imageRendering: "pixelated" }}
-        />
+        <FloatingMascot />
         <Toaster richColors position="top-center" />
       </SidebarProvider>
     </AuthProvider>
