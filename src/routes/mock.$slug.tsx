@@ -88,6 +88,7 @@ function PaperRunner() {
   const stemRef = useRef<HTMLDivElement | null>(null);
   const [highlightActive, setHighlightActive] = useState(false);
   type HlColor = "yellow" | "pink" | "blue";
+  const [hlColor, setHlColor] = useState<HlColor>("yellow");
   const HL_BG: Record<HlColor, string> = {
     yellow: "#fde68a",
     pink: "#fbcfe8",
@@ -104,7 +105,7 @@ function PaperRunner() {
     if (!container || !container.contains(range.commonAncestorContainer)) {
       return;
     }
-    applyHighlight("yellow", container);
+    applyHighlight(hlColor, container);
   }
 
   function applyHighlight(color: HlColor | "erase", targetContainer?: HTMLDivElement | null) {
