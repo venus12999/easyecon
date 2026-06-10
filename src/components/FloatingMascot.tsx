@@ -7,7 +7,6 @@ const MASCOT_KEY = "mascot-variant-v1";
 
 const SIZE = 80;
 const STORAGE_KEY = "mascot-pos-v1";
-const LONG_PRESS_MS = 500;
 
 export function FloatingMascot() {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
@@ -16,10 +15,7 @@ export function FloatingMascot() {
     const v = Number(localStorage.getItem(MASCOT_KEY) ?? 0);
     return Number.isFinite(v) && v >= 0 && v < MASCOTS.length ? v : 0;
   });
-  const [showPanel, setShowPanel] = useState(false);
   const dragRef = useRef<{ dx: number; dy: number; moved: boolean } | null>(null);
-  const longPressTimerRef = useRef<number | null>(null);
-  const panelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     try {
@@ -35,21 +31,6 @@ export function FloatingMascot() {
     setPos({ x: window.innerWidth - SIZE - 12, y: 12 });
   }, []);
 
-  useEffect(() => {
-    function onDocPointerDown(e: PointerEvent) {
-      if (
-        panelRef.current &&
-        !panelRef.current.contains(e.target as Node)
-      ) {
-        setShowPanel(false);
-      }
-    }
-    if (showPanel) {
-      document.addEventListener("pointerdown", onDocPointerDown);
-    }
-    return () => document.removeEventListener("pointerdown", onDocPointerDown);
-  }, [showPanel]);
-
   function clamp(x: number, y: number) {
     const maxX = window.innerWidth - SIZE;
     const maxY = window.innerHeight - SIZE;
@@ -59,38 +40,20 @@ export function FloatingMascot() {
     };
   }
 
-  function startLongPress() {
-    if (longPressTimerRef.current) return;
-    longPressTimerRef.current = window.setTimeout(() => {
-      longPressTimerRef.current = null;
-      setShowPanel(true);
-    }, LONG_PRESS_MS);
-  }
-
-  function cancelLongPress() {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-  }
-
   function onPointerDown(e: React.PointerEvent<HTMLImageElement>) {
     if (!pos) return;
     (e.target as HTMLImageElement).setPointerCapture(e.pointerId);
     dragRef.current = { dx: e.clientX - pos.x, dy: e.clientY - pos.y, moved: false };
-    startLongPress();
   }
 
   function onPointerMove(e: React.PointerEvent<HTMLImageElement>) {
     if (!dragRef.current) return;
-    cancelLongPress();
     dragRef.current.moved = true;
     const next = clamp(e.clientX - dragRef.current.dx, e.clientY - dragRef.current.dy);
     setPos(next);
   }
 
   function onPointerUp(e: React.PointerEvent<HTMLImageElement>) {
-    cancelLongPress();
     if (!dragRef.current) return;
     try { (e.target as HTMLImageElement).releasePointerCapture(e.pointerId); } catch {}
     if (dragRef.current.moved && pos) {
@@ -99,59 +62,27 @@ export function FloatingMascot() {
     dragRef.current = null;
   }
 
-  function selectMascot(idx: number) {
-    setVariant(idx);
-    try { localStorage.setItem(MASCOT_KEY, String(idx)); } catch {}
-    setShowPanel(false);
+  function onDoubleClick() {
+    const next = (variant + 1) % MASCOTS.length;
+    setVariant(next);
+    try { localStorage.setItem(MASCOT_KEY, String(next)); } catch {}
   }
 
   if (!pos) return null;
 
-  const panelLeft = Math.min(
-    pos.x,
-    window.innerWidth - (MASCOTS.length * 56 + 24)
-  );
-
   return (
-    <>
-      <img
-        src={MASCOTS[variant]}
-        alt=""
-        aria-hidden="true"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-        onDragStart={(e) => e.preventDefault()}
-        className="fixed z-50 h-20 w-20 select-none drop-shadow-lg touch-none cursor-grab active:cursor-grabbing"
-        style={{ left: pos.x, top: pos.y, imageRendering: "pixelated" }}
-      />
-      {showPanel && (
-        <div
-          ref={panelRef}
-          className="fixed z-[60] flex gap-2 rounded-xl bg-white/90 p-3 shadow-xl backdrop-blur-sm border border-gray-200"
-          style={{ left: panelLeft, top: pos.y + SIZE + 8 }}
-        >
-          {MASCOTS.map((src, idx) => (
-            <button
-              key={idx}
-              onClick={() => selectMascot(idx)}
-              className={`flex h-14 w-14 items-center justify-center rounded-lg border-2 transition hover:scale-105 ${
-                idx === variant
-                  ? "border-primary bg-primary/10"
-                  : "border-transparent hover:border-gray-300"
-              }`}
-            >
-              <img
-                src={src}
-                alt={`mascot ${idx + 1}`}
-                className="h-12 w-12"
-                style={{ imageRendering: "pixelated" }}
-              />
-            </button>
-          ))}
-        </div>
-      )}
-    </>
+    <img
+      src={MASCOTS[variant]}
+      alt=""
+      aria-hidden="true"
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      onDoubleClick={onDoubleClick}
+      onDragStart={(e) => e.preventDefault()}
+      className="fixed z-50 h-20 w-20 select-none drop-shadow-lg touch-none cursor-grab active:cursor-grabbing"
+      style={{ left: pos.x, top: pos.y, imageRendering: "pixelated" }}
+    />
   );
 }
