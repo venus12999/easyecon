@@ -867,33 +867,6 @@ function PaperRunner() {
         {/* Calculator modal */}
         {showCalc && <CalculatorModal onClose={() => setShowCalc(false)} />}
 
-        {/* Highlight color picker */}
-        {hlPopup && (
-          <div
-            className="fixed z-[70] -translate-x-1/2 -translate-y-full bg-white border border-slate-300 shadow-lg rounded-full flex items-center gap-1 px-2 py-1.5"
-            style={{ left: hlPopup.x, top: hlPopup.y }}
-            onMouseDown={(e) => e.preventDefault()}
-          >
-            {(["yellow", "pink", "blue"] as HlColor[]).map((c) => (
-              <button
-                key={c}
-                onClick={() => applyHighlight(c)}
-                className="w-6 h-6 rounded-full border border-slate-300 hover:scale-110 transition-transform"
-                style={{ backgroundColor: HL_BG[c] }}
-                title={c}
-              />
-            ))}
-            <div className="w-px h-5 bg-slate-300 mx-0.5" />
-            <button
-              onClick={() => applyHighlight("erase")}
-              className="text-[11px] font-semibold text-slate-700 hover:text-slate-900 px-2"
-              title="移除高亮"
-            >
-              清除
-            </button>
-          </div>
-        )}
-
         {/* Submit confirm */}
         {confirmSubmit && (
           <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4">
