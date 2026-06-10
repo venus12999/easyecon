@@ -120,19 +120,27 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
   const [filterUnit, setFilterUnit] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
   const [filterImage, setFilterImage] = useState<string>("all");
+  const [filterScope, setFilterScope] = useState<"all" | "mcq" | "frq">("all");
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<Q | null>(null);
   const [creating, setCreating] = useState(false);
   const [papers, setPapers] = useState<{ id: string; slug: string; title: string }[]>([]);
   const [paperMap, setPaperMap] = useState<Record<string, Map<string, number>>>({}); // paperId -> map(questionId, sort_order)
+  const [frqs, setFrqs] = useState<FrqRow[]>([]);
+  const [tab, setTab] = useState<string>("list");
 
   useEffect(() => {
     (async () => {
-      const [{ data: p }, { data: pq }] = await Promise.all([
+      const [{ data: p }, { data: pq }, { data: fq }] = await Promise.all([
         supabase.from("mock_papers").select("id,slug,title").order("sort_order"),
         supabase.from("paper_questions").select("paper_id,question_id,sort_order"),
+        supabase
+          .from("paper_frqs")
+          .select("id,paper_id,sort_order,title,content,image_url,image_text,max_score,rubric_note")
+          .order("sort_order", { ascending: true }),
       ]);
       setPapers(p ?? []);
+      setFrqs((fq ?? []) as FrqRow[]);
       const m: Record<string, Map<string, number>> = {};
       (pq ?? []).forEach((r: { paper_id: string; question_id: string; sort_order: number }) => {
         (m[r.paper_id] ??= new Map()).set(r.question_id, r.sort_order);
@@ -180,6 +188,23 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
   const imageCount = questions.filter((q) => hasImageMarker(q.stem)).length;
   const units = Array.from(new Set(kps.map((k) => k.unit))).sort((a, b) => a - b);
   const visibleKps = filterUnit === "all" ? kps : kps.filter((k) => String(k.unit) === filterUnit);
+  const paperTitleMap = new Map(papers.map((p) => [p.id, p.title]));
+  const showMcq = filterScope !== "frq";
+  const showFrq = filterScope !== "mcq";
+  const mcqList = showMcq ? filtered : [];
+  const frqList = showFrq
+    ? frqs.filter((f) => {
+        // FRQ 没有 knowledge_point / type / image marker，受 unit/kp/type/image 过滤时只在 "all" 下显示
+        if (filterUnit !== "all" && !filterUnit.startsWith("paper:")) return false;
+        if (filterUnit.startsWith("paper:") && f.paper_id !== filterUnit.slice(6)) return false;
+        if (filterKp !== "all") return false;
+        if (filterType !== "all") return false;
+        if (filterImage === "noimage" && f.image_url) return false;
+        if (filterImage === "image" && !f.image_url) return false;
+        if (search && !f.content.toLowerCase().includes(search.toLowerCase())) return false;
+        return true;
+      })
+    : [];
 
   return (
     <div className="min-h-screen bg-background">
@@ -190,7 +215,7 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
           <Button variant="outline" size="sm" onClick={onLogout}>退出</Button>
         </div>
 
-        <Tabs defaultValue="list">
+        <Tabs value={tab} onValueChange={setTab}>
           <TabsList>
             <TabsTrigger value="list">题目列表</TabsTrigger>
             <TabsTrigger value="import">批量导入</TabsTrigger>
@@ -202,6 +227,14 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
 
           <TabsContent value="list" className="mt-4">
             <div className="flex flex-wrap gap-2 mb-4 items-center">
+              <Select value={filterScope} onValueChange={(v) => setFilterScope(v as "all" | "mcq" | "frq")}>
+                <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部题型</SelectItem>
+                  <SelectItem value="mcq">仅 MCQ</SelectItem>
+                  <SelectItem value="frq">仅 FRQ</SelectItem>
+                </SelectContent>
+              </Select>
               <Select value={filterUnit} onValueChange={(v) => { setFilterUnit(v); setFilterKp("all"); }}>
                 <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -238,11 +271,16 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
               </Select>
               <Input placeholder="搜索题干…" value={search} onChange={(e) => setSearch(e.target.value)} className="w-60" />
               <Button size="sm" onClick={() => setCreating(true)}><Plus className="h-4 w-4" /> 新建</Button>
-              <span className="ml-auto text-sm text-muted-foreground">共 {filtered.length} 题</span>
+              <span className="ml-auto text-sm text-muted-foreground">
+                共 {mcqList.length + frqList.length} 题
+                {showMcq && showFrq && (mcqList.length > 0 || frqList.length > 0) && (
+                  <span className="ml-1">（MCQ {mcqList.length} · FRQ {frqList.length}）</span>
+                )}
+              </span>
             </div>
 
             <div className="space-y-2">
-              {filtered.map((q) => (
+              {mcqList.map((q) => (
                 <Card key={q.id}>
                   <CardContent className="p-4 flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
@@ -290,6 +328,37 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
                         if (r.ok) { toast.success("已删除"); reload(); }
                         else toast.error("删除失败");
                       }}><Trash2 className="h-4 w-4" /></Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+              {frqList.length > 0 && (
+                <div className="pt-3 pb-1 text-xs font-semibold text-muted-foreground">
+                  FRQ 大题（{frqList.length}）
+                </div>
+              )}
+              {frqList.map((f) => (
+                <Card key={`frq-${f.id}`}>
+                  <CardContent className="p-4 flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-primary text-primary-foreground font-bold">FRQ</span>
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-secondary">{paperTitleMap.get(f.paper_id) ?? "—"}</span>
+                        <span className="text-xs text-muted-foreground">Q{f.sort_order}{f.title ? ` · ${f.title}` : ""}</span>
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-success/15 text-success">满分 {f.max_score}</span>
+                        {f.rubric_note && (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-primary/15 text-primary">已配 rubric</span>
+                        )}
+                        {f.image_url && (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-primary/15 text-primary inline-flex items-center gap-1">
+                            <ImageIcon className="h-3 w-3" /> 带图
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm line-clamp-2 whitespace-pre-wrap">{f.content}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" onClick={() => setTab("frq")}>编辑</Button>
                     </div>
                   </CardContent>
                 </Card>
