@@ -30,6 +30,41 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
+function QuickCard({
+  to,
+  icon,
+  iconBg,
+  title,
+  subtitle,
+  accent,
+  accentText,
+}: {
+  to: string;
+  icon: React.ReactNode;
+  iconBg: string;
+  title: string;
+  subtitle: string;
+  accent: string;
+  accentText: string;
+}) {
+  return (
+    <Link
+      to={to}
+      className="group rounded-2xl border bg-card p-4 hover:shadow-md hover:border-primary/40 transition-all flex flex-col gap-3"
+    >
+      <div className={`h-9 w-9 rounded-xl ${iconBg} flex items-center justify-center`}>{icon}</div>
+      <div>
+        <div className="font-semibold text-sm">{title}</div>
+        <div className="text-xs text-muted-foreground mt-0.5">{subtitle}</div>
+      </div>
+      <div className={`flex items-center justify-between text-xs font-medium ${accent}`}>
+        <span>{accentText}</span>
+        <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-1 transition-transform" />
+      </div>
+    </Link>
+  );
+}
+
 type Kp = {
   id: string;
   unit: number;
