@@ -603,9 +603,15 @@ function PaperRunner() {
             </button>
           </div>
           <div className="flex-1 flex items-center justify-end gap-5 text-[11px]">
-            <button className="flex flex-col items-center gap-0.5 text-slate-700 hover:text-slate-900">
+            <button
+              onClick={() => setHighlightActive((v) => !v)}
+              className={cn(
+                "flex flex-col items-center gap-0.5 transition-colors",
+                highlightActive ? "text-[#1a2b6b] font-bold" : "text-slate-700 hover:text-slate-900",
+              )}
+            >
               <Highlighter className="h-5 w-5" />
-              <span>Highlights & Notes</span>
+              <span>Highlights</span>
             </button>
             <button
               onClick={() => setShowCalc(true)}
@@ -664,8 +670,8 @@ function PaperRunner() {
             <div
               key={cur.id}
               ref={stemRef}
-              onMouseUp={onStemMouseUp}
-              className="text-[17px] leading-relaxed mb-6 select-text"
+              onMouseUp={() => onHighlightableMouseUp(stemRef.current)}
+              className={cn("text-[17px] leading-relaxed mb-6 select-text", highlightActive && "cursor-text")}
             >
               {renderStemWithTerms(cur.stem, cur.term_tags ?? [], termDict)}
             </div>
