@@ -1,11 +1,20 @@
 import { useEffect, useRef, useState } from "react";
-import mascotUrl from "@/assets/mascot.png";
+import mascot1Url from "@/assets/mascot.png";
+import mascot2Url from "@/assets/mascot2.png";
+
+const MASCOTS = [mascot1Url, mascot2Url];
+const MASCOT_KEY = "mascot-variant-v1";
 
 const SIZE = 80;
 const STORAGE_KEY = "mascot-pos-v1";
 
 export function FloatingMascot() {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const [variant, setVariant] = useState<number>(() => {
+    if (typeof window === "undefined") return 0;
+    const v = Number(localStorage.getItem(MASCOT_KEY) ?? 0);
+    return Number.isFinite(v) && v >= 0 && v < MASCOTS.length ? v : 0;
+  });
   const dragRef = useRef<{ dx: number; dy: number; moved: boolean } | null>(null);
 
   useEffect(() => {
@@ -53,17 +62,24 @@ export function FloatingMascot() {
     dragRef.current = null;
   }
 
+  function onDoubleClick() {
+    const next = (variant + 1) % MASCOTS.length;
+    setVariant(next);
+    try { localStorage.setItem(MASCOT_KEY, String(next)); } catch {}
+  }
+
   if (!pos) return null;
 
   return (
     <img
-      src={mascotUrl}
+      src={MASCOTS[variant]}
       alt=""
       aria-hidden="true"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
+      onDoubleClick={onDoubleClick}
       onDragStart={(e) => e.preventDefault()}
       className="fixed z-50 h-20 w-20 select-none drop-shadow-lg touch-none cursor-grab active:cursor-grabbing"
       style={{ left: pos.x, top: pos.y, imageRendering: "pixelated" }}
