@@ -84,9 +84,10 @@ function PaperRunner() {
   const [showDirections, setShowDirections] = useState(false);
   const [confirmSubmit, setConfirmSubmit] = useState(false);
 
-  // Highlighter (yellow / pink / blue)
+  // Highlighter
   const stemRef = useRef<HTMLDivElement | null>(null);
-  const [hlPopup, setHlPopup] = useState<{ x: number; y: number } | null>(null);
+  const frqContentRef = useRef<HTMLDivElement | null>(null);
+  const [highlightActive, setHighlightActive] = useState(false);
   type HlColor = "yellow" | "pink" | "blue";
   const HL_BG: Record<HlColor, string> = {
     yellow: "#fde68a",
@@ -94,28 +95,25 @@ function PaperRunner() {
     blue: "#bfdbfe",
   };
 
-  function onStemMouseUp(e: React.MouseEvent) {
+  function onHighlightableMouseUp(container: HTMLDivElement | null) {
+    if (!highlightActive) return;
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
-      setHlPopup(null);
       return;
     }
     const range = sel.getRangeAt(0);
-    const container = stemRef.current;
     if (!container || !container.contains(range.commonAncestorContainer)) {
-      setHlPopup(null);
       return;
     }
-    const rect = range.getBoundingClientRect();
-    setHlPopup({ x: rect.left + rect.width / 2, y: rect.top - 8 });
+    applyHighlight("yellow", container);
   }
 
-  function applyHighlight(color: HlColor | "erase") {
+  function applyHighlight(color: HlColor | "erase", targetContainer?: HTMLDivElement | null) {
     const sel = window.getSelection();
-    if (!sel || sel.isCollapsed || sel.rangeCount === 0) return setHlPopup(null);
+    if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
     const range = sel.getRangeAt(0);
-    const container = stemRef.current;
-    if (!container || !container.contains(range.commonAncestorContainer)) return setHlPopup(null);
+    const container = targetContainer ?? stemRef.current;
+    if (!container || !container.contains(range.commonAncestorContainer)) return;
     if (color === "erase") {
       // unwrap any highlight spans intersecting the selection
       const spans = Array.from(container.querySelectorAll<HTMLSpanElement>("span[data-hl]"));
@@ -136,7 +134,6 @@ function PaperRunner() {
       range.insertNode(span);
     }
     sel.removeAllRanges();
-    setHlPopup(null);
   }
 
   const remaining = paper ? Math.max(0, paper.total_seconds - seconds) : 0;
