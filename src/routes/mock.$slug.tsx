@@ -86,7 +86,6 @@ function PaperRunner() {
 
   // Highlighter
   const stemRef = useRef<HTMLDivElement | null>(null);
-  const frqContentRef = useRef<HTMLDivElement | null>(null);
   const [highlightActive, setHighlightActive] = useState(false);
   type HlColor = "yellow" | "pink" | "blue";
   const HL_BG: Record<HlColor, string> = {
@@ -454,13 +453,23 @@ function PaperRunner() {
     const allGrading = Object.values(grading).some(Boolean);
     return (
       <main className="mx-auto max-w-3xl px-4 py-8 space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold">Section II · FRQ</h1>
             <p className="text-xs text-muted-foreground">
               {mode === "exam" ? "仿真模式：到点自动交卷" : "练习模式：无时间限制"}
             </p>
           </div>
+          <button
+            onClick={() => setHighlightActive((v) => !v)}
+            className={cn(
+              "flex flex-col items-center gap-0.5 text-[11px] transition-colors",
+              highlightActive ? "text-primary font-semibold" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Highlighter className="h-5 w-5" />
+            <span>Highlights</span>
+          </button>
           {mode === "exam" && (
             <div className="text-right">
               <div className="font-mono text-lg tabular-nums text-primary">{mm}:{ss}</div>
@@ -480,7 +489,15 @@ function PaperRunner() {
                   {f.title ? ` · ${f.title}` : ""}
                   <span className="ml-2 text-xs text-muted-foreground">满分 {f.max_score} 分</span>
                 </div>
-                <p className="text-sm whitespace-pre-wrap leading-relaxed">{f.content}</p>
+                <div
+                  onMouseUp={(e) => onHighlightableMouseUp(e.currentTarget)}
+                  className={cn(
+                    "text-sm whitespace-pre-wrap leading-relaxed select-text",
+                    highlightActive && "cursor-text",
+                  )}
+                >
+                  {f.content}
+                </div>
                 {f.image_url && (
                   <img src={f.image_url} alt="FRQ 图" className="max-h-80 w-auto rounded border border-border" />
                 )}
