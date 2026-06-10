@@ -2,7 +2,20 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { ChevronRight, Sparkles } from "lucide-react";
+import {
+  ChevronRight,
+  Sparkles,
+  BookOpen,
+  Target,
+  Bookmark,
+  XCircle,
+  BarChart3,
+  Library,
+  ArrowRight,
+  Lightbulb,
+  Flame,
+  Check,
+} from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/")({
@@ -153,49 +166,185 @@ function Index() {
   const allUnits = Array.from(new Set(kps.map((k) => k.unit))).sort((a, b) => a - b);
   const visibleKps = unit == null ? kps : kps.filter((k) => k.unit === unit);
 
+  // 问候语
+  const hour = new Date().getHours();
+  const greeting = hour < 6 ? "凌晨好" : hour < 12 ? "早上好" : hour < 14 ? "中午好" : hour < 18 ? "下午好" : "晚上好";
+  const displayName = user?.email ? user.email.split("@")[0] : "同学";
+
+  // 本周打卡（基于 stats.today 这种只能粗略；这里用一个简单展示）
+  const weekDays = ["一", "二", "三", "四", "五", "六", "日"];
+  const todayIdx = (new Date().getDay() + 6) % 7; // 周一=0
+
+  // 选一个有题目的 KP，用于 Practice 大卡的副标题与跳转
+  const firstKpWithQuestions = kps.find((k) => (counts[k.id]?.total ?? 0) > 0) ?? kps[0];
+
   return (
     <div className="min-h-screen bg-background">
       
       <main className="mx-auto max-w-6xl px-4 py-8">
-        <section className="mb-8">
-          <div className="flex items-center gap-2 text-xs text-primary font-medium mb-2">
-            <Sparkles className="h-3.5 w-3.5" /> AP Microeconomics
+        {/* 顶部问候 */}
+        <section className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">
+              {greeting}，{displayName} <span className="inline-block">👋</span>
+            </h1>
+            <p className="mt-2 text-muted-foreground">
+              {user
+                ? stats.today > 0
+                  ? `今天已完成 ${stats.today} 题，继续保持！`
+                  : "今天还没开始刷题，挑一张卡片出发吧。"
+                : "登录后可云端同步进度。"}
+            </p>
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">选一个知识点开始刷</h1>
-          <p className="mt-2 text-muted-foreground">
-            英文题干 + 中文解析 + 术语悬停翻译。专为中国 AP 学生设计。
-          </p>
-        </section>
-
-        {user && (
-          <section className="grid gap-3 sm:grid-cols-3 mb-6">
-            <Card>
-              <CardContent className="p-5">
-                <div className="text-xs text-muted-foreground">今日已完成</div>
-                <div className="mt-1 text-3xl font-bold text-primary">{stats.today}</div>
-                <div className="mt-1 text-xs text-muted-foreground">累计 {stats.totalAttempts} 题</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-5">
-                <div className="text-xs text-muted-foreground">总正确率</div>
-                <div className="mt-1 text-3xl font-bold text-success">
+          {user && (
+            <div className="rounded-xl bg-card border px-4 py-2.5 flex items-center gap-2 shadow-sm">
+              <BarChart3 className="h-5 w-5 text-primary" />
+              <div className="leading-tight">
+                <div className="text-xs text-muted-foreground">正确率</div>
+                <div className="text-base font-bold">
                   {stats.rate !== null ? `${stats.rate}%` : "—"}
                 </div>
-                <div className="mt-1 text-xs text-muted-foreground">基于全部答题</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-5">
-                <div className="text-xs text-muted-foreground">账号</div>
-                <div className="mt-1 text-sm font-semibold truncate" title={user.email ?? ""}>
-                  {user.email}
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* 双大卡 */}
+        <section className="grid gap-4 md:grid-cols-2 mb-5">
+          <Link
+            to={firstKpWithQuestions ? "/practice/$slug" : "/"}
+            params={firstKpWithQuestions ? { slug: firstKpWithQuestions.slug } : undefined as never}
+            search={{} as never}
+            className="group relative overflow-hidden rounded-2xl border bg-gradient-to-br from-[#bcd9f5] via-[#c9e4f5] to-[#e7f1fb] p-6 min-h-[230px] flex flex-col justify-between text-[#16335c] shadow-sm hover:shadow-md transition-shadow"
+          >
+            <div className="flex items-start justify-between">
+              <div className="h-12 w-12 rounded-2xl bg-white/60 backdrop-blur flex items-center justify-center shadow-sm">
+                <BookOpen className="h-6 w-6" />
+              </div>
+              <ArrowRight className="h-5 w-5 opacity-70 group-hover:translate-x-1 transition-transform" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold">刷题练习</div>
+              <div className="text-sm opacity-80 mt-1">
+                {firstKpWithQuestions
+                  ? `Unit ${firstKpWithQuestions.unit} · ${firstKpWithQuestions.name_zh}`
+                  : "选择知识点开始训练"}
+              </div>
+              <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/60 backdrop-blur px-4 py-2 text-sm font-medium">
+                继续上次的进度
+              </div>
+            </div>
+          </Link>
+
+          <Link
+            to="/mock"
+            className="group relative overflow-hidden rounded-2xl p-6 min-h-[230px] flex flex-col justify-between text-white shadow-sm hover:shadow-md transition-shadow"
+            style={{ background: "linear-gradient(135deg,#27406b 0%,#3b5f95 60%,#5d82b8 100%)" }}
+          >
+            <div className="flex items-start justify-between">
+              <div className="h-12 w-12 rounded-2xl bg-white/15 backdrop-blur flex items-center justify-center">
+                <Target className="h-6 w-6" />
+              </div>
+              <ArrowRight className="h-5 w-5 opacity-80 group-hover:translate-x-1 transition-transform" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold">模拟考试</div>
+              <div className="text-sm opacity-80 mt-1">真题套卷 · MCQ + FRQ</div>
+              <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/15 backdrop-blur px-4 py-2 text-sm font-medium">
+                开始考试
+              </div>
+            </div>
+          </Link>
+        </section>
+
+        {/* 四张小卡 */}
+        <section className="grid gap-3 grid-cols-2 lg:grid-cols-4 mb-5">
+          <QuickCard
+            to="/wrong"
+            icon={<Bookmark className="h-5 w-5 text-amber-500" />}
+            iconBg="bg-amber-50"
+            title="收藏"
+            subtitle="标记题目复习"
+            accent="text-amber-600"
+            accentText="查看"
+          />
+          <QuickCard
+            to="/wrong"
+            icon={<XCircle className="h-5 w-5 text-rose-500" />}
+            iconBg="bg-rose-50"
+            title="错题本"
+            subtitle="复盘并提升"
+            accent="text-rose-600"
+            accentText="去复习"
+          />
+          <QuickCard
+            to="/"
+            icon={<BarChart3 className="h-5 w-5 text-emerald-500" />}
+            iconBg="bg-emerald-50"
+            title="统计"
+            subtitle="查看你的进度"
+            accent="text-emerald-600"
+            accentText={stats.rate !== null ? `${stats.rate}% 正确率` : "暂无数据"}
+          />
+          <QuickCard
+            to="/terms"
+            icon={<Library className="h-5 w-5 text-primary" />}
+            iconBg="bg-primary/10"
+            title="术语表"
+            subtitle="中英对照速查"
+            accent="text-primary"
+            accentText="打开"
+          />
+        </section>
+
+        {/* 打卡 + Tip */}
+        <section className="grid gap-3 lg:grid-cols-[1.4fr_1fr] mb-8">
+          <div className="rounded-2xl border bg-card p-4 flex items-center gap-5">
+            <div className="flex items-center gap-3 pr-4 border-r">
+              <div className="text-3xl font-bold">{stats.today > 0 ? "+1" : "0"}</div>
+              <div>
+                <div className="text-sm font-semibold flex items-center gap-1">
+                  今日打卡 <Flame className="h-4 w-4 text-orange-500" />
                 </div>
-                <div className="mt-1 text-xs text-muted-foreground">数据自动云端保存</div>
-              </CardContent>
-            </Card>
-          </section>
-        )}
+                <div className="text-xs text-muted-foreground">坚持每天一点点</div>
+              </div>
+            </div>
+            <div className="flex-1 grid grid-cols-7 gap-1.5 text-center">
+              {weekDays.map((d, i) => {
+                const done = i < todayIdx || (i === todayIdx && stats.today > 0);
+                const isToday = i === todayIdx;
+                return (
+                  <div key={d} className="flex flex-col items-center gap-1">
+                    <div className="text-[11px] text-muted-foreground">{d}</div>
+                    <div
+                      className={`h-7 w-7 rounded-full flex items-center justify-center text-xs ${
+                        done
+                          ? "bg-primary text-primary-foreground"
+                          : isToday
+                            ? "border-2 border-primary text-primary"
+                            : "bg-muted text-muted-foreground"
+                      }`}
+                    >
+                      {done ? <Check className="h-3.5 w-3.5" /> : ""}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="rounded-2xl border bg-card p-4 flex items-start gap-3">
+            <div className="h-9 w-9 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
+              <Lightbulb className="h-5 w-5 text-amber-500" />
+            </div>
+            <div className="text-sm">
+              <div className="font-semibold mb-1">今日小贴士</div>
+              <div className="text-muted-foreground">
+                读图题先看坐标轴和曲线方向，再去判断价格/数量的变化。
+              </div>
+            </div>
+          </div>
+        </section>
+
         {!user && (
           <Card className="mb-6 border-primary/30 bg-primary/5">
             <CardContent className="p-5 flex items-center justify-between gap-4">
@@ -214,6 +363,11 @@ function Index() {
             </CardContent>
           </Card>
         )}
+
+        {/* 知识点列表 */}
+        <section className="mb-3 flex items-center gap-2 text-xs text-primary font-medium">
+          <Sparkles className="h-3.5 w-3.5" /> 知识点 · 选一个开始
+        </section>
 
         {allUnits.length > 0 && (
           <div className="mb-4 flex flex-wrap gap-2">
