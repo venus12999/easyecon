@@ -87,7 +87,12 @@ export const Route = createFileRoute("/api/frq/grade")({
           `【题目原文】\n${frq.content ?? ""}`,
         ];
         if (frq.image_text) userTextParts.push(`【题图中的文字】\n${frq.image_text}`);
-        if (frq.rubric_note) userTextParts.push(`【评分备注（来自管理员）】\n${frq.rubric_note}`);
+        if (frq.rubric_note) {
+          userTextParts.push(
+            `【College Board 官方评分要点｜最高优先级】\n` +
+              `以下 rubric 是本题随附的官方得分点。必须逐条对照评分，不得自行新增、合并、省略或改写评分点；每个 breakdown 项必须与其中一个得分点一一对应。\n\n${frq.rubric_note}`,
+          );
+        }
         if (hasText) userTextParts.push(`【学生文字答案】\n${body.answer_text}`);
         if (hasFile) {
           if (body.answer_file_kind === "image") {
