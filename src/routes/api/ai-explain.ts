@@ -112,7 +112,19 @@ export const Route = createFileRoute("/api/ai-explain")({
               headers: jsonHeaders,
             });
           }
-          return new Response(upstream.body, {
+          let streamText: string;
+          try {
+            streamText = await upstream.text();
+          } catch (error) {
+            console.error("AI stream interrupted", error);
+            await releaseAiQuota(supabaseAdmin, user.userId, "ai_explain");
+            return new Response(JSON.stringify({ error: "ai_failed" }), { status: 500, headers: jsonHeaders });
+          }
+          if (!streamText.includes("[DONE]")) {
+            await releaseAiQuota(supabaseAdmin, user.userId, "ai_explain");
+            return new Response(JSON.stringify({ error: "ai_failed" }), { status: 500, headers: jsonHeaders });
+          }
+          return new Response(streamText, {
             headers: { "Content-Type": "text/event-stream" },
           });
         } catch (e) {
