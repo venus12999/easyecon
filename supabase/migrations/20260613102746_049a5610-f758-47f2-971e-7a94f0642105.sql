@@ -1,0 +1,10 @@
+REVOKE ALL ON FUNCTION public.has_role(uuid, public.app_role) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.has_role(uuid, public.app_role) TO service_role;
+REVOKE ALL ON FUNCTION public.has_active_subscription(uuid, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.has_active_subscription(uuid, text) TO service_role;
+REVOKE ALL ON FUNCTION public.consume_ai_quota(uuid, text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.consume_ai_quota(uuid, text, text) TO service_role;
+REVOKE ALL ON FUNCTION public.release_ai_quota(uuid, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.release_ai_quota(uuid, text) TO service_role;
+REVOKE ALL ON FUNCTION public.consume_mock_access(uuid, text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.consume_mock_access(uuid, text, text) TO service_role;
