@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { verifyUserRequest } from "@/lib/user-auth.server";
+import { consumeAiQuota, membershipEnvironment } from "@/lib/membership.server";
 
 function err(msg: string, status = 400) {
   return new Response(JSON.stringify({ error: msg }), {
@@ -103,6 +104,8 @@ export const Route = createFileRoute("/api/frq/grade")({
 
         const apiKey = process.env.LOVABLE_API_KEY;
         if (!apiKey) return err("AI 未配置", 500);
+         const quota = await consumeAiQuota(supabaseAdmin, u.userId, "frq_grade", membershipEnvironment(request));
+         if (!quota.allowed) return err("membership_quota_exhausted", 403);
 
         const maxScore = frq.max_score ?? 9;
         const userTextParts: string[] = [

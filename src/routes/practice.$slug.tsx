@@ -433,7 +433,9 @@ function AskAi({ q }: { q: Q }) {
         }),
       });
       if (!res.ok || !res.body) {
-        if (res.status === 429) {
+         if (res.status === 403) {
+           toast.error("今日 AI 答疑次数已用完，可在个人资料页升级会员");
+         } else if (res.status === 429) {
           toast.error("AI 请求过于频繁，请稍后再试");
         } else if (res.status === 402) {
           toast.error("AI 额度已用完，请联系管理员充值");

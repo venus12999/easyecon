@@ -210,7 +210,7 @@ function PaperRunner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeUp]);
 
-  function start() {
+  function beginPaper() {
     setAnswers({});
     setIdx(0);
     setSeconds(0);
@@ -227,6 +227,22 @@ function PaperRunner() {
     } else {
       setPhase("running");
     }
+  }
+
+  async function start() {
+    if (user && slug !== "frq-pdf-practice") {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (token) {
+        const response = await fetch("/api/membership/mock-access", { headers: { Authorization: `Bearer ${token}` } });
+        const access = await response.json();
+        if (response.ok && !access.allowed) {
+          toast.error("免费用户每 7 天可参加 1 次模考，可在个人资料页升级会员");
+          return;
+        }
+      }
+    }
+    beginPaper();
   }
 
   function submit() {
@@ -330,7 +346,9 @@ function PaperRunner() {
       });
       if (!r.ok) {
         const j = await r.json().catch(() => ({}));
-        const message = j.error === "credits_exhausted"
+         const message = j.error === "membership_quota_exhausted"
+           ? "今日 AI 评分次数已用完，可在个人资料页升级会员"
+           : j.error === "credits_exhausted"
           ? "AI 评分额度暂时不足，请稍后重试"
           : j.error === "rate_limited"
             ? "AI 评分请求过多，请稍后重试"

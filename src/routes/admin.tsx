@@ -1119,18 +1119,23 @@ function FeedbackPanel({ token }: { token: string }) {
   );
 }
 function UsersPanel({ token }: { token: string }) {
-  type U = { user_id: string; email: string; display_name: string | null; created_at: string; total: number; correct: number; last: string | null; mocks: number };
+  type Subscription = { status: string; current_period_end: string | null; price_id: string; environment: string };
+  type U = { user_id: string; email: string; display_name: string | null; created_at: string; total: number; correct: number; last: string | null; mocks: number; subscription: Subscription | null; gifted_until: string | null };
   type Detail = {
     profile: { email: string; display_name: string | null; created_at: string } | null;
     attempts: Array<{ id: string; question_id: string; picked_answer: string | null; is_correct: boolean; mode: string; created_at: string }>;
     mocks: Array<{ id: string; total: number; correct: number; duration_seconds: number; created_at: string }>;
     wrongs: Array<{ question_id: string; added_at: string; source: string }>;
     questions: Record<string, { stem: string; correct_answer: string }>;
+    subscriptions: Subscription[];
+    usage: Array<{ usage_date: string; ai_explain_count: number; frq_grade_count: number }>;
+    adjustments: Array<{ days_granted: number; starts_at: string; ends_at: string; note: string | null; created_at: string }>;
   };
   const [users, setUsers] = useState<U[]>([]);
   const [picked, setPicked] = useState<string | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [grantDays, setGrantDays] = useState("30");
 
   useEffect(() => {
     fetch("/api/admin/users", { headers: { Authorization: `Bearer ${token}` } })
@@ -1143,6 +1148,20 @@ function UsersPanel({ token }: { token: string }) {
     setDetail(null);
     const r = await fetch(`/api/admin/users?user_id=${uid}`, { headers: { Authorization: `Bearer ${token}` } });
     setDetail(await r.json());
+  }
+
+  async function grantMembership() {
+    if (!picked) return;
+    const days = Number(grantDays);
+    if (!Number.isInteger(days) || days < 1) return toast.error("请输入有效天数");
+    const response = await fetch("/api/admin/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ user_id: picked, days, note: "管理员赠送" }),
+    });
+    if (!response.ok) return toast.error("开通失败");
+    toast.success(`已赠送 ${days} 天 Pro 会员`);
+    await open(picked);
   }
 
   if (loading) return <div className="text-sm text-muted-foreground">加载中…</div>;
@@ -1161,6 +1180,12 @@ function UsersPanel({ token }: { token: string }) {
               >
                 <div className="font-medium truncate">{u.display_name?.trim() || "未设置昵称"}</div>
                 <div className="text-xs text-muted-foreground truncate">{u.email}</div>
+                 <div className="mt-1 text-xs font-medium text-primary">
+                   {(u.gifted_until && new Date(u.gifted_until).getTime() > Date.now()) ||
+                   (u.subscription && ["active", "trialing", "past_due", "canceled"].includes(u.subscription.status) && (!u.subscription.current_period_end || new Date(u.subscription.current_period_end).getTime() > Date.now()))
+                     ? "Pro 会员"
+                     : "免费用户"}
+                 </div>
                 <div className="text-xs text-muted-foreground mt-0.5">
                   答题 {u.total} · 正确 {u.total ? Math.round((u.correct / u.total) * 100) : 0}% · 模考 {u.mocks}
                 </div>
@@ -1184,6 +1209,14 @@ function UsersPanel({ token }: { token: string }) {
                 <div className="font-medium">{detail.profile?.display_name?.trim() || "未设置昵称"}</div>
                 <div className="text-xs text-muted-foreground">{detail.profile?.email}</div>
                 <div className="text-xs text-muted-foreground">注册于 {detail.profile && new Date(detail.profile.created_at).toLocaleString()}</div>
+                 <div className="mt-3 flex items-center gap-2">
+                   <Input className="w-24" type="number" min="1" max="3660" value={grantDays} onChange={(event) => setGrantDays(event.target.value)} />
+                   <Button size="sm" onClick={() => void grantMembership()}>赠送会员天数</Button>
+                 </div>
+                 <div className="mt-2 text-xs text-muted-foreground">
+                   {detail.subscriptions[0] ? `订阅：${detail.subscriptions[0].status}${detail.subscriptions[0].current_period_end ? ` · 至 ${new Date(detail.subscriptions[0].current_period_end).toLocaleDateString()}` : ""}` : "暂无付费订阅"}
+                   {detail.adjustments[0] ? ` · 赠送会员至 ${new Date(detail.adjustments[0].ends_at).toLocaleDateString()}` : ""}
+                 </div>
               </div>
               <TabsList>
                 <TabsTrigger value="attempts">答题明细 ({detail.attempts.length})</TabsTrigger>
