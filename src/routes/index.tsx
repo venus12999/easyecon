@@ -280,8 +280,7 @@ function Index() {
           </Link>
 
           <Link
-            to="/mock/$slug"
-            params={{ slug: "frq-pdf-practice" }}
+            to="/frq"
             className="group relative overflow-hidden rounded-2xl border bg-primary/10 p-6 min-h-[230px] flex flex-col justify-between text-foreground shadow-sm hover:shadow-md hover:border-primary/40 transition-all"
           >
             <div className="flex items-start justify-between">
@@ -292,7 +291,7 @@ function Index() {
             </div>
             <div>
               <div className="text-2xl font-bold">大题</div>
-              <div className="text-sm text-muted-foreground mt-1">FRQ 专项训练 · 按得分点评分</div>
+              <div className="text-sm text-muted-foreground mt-1">按 Unit 分类 · 按得分点评分</div>
               <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-primary/15 px-4 py-2 text-sm font-medium text-primary">
                 开始刷大题
               </div>
