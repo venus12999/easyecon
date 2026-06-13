@@ -1121,7 +1121,7 @@ function FeedbackPanel({ token }: { token: string }) {
 function UsersPanel({ token }: { token: string }) {
   type U = { user_id: string; email: string; display_name: string | null; created_at: string; total: number; correct: number; last: string | null; mocks: number };
   type Detail = {
-    profile: { email: string; created_at: string } | null;
+    profile: { email: string; display_name: string | null; created_at: string } | null;
     attempts: Array<{ id: string; question_id: string; picked_answer: string | null; is_correct: boolean; mode: string; created_at: string }>;
     mocks: Array<{ id: string; total: number; correct: number; duration_seconds: number; created_at: string }>;
     wrongs: Array<{ question_id: string; added_at: string; source: string }>;
@@ -1159,7 +1159,8 @@ function UsersPanel({ token }: { token: string }) {
                 onClick={() => open(u.user_id)}
                 className={`w-full text-left rounded-md border px-3 py-2 text-sm hover:bg-accent ${picked === u.user_id ? "bg-accent" : ""}`}
               >
-                <div className="font-medium truncate">{u.email}</div>
+                <div className="font-medium truncate">{u.display_name?.trim() || "未设置昵称"}</div>
+                <div className="text-xs text-muted-foreground truncate">{u.email}</div>
                 <div className="text-xs text-muted-foreground mt-0.5">
                   答题 {u.total} · 正确 {u.total ? Math.round((u.correct / u.total) * 100) : 0}% · 模考 {u.mocks}
                 </div>
@@ -1180,7 +1181,8 @@ function UsersPanel({ token }: { token: string }) {
           {detail && (
             <Tabs defaultValue="attempts">
               <div className="mb-3">
-                <div className="font-medium">{detail.profile?.email}</div>
+                <div className="font-medium">{detail.profile?.display_name?.trim() || "未设置昵称"}</div>
+                <div className="text-xs text-muted-foreground">{detail.profile?.email}</div>
                 <div className="text-xs text-muted-foreground">注册于 {detail.profile && new Date(detail.profile.created_at).toLocaleString()}</div>
               </div>
               <TabsList>

@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WrongRouteImport } from './routes/wrong'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as FrqRouteImport } from './routes/frq'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AdminRouteImport } from './routes/admin'
@@ -41,6 +42,11 @@ const WrongRoute = WrongRouteImport.update({
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProfileRoute = ProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FrqRoute = FrqRouteImport.update({
@@ -154,6 +160,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
   '/frq': typeof FrqRoute
+  '/profile': typeof ProfileRoute
   '/terms': typeof TermsRoute
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
@@ -179,6 +186,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
   '/frq': typeof FrqRoute
+  '/profile': typeof ProfileRoute
   '/terms': typeof TermsRoute
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
@@ -205,6 +213,7 @@ export interface FileRoutesById {
   '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
   '/frq': typeof FrqRoute
+  '/profile': typeof ProfileRoute
   '/terms': typeof TermsRoute
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
@@ -232,6 +241,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/auth'
     | '/frq'
+    | '/profile'
     | '/terms'
     | '/wrong'
     | '/api/ai-explain'
@@ -257,6 +267,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/auth'
     | '/frq'
+    | '/profile'
     | '/terms'
     | '/wrong'
     | '/api/ai-explain'
@@ -282,6 +293,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/auth'
     | '/frq'
+    | '/profile'
     | '/terms'
     | '/wrong'
     | '/api/ai-explain'
@@ -308,6 +320,7 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRoute
   AuthRoute: typeof AuthRoute
   FrqRoute: typeof FrqRoute
+  ProfileRoute: typeof ProfileRoute
   TermsRoute: typeof TermsRoute
   WrongRoute: typeof WrongRoute
   ApiAiExplainRoute: typeof ApiAiExplainRoute
@@ -343,6 +356,13 @@ declare module '@tanstack/react-router' {
       path: '/terms'
       fullPath: '/terms'
       preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/profile': {
+      id: '/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof ProfileRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/frq': {
@@ -500,6 +520,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRoute,
   AuthRoute: AuthRoute,
   FrqRoute: FrqRoute,
+  ProfileRoute: ProfileRoute,
   TermsRoute: TermsRoute,
   WrongRoute: WrongRoute,
   ApiAiExplainRoute: ApiAiExplainRoute,

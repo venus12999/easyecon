@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { BookOpen, ListChecks, Library, GraduationCap, LogOut, Bookmark, Shield, MessageSquarePlus } from "lucide-react";
+import { BookOpen, ListChecks, Library, GraduationCap, LogOut, Bookmark, Shield, MessageSquarePlus, UserRound } from "lucide-react";
 import { useState } from "react";
 import {
   Sidebar,
@@ -97,6 +97,16 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              {user && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive("/profile")}>
+                    <Link to="/profile" className="flex items-center gap-2">
+                      <UserRound className="h-4 w-4" />
+                      {!collapsed && <span>个人资料</span>}
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
               {showAdmin && (
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild isActive={isActive("/admin")}>

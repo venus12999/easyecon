@@ -93,6 +93,7 @@ function Index() {
   const [loading, setLoading] = useState(true);
   const [unit, setUnit] = useState<number | null>(null);
   const { user } = useAuth();
+  const [displayName, setDisplayName] = useState<string | null>(null);
   const [kpProgress, setKpProgress] = useState<Record<string, KpProgressInfo>>({});
   const [stats, setStats] = useState<{ today: number; rate: number | null; totalAttempts: number }>({
     today: 0,
@@ -104,6 +105,19 @@ function Index() {
   useEffect(() => {
     setCurrentDate(new Date());
   }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setDisplayName(null);
+      return;
+    }
+    void supabase
+      .from("profiles")
+      .select("display_name")
+      .eq("user_id", user.id)
+      .maybeSingle()
+      .then(({ data }) => setDisplayName(data?.display_name?.trim() || null));
+  }, [user]);
 
   useEffect(() => {
     if (!user) {
@@ -230,7 +244,7 @@ function Index() {
   // 问候语
   const hour = currentDate?.getHours();
   const greeting = hour == null ? "你好" : hour < 6 ? "凌晨好" : hour < 12 ? "早上好" : hour < 14 ? "中午好" : hour < 18 ? "下午好" : "晚上好";
-  const displayName = user?.email ? user.email.split("@")[0] : "同学";
+  const userLabel = displayName ?? (user?.email ? user.email.split("@")[0] : "同学");
 
   // 本周打卡：按用户本周真实答题记录计算
   const weekDays = ["一", "二", "三", "四", "五", "六", "日"];
@@ -247,7 +261,7 @@ function Index() {
         <section className="mb-6 flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">
-              {greeting}，{displayName} <span className="inline-block">👋</span>
+              {greeting}，{userLabel} <span className="inline-block">👋</span>
             </h1>
             <p className="mt-2 text-muted-foreground">
               {user
