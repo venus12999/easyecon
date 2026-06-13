@@ -357,19 +357,20 @@ function PaperRunner() {
   }
 
   if (phase === "idle") {
+    const isFrqPractice = questions.length === 0 && frqs.length > 0;
     return (
       <main className="mx-auto max-w-2xl px-4 py-10">
         <Link
-          to="/mock"
+          to={isFrqPractice ? "/" : "/mock"}
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
         >
-          <ArrowLeft className="h-3.5 w-3.5" /> 卷库
+          <ArrowLeft className="h-3.5 w-3.5" /> {isFrqPractice ? "返回刷题" : "卷库"}
         </Link>
         <h1 className="text-2xl font-bold mb-2">{paper.title}</h1>
         {paper.description && (
           <p className="text-sm text-muted-foreground mb-6">{paper.description}</p>
         )}
-        <div className="grid sm:grid-cols-2 gap-3 mb-4">
+        {!isFrqPractice && <div className="grid sm:grid-cols-2 gap-3 mb-4">
           <button
             onClick={() => setMode("exam")}
             className={cn(
@@ -402,7 +403,7 @@ function PaperRunner() {
               无时间限制：自由作答 MCQ，随时进入 FRQ。提交 FRQ 之后才会显示 MCQ 正确答案与 AI 解析。
             </p>
           </button>
-        </div>
+        </div>}
         <Card>
           <CardContent className="p-6 space-y-4">
             <div className="grid grid-cols-3 gap-3 text-center text-sm">
@@ -425,7 +426,7 @@ function PaperRunner() {
               className="w-full"
             >
               {questions.length === 0 && frqs.length > 0
-                ? "开始作答（仅 FRQ 大题）"
+                ? "开始刷大题"
                 : `开始作答（${mode === "exam" ? "仿真模式" : "练习模式"}）`}
             </Button>
           </CardContent>
@@ -455,9 +456,9 @@ function PaperRunner() {
       <main className="mx-auto max-w-3xl px-4 py-8 space-y-6">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold">Section II · FRQ</h1>
+            <h1 className="text-2xl font-bold">{questions.length === 0 ? "大题练习 · FRQ" : "Section II · FRQ"}</h1>
             <p className="text-xs text-muted-foreground">
-              {mode === "exam" ? "仿真模式：到点自动交卷" : "练习模式：无时间限制"}
+              {mode === "exam" ? "仿真模式：到点自动交卷" : "无时间限制，按得分点逐题评分"}
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -559,7 +560,7 @@ function PaperRunner() {
         <div className="flex justify-end gap-2">
           <Button onClick={() => void submitAllFrqs()} disabled={allGrading}>
             {allGrading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            交卷并查看全部成绩
+            {mode === "exam" ? "交卷并查看全部成绩" : "完成并查看全部评分"}
           </Button>
         </div>
       </main>
