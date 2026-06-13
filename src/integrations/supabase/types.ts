@@ -263,6 +263,35 @@ export type Database = {
         }
         Relationships: []
       }
+      paper_frq_rubrics: {
+        Row: {
+          created_at: string
+          frq_id: string
+          rubric_note: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          frq_id: string
+          rubric_note?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          frq_id?: string
+          rubric_note?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "paper_frq_rubrics_frq_id_fkey"
+            columns: ["frq_id"]
+            isOneToOne: true
+            referencedRelation: "paper_frqs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       paper_frqs: {
         Row: {
           content: string
@@ -272,7 +301,6 @@ export type Database = {
           image_url: string | null
           max_score: number
           paper_id: string
-          rubric_note: string | null
           sort_order: number
           title: string | null
         }
@@ -284,7 +312,6 @@ export type Database = {
           image_url?: string | null
           max_score?: number
           paper_id: string
-          rubric_note?: string | null
           sort_order: number
           title?: string | null
         }
@@ -296,7 +323,6 @@ export type Database = {
           image_url?: string | null
           max_score?: number
           paper_id?: string
-          rubric_note?: string | null
           sort_order?: number
           title?: string | null
         }

@@ -406,9 +406,16 @@ function AskAi({ q }: { q: Q }) {
     setLoading(true);
     setAnswer("");
     try {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) {
+        toast.error("请先登录后使用 AI 答疑");
+        setLoading(false);
+        return;
+      }
       const res = await fetch("/api/ai-explain", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           question: input,
           context: {

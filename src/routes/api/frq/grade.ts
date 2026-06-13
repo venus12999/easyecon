@@ -59,15 +59,39 @@ export const Route = createFileRoute("/api/frq/grade")({
         if (!u) return err("unauthorized", 401);
         const body = (await request.json()) as Body;
         if (!body.frq_id || !body.paper_id || !body.mode) return err("missing fields");
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.frq_id) ||
+            !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.paper_id) ||
+            !["exam", "practice"].includes(body.mode)) return err("invalid fields");
+        if (body.answer_text && body.answer_text.length > 30000) return err("答案文字过长");
         const hasText = !!(body.answer_text && body.answer_text.trim());
         const hasFile = !!body.answer_file_url;
         if (!hasText && !hasFile) return err("请填写或上传答案");
+        if (hasFile) {
+          let fileUrl: URL;
+          try {
+            fileUrl = new URL(body.answer_file_url!);
+          } catch {
+            return err("invalid file URL");
+          }
+          const storageBase = process.env.SUPABASE_URL;
+          if (!storageBase) return err("storage unavailable", 500);
+          const allowedPrefix = `${storageBase.replace(/\/$/, "")}/storage/v1/object/public/question-images/frq-answers/${u.userId}/${body.paper_id}/${body.frq_id}/`;
+          if (!fileUrl.href.startsWith(allowedPrefix)) return err("invalid file URL");
+        }
 
-        const { data: frq, error: e1 } = await supabaseAdmin
-          .from("paper_frqs")
-          .select("id,title,content,image_url,image_text,max_score,rubric_note,sort_order")
-          .eq("id", body.frq_id)
-          .maybeSingle();
+        const [{ data: frq, error: e1 }, { data: rubric }] = await Promise.all([
+          supabaseAdmin
+            .from("paper_frqs")
+            .select("id,paper_id,title,content,image_url,image_text,max_score,sort_order")
+            .eq("id", body.frq_id)
+            .eq("paper_id", body.paper_id)
+            .maybeSingle(),
+          supabaseAdmin
+            .from("paper_frq_rubrics")
+            .select("rubric_note")
+            .eq("frq_id", body.frq_id)
+            .maybeSingle(),
+        ]);
         if (e1 || !frq) return err("frq not found", 404);
 
         const { data: settings } = await supabaseAdmin
@@ -87,10 +111,10 @@ export const Route = createFileRoute("/api/frq/grade")({
           `【题目原文】\n${frq.content ?? ""}`,
         ];
         if (frq.image_text) userTextParts.push(`【题图中的文字】\n${frq.image_text}`);
-        if (frq.rubric_note) {
+        if (rubric?.rubric_note) {
           userTextParts.push(
             `【College Board 官方评分要点｜最高优先级】\n` +
-              `以下 rubric 是本题随附的官方得分点。必须逐条对照评分，不得自行新增、合并、省略或改写评分点；每个 breakdown 项必须与其中一个得分点一一对应。\n\n${frq.rubric_note}`,
+              `以下 rubric 是本题随附的官方得分点。必须逐条对照评分，不得自行新增、合并、省略或改写评分点；每个 breakdown 项必须与其中一个得分点一一对应。\n\n${rubric.rubric_note}`,
           );
         }
         if (hasText) userTextParts.push(`【学生文字答案】\n${body.answer_text}`);

@@ -1,16 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { verifyUserRequest } from "@/lib/user-auth.server";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "content-type",
-};
+const jsonHeaders = { "Content-Type": "application/json" };
 
 export const Route = createFileRoute("/api/ai-explain")({
   server: {
     handlers: {
-      OPTIONS: async () => new Response(null, { headers: corsHeaders }),
       POST: async ({ request }) => {
         try {
+          const user = await verifyUserRequest(request);
+          if (!user) {
+            return new Response(JSON.stringify({ error: "unauthorized" }), {
+              status: 401,
+              headers: jsonHeaders,
+            });
+          }
           const body = await request.json();
           const { question, context } = body as {
             question: string;
@@ -21,17 +25,26 @@ export const Route = createFileRoute("/api/ai-explain")({
               explanation: string;
             };
           };
-          if (!question || !context) {
+          if (
+            typeof question !== "string" ||
+            question.trim().length === 0 ||
+            question.length > 1000 ||
+            !context ||
+            typeof context.stem !== "string" ||
+            context.stem.length > 10000 ||
+            typeof context.explanation !== "string" ||
+            context.explanation.length > 10000
+          ) {
             return new Response(JSON.stringify({ error: "缺少参数" }), {
               status: 400,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
+              headers: jsonHeaders,
             });
           }
           const apiKey = process.env.LOVABLE_API_KEY;
           if (!apiKey) {
             return new Response(JSON.stringify({ error: "AI 未配置" }), {
               status: 500,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
+              headers: jsonHeaders,
             });
           }
 
@@ -65,13 +78,13 @@ export const Route = createFileRoute("/api/ai-explain")({
           if (upstream.status === 429) {
             return new Response(JSON.stringify({ error: "rate_limited" }), {
               status: 429,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
+              headers: jsonHeaders,
             });
           }
           if (upstream.status === 402) {
             return new Response(JSON.stringify({ error: "credits_exhausted" }), {
               status: 402,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
+              headers: jsonHeaders,
             });
           }
           if (!upstream.ok || !upstream.body) {
@@ -79,17 +92,17 @@ export const Route = createFileRoute("/api/ai-explain")({
             console.error("AI gateway error", upstream.status, t);
             return new Response(JSON.stringify({ error: "ai_failed" }), {
               status: 500,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
+              headers: jsonHeaders,
             });
           }
           return new Response(upstream.body, {
-            headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+            headers: { "Content-Type": "text/event-stream" },
           });
         } catch (e) {
           console.error("ai-explain error", e);
           return new Response(JSON.stringify({ error: "server_error" }), {
             status: 500,
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            headers: jsonHeaders,
           });
         }
       },

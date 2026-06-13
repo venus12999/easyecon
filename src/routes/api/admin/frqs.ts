@@ -40,20 +40,22 @@ export const Route = createFileRoute("/api/admin/frqs")({
       // 列出全部真题卷 + FRQ + 当前 grader_prompt
       GET: async ({ request }) => {
         if (!(await verifyAdminRequest(request))) return err("unauthorized", 401);
-        const [{ data: papers }, { data: frqs }, { data: settings }] = await Promise.all([
+        const [{ data: papers }, { data: frqs }, { data: rubrics }, { data: settings }] = await Promise.all([
           supabaseAdmin
             .from("mock_papers")
             .select("id,slug,title,total_seconds,frq_seconds,break_seconds")
             .order("sort_order", { ascending: true }),
           supabaseAdmin
             .from("paper_frqs")
-            .select("id,paper_id,sort_order,title,content,image_url,image_text,max_score,rubric_note")
+            .select("id,paper_id,sort_order,title,content,image_url,image_text,max_score")
             .order("sort_order", { ascending: true }),
+          supabaseAdmin.from("paper_frq_rubrics").select("frq_id,rubric_note"),
           supabaseAdmin.from("admin_settings").select("frq_grader_prompt").eq("id", 1).maybeSingle(),
         ]);
+        const rubricByFrq = new Map((rubrics ?? []).map((row) => [row.frq_id, row.rubric_note]));
         return Response.json({
           papers: papers ?? [],
-          frqs: frqs ?? [],
+          frqs: (frqs ?? []).map((frq) => ({ ...frq, rubric_note: rubricByFrq.get(frq.id) ?? null })),
           grader_prompt: settings?.frq_grader_prompt ?? DEFAULT_PROMPT,
           default_prompt: DEFAULT_PROMPT,
         });
@@ -84,17 +86,21 @@ export const Route = createFileRoute("/api/admin/frqs")({
         }
         if (body.target === "frq") {
           if (!body.id) return err("missing id");
-          const patch: {
-            image_text?: string | null;
-            max_score?: number;
-            rubric_note?: string | null;
-          } = {};
+          const patch: { image_text?: string | null; max_score?: number } = {};
           if (body.image_text !== undefined) patch.image_text = body.image_text;
           if (body.max_score !== undefined) patch.max_score = body.max_score;
-          if (body.rubric_note !== undefined) patch.rubric_note = body.rubric_note;
-          if (Object.keys(patch).length === 0) return err("nothing to update");
-          const { error } = await supabaseAdmin.from("paper_frqs").update(patch).eq("id", body.id);
-          if (error) return err(error.message, 500);
+          if (Object.keys(patch).length > 0) {
+            const { error } = await supabaseAdmin.from("paper_frqs").update(patch).eq("id", body.id);
+            if (error) return err(error.message, 500);
+          }
+          if (body.rubric_note !== undefined) {
+            const { error } = await supabaseAdmin.from("paper_frq_rubrics").upsert({
+              frq_id: body.id,
+              rubric_note: body.rubric_note,
+            });
+            if (error) return err(error.message, 500);
+          }
+          if (Object.keys(patch).length === 0 && body.rubric_note === undefined) return err("nothing to update");
           return Response.json({ ok: true });
         }
         if (body.target === "paper") {
