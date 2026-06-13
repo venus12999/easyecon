@@ -32,6 +32,7 @@ export const Route = createFileRoute("/wrong")({
 type QType = "basic" | "application" | "pitfall";
 type Q = {
   id: string;
+  source: "practice" | "mock";
   stem: string;
   type: QType;
   knowledge_point_id: string;
@@ -59,20 +60,25 @@ function WrongBook() {
   const [unitFilter, setUnitFilter] = useState<string>("all");
   const [kpFilter, setKpFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [sourceFilter, setSourceFilter] = useState<string>("all");
   const [rangeFilter, setRangeFilter] = useState<RangeKey>("30");
 
   async function load() {
-    let idToAddedAt = new Map<string, string | null>();
+    let records: Array<{ question_id: string; added_at: string | null; source: "practice" | "mock" }> = [];
     if (user) {
       const { data } = await supabase
         .from("wrong_questions")
-        .select("question_id,added_at")
+        .select("question_id,added_at,source")
         .eq("user_id", user.id);
-      (data ?? []).forEach((r) => idToAddedAt.set(r.question_id, r.added_at));
+      records = (data ?? []).map((r) => ({
+        question_id: r.question_id,
+        added_at: r.added_at,
+        source: r.source === "mock" ? "mock" : "practice",
+      }));
     } else {
-      getWrong().forEach((qid) => idToAddedAt.set(qid, null));
+      records = getWrong().map((question_id) => ({ question_id, added_at: null, source: "practice" }));
     }
-    const ids = Array.from(idToAddedAt.keys());
+    const ids = Array.from(new Set(records.map((r) => r.question_id)));
     if (ids.length === 0) {
       setItems([]);
       setLoading(false);
@@ -99,14 +105,20 @@ function WrongBook() {
         kpMap[k.id] = { name_zh: k.name_zh, slug: k.slug, unit: k.unit };
       });
     }
-    const merged: Q[] = (qs ?? []).map((q) => ({
-      id: q.id,
-      stem: q.stem,
-      type: q.type as QType,
-      knowledge_point_id: q.knowledge_point_id,
-      added_at: idToAddedAt.get(q.id) ?? null,
-      knowledge_points: kpMap[q.knowledge_point_id] ?? null,
-    }));
+    const qMap = new Map((qs ?? []).map((q) => [q.id, q]));
+    const merged: Q[] = records.flatMap((record) => {
+      const q = qMap.get(record.question_id);
+      if (!q) return [];
+      return [{
+        id: q.id,
+        source: record.source,
+        stem: q.stem,
+        type: q.type as QType,
+        knowledge_point_id: q.knowledge_point_id,
+        added_at: record.added_at,
+        knowledge_points: kpMap[q.knowledge_point_id] ?? null,
+      }];
+    });
     setItems(merged);
     setLoading(false);
   }
@@ -149,13 +161,14 @@ function WrongBook() {
       if (unitFilter !== "all" && String(q.knowledge_points?.unit) !== unitFilter) return false;
       if (kpFilter !== "all" && q.knowledge_point_id !== kpFilter) return false;
       if (typeFilter !== "all" && q.type !== typeFilter) return false;
+      if (sourceFilter !== "all" && q.source !== sourceFilter) return false;
       if (cutoff && user) {
         if (!q.added_at) return false;
         if (new Date(q.added_at) < cutoff) return false;
       }
       return true;
     });
-  }, [items, unitFilter, kpFilter, typeFilter, cutoff, user]);
+  }, [items, unitFilter, kpFilter, typeFilter, sourceFilter, cutoff, user]);
 
   const trend = useMemo(() => {
     const days = RANGE_DAYS[rangeFilter] ?? 30;
@@ -262,7 +275,15 @@ function WrongBook() {
             </Card>
 
             {/* 筛选 */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+              <Select value={sourceFilter} onValueChange={setSourceFilter}>
+                <SelectTrigger><SelectValue placeholder="来源" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部来源</SelectItem>
+                  <SelectItem value="practice">日常刷题</SelectItem>
+                  <SelectItem value="mock">模拟考试</SelectItem>
+                </SelectContent>
+              </Select>
               <Select value={unitFilter} onValueChange={(v) => { setUnitFilter(v); setKpFilter("all"); }}>
                 <SelectTrigger><SelectValue placeholder="Unit" /></SelectTrigger>
                 <SelectContent>
@@ -319,10 +340,13 @@ function WrongBook() {
                     </h2>
                     <div className="space-y-3">
                       {group.map((q) => (
-              <Card key={q.id}>
+              <Card key={`${q.id}-${q.source}`}>
                 <CardContent className="p-4 flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
-                    <div className="text-xs text-primary mb-1">
+                    <div className="text-xs text-primary mb-1 flex flex-wrap items-center gap-2">
+                      <Badge variant={q.source === "mock" ? "default" : "secondary"}>
+                        {q.source === "mock" ? "模拟考试" : "日常刷题"}
+                      </Badge>
                       {q.knowledge_points ? `U${q.knowledge_points.unit} · ${q.knowledge_points.name_zh}` : ""}
                       {q.added_at && (
                         <span className="ml-2 text-muted-foreground">
@@ -350,7 +374,8 @@ function WrongBook() {
                             .from("wrong_questions")
                             .delete()
                             .eq("user_id", user.id)
-                            .eq("question_id", q.id);
+                            .eq("question_id", q.id)
+                            .eq("source", q.source);
                         }
                         load();
                       }}
