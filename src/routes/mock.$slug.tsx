@@ -304,17 +304,17 @@ function PaperRunner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, mode, frqSeconds]);
 
-  async function gradeOneFrq(f: Frq): Promise<void> {
-    if (!paper) return;
+  async function gradeOneFrq(f: Frq): Promise<boolean> {
+    if (!paper) return false;
     const ans = frqAnswers[f.id] ?? EMPTY_ANSWER;
-    if (!ans.text.trim() && !ans.fileUrl) return; // 未作答跳过
+    if (!ans.text.trim() && !ans.fileUrl) return true; // 未作答跳过
     setGrading((g) => ({ ...g, [f.id]: true }));
     try {
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
       if (!token) {
         toast.error("请先登录");
-        return;
+        return false;
       }
       const r = await fetch("/api/frq/grade", {
         method: "POST",
@@ -330,21 +330,36 @@ function PaperRunner() {
       });
       if (!r.ok) {
         const j = await r.json().catch(() => ({}));
-        toast.error(j.error || "AI 评分失败");
-        return;
+        const message = j.error === "credits_exhausted"
+          ? "AI 评分额度暂时不足，请稍后重试"
+          : j.error === "rate_limited"
+            ? "AI 评分请求过多，请稍后重试"
+            : j.error || "AI 评分失败，请稍后重试";
+        toast.error(message);
+        return false;
       }
       const grade = (await r.json()) as GradeResult;
       setFrqGrades((g) => ({ ...g, [f.id]: grade }));
+      return true;
+    } catch {
+      toast.error("AI 评分失败，请检查网络后重试");
+      return false;
     } finally {
       setGrading((g) => ({ ...g, [f.id]: false }));
     }
   }
 
   async function submitAllFrqs() {
+    let gradingSucceeded = true;
     for (const f of frqs) {
       if (!frqGrades[f.id]) {
-        await gradeOneFrq(f);
+        const succeeded = await gradeOneFrq(f);
+        if (!succeeded) gradingSucceeded = false;
       }
+    }
+    if (!gradingSucceeded) {
+      toast.error("部分作答尚未评分，请重试后再查看结果");
+      return;
     }
     setFrqSubmitted(true);
     setPhase("done");
@@ -1055,6 +1070,8 @@ function PaperRunner() {
                         )}
                         {grade ? (
                           <FrqGradeCard grade={grade} />
+                        ) : ans.text.trim() || ans.fileUrl ? (
+                          <p className="text-xs text-destructive">已作答，但 AI 评分未完成，请返回重试。</p>
                         ) : (
                           <p className="text-xs text-muted-foreground">本题未提交作答，未评分。</p>
                         )}
