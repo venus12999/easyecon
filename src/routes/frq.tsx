@@ -12,11 +12,24 @@ export const Route = createFileRoute("/frq")({
       { name: "description", content: "按 AP 微观经济 Unit 分类练习 FRQ 大题，并按得分点获得评分。" },
     ],
   }),
+  validateSearch: (search: Record<string, unknown>) => {
+    const unit = Number(search.unit);
+    return { unit: Number.isInteger(unit) && unit >= 1 && unit <= 6 ? unit : undefined };
+  },
   component: FrqCategoriesPage,
 });
 
+type FrqListItem = {
+  id: string;
+  title: string | null;
+  content: string;
+  max_score: number;
+  sort_order: number;
+};
+
 function FrqCategoriesPage() {
-  const [titles, setTitles] = useState<Array<{ title: string | null }>>([]);
+  const { unit } = Route.useSearch();
+  const [frqs, setFrqs] = useState<FrqListItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -27,8 +40,12 @@ function FrqCategoriesPage() {
         .eq("slug", "frq-pdf-practice")
         .maybeSingle();
       if (paper) {
-        const { data } = await supabase.from("paper_frqs").select("title").eq("paper_id", paper.id);
-        setTitles(data ?? []);
+        const { data } = await supabase
+          .from("paper_frqs")
+          .select("id,title,content,max_score,sort_order")
+          .eq("paper_id", paper.id)
+          .order("sort_order", { ascending: true });
+        setFrqs((data ?? []) as FrqListItem[]);
       }
       setLoading(false);
     })();
@@ -36,37 +53,75 @@ function FrqCategoriesPage() {
 
   const counts = useMemo(() => {
     const next: Record<number, number> = {};
-    titles.forEach(({ title }) => {
+    frqs.forEach(({ title }) => {
       const unit = getFrqUnit(title);
       if (unit) next[unit] = (next[unit] ?? 0) + 1;
     });
     return next;
-  }, [titles]);
+  }, [frqs]);
+
+  const selectedCategory = FRQ_CATEGORIES.find((category) => category.unit === unit);
+  const visibleFrqs = unit ? frqs.filter((frq) => getFrqUnit(frq.title) === unit) : [];
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8">
-      <Link to="/" className="mb-5 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="h-4 w-4" /> 返回刷题
+      <Link
+        to={unit ? "/frq" : "/"}
+        search={unit ? {} : undefined}
+        className="mb-5 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+      >
+        <ArrowLeft className="h-4 w-4" /> {unit ? "返回大题分类" : "返回刷题"}
       </Link>
       <div className="mb-7">
         <div className="mb-2 flex items-center gap-2 text-sm font-medium text-primary">
           <SquarePen className="h-4 w-4" /> 大题刷题
         </div>
-        <h1 className="text-3xl font-bold tracking-tight">选择大题分类</h1>
-        <p className="mt-2 text-muted-foreground">和选择题一样，按 AP Unit 选择专项练习。</p>
+        <h1 className="text-3xl font-bold tracking-tight">
+          {selectedCategory ? `Unit ${selectedCategory.unit} · ${selectedCategory.nameZh}` : "选择大题分类"}
+        </h1>
+        <p className="mt-2 text-muted-foreground">
+          {selectedCategory ? "选择一道大题单独作答，完成后按得分点评分。" : "和选择题一样，按 AP Unit 选择专项练习。"}
+        </p>
       </div>
 
       {loading ? (
         <div className="py-16 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-muted-foreground" /></div>
       ) : (
+        selectedCategory ? (
+          <div className="grid gap-4 sm:grid-cols-2">
+            {visibleFrqs.map((frq, index) => (
+              <Card key={frq.id} className="flex h-full flex-col">
+                <CardHeader>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="text-xs font-semibold text-primary">第 {index + 1} 题</div>
+                    <div className="text-xs text-muted-foreground">满分 {frq.max_score} 分</div>
+                  </div>
+                  <CardTitle className="text-base leading-snug">{frq.title ?? `FRQ ${index + 1}`}</CardTitle>
+                  <CardDescription className="line-clamp-3 whitespace-pre-wrap leading-relaxed">
+                    {frq.content}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="mt-auto">
+                  <Link
+                    to="/mock/$slug"
+                    params={{ slug: "frq-pdf-practice" }}
+                    search={{ unit: selectedCategory.unit, frq: frq.id }}
+                    className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
+                  >
+                    开始作答 <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {FRQ_CATEGORIES.map((category) => {
             const count = counts[category.unit] ?? 0;
             return (
               <Link
                 key={category.unit}
-                to="/mock/$slug"
-                params={{ slug: "frq-pdf-practice" }}
+                to="/frq"
                 search={{ unit: category.unit }}
                 className={count === 0 ? "pointer-events-none opacity-55" : "group"}
               >
@@ -88,7 +143,7 @@ function FrqCategoriesPage() {
               </Link>
             );
           })}
-        </div>
+        </div>)
       )}
     </main>
   );
