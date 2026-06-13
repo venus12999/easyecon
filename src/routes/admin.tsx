@@ -1124,7 +1124,7 @@ function UsersPanel({ token }: { token: string }) {
     profile: { email: string; created_at: string } | null;
     attempts: Array<{ id: string; question_id: string; picked_answer: string | null; is_correct: boolean; mode: string; created_at: string }>;
     mocks: Array<{ id: string; total: number; correct: number; duration_seconds: number; created_at: string }>;
-    wrongs: Array<{ question_id: string; added_at: string }>;
+    wrongs: Array<{ question_id: string; added_at: string; source: string }>;
     questions: Record<string, { stem: string; correct_answer: string }>;
   };
   const [users, setUsers] = useState<U[]>([]);
@@ -1216,9 +1216,11 @@ function UsersPanel({ token }: { token: string }) {
               </TabsContent>
               <TabsContent value="wrongs" className="mt-3 space-y-2 max-h-[60vh] overflow-auto">
                 {detail.wrongs.map((w) => (
-                  <div key={w.question_id} className="border rounded px-3 py-2 text-xs">
+                  <div key={`${w.question_id}-${w.source}`} className="border rounded px-3 py-2 text-xs">
                     <div className="line-clamp-2">{detail.questions[w.question_id]?.stem ?? "(题目已删除)"}</div>
-                    <div className="text-muted-foreground mt-1">加入于 {new Date(w.added_at).toLocaleString()}</div>
+                    <div className="text-muted-foreground mt-1">
+                      {w.source === "mock" ? "模拟考试" : "日常刷题"} · 加入于 {new Date(w.added_at).toLocaleString()}
+                    </div>
                   </div>
                 ))}
               </TabsContent>

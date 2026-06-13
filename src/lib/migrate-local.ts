@@ -11,8 +11,8 @@ export async function migrateLocalToCloud(userId: string) {
   // 错题迁移
   const wrongIds = getWrong();
   if (wrongIds.length > 0) {
-    const rows = wrongIds.map((qid) => ({ user_id: userId, question_id: qid }));
-    await supabase.from("wrong_questions").upsert(rows, { onConflict: "user_id,question_id" });
+    const rows = wrongIds.map((qid) => ({ user_id: userId, question_id: qid, source: "practice" }));
+    await supabase.from("wrong_questions").upsert(rows, { onConflict: "user_id,question_id,source" });
   }
 
   localStorage.setItem(flag, String(Date.now()));

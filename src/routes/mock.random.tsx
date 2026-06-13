@@ -163,6 +163,14 @@ function Mock() {
           mode: "mock",
         }));
       if (rows.length > 0) void supabase.from("answer_attempts").insert(rows);
+      const wrongRows = questions
+        .filter((q) => !!answers[q.id] && answers[q.id] !== q.correct_answer)
+        .map((q) => ({ user_id: user.id, question_id: q.id, source: "mock" }));
+      if (wrongRows.length > 0) {
+        void supabase.from("wrong_questions").upsert(wrongRows, {
+          onConflict: "user_id,question_id,source",
+        });
+      }
     }
     setPhase("done");
   }
