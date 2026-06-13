@@ -50,17 +50,21 @@ function Admin() {
   const [token, setToken] = useState<string | null>(null);
   const [denied, setDenied] = useState(false);
 
-  // 已登录且邮箱在白名单 → 直接拿 Supabase JWT 作为后台请求凭证。
+  // 服务端角色校验通过后，使用登录 JWT 调用后台接口。
   useEffect(() => {
     if (authLoading || !user) return;
-    if (!isAdminEmail(user.email)) {
-      setDenied(true);
-      setToken(null);
-      return;
-    }
-    setDenied(false);
     supabase.auth.getSession().then(({ data }) => {
-      setToken(data.session?.access_token ?? null);
+      const nextToken = data.session?.access_token;
+      if (!nextToken) return;
+      fetch("/api/admin/login", { method: "POST", headers: { Authorization: `Bearer ${nextToken}` } })
+        .then((response) => {
+          setDenied(!response.ok);
+          setToken(response.ok ? nextToken : null);
+        })
+        .catch(() => {
+          setDenied(true);
+          setToken(null);
+        });
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
       setToken(s?.access_token ?? null);
@@ -88,7 +92,7 @@ function Admin() {
     );
   }
 
-  if (denied || !isAdminEmail(user.email)) {
+  if (denied) {
     return (
       <main className="mx-auto max-w-md px-4 py-16 text-center space-y-3">
         <h1 className="text-xl font-bold">无访问权限</h1>
