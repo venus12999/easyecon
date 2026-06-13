@@ -330,7 +330,9 @@ function PaperRunner() {
       });
       if (!r.ok) {
         const j = await r.json().catch(() => ({}));
-        const message = j.error === "credits_exhausted"
+         const message = j.error === "membership_quota_exhausted"
+           ? "今日 AI 评分次数已用完，可在个人资料页升级会员"
+           : j.error === "credits_exhausted"
           ? "AI 评分额度暂时不足，请稍后重试"
           : j.error === "rate_limited"
             ? "AI 评分请求过多，请稍后重试"

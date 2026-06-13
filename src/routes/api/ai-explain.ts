@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { verifyUserRequest } from "@/lib/user-auth.server";
+import { consumeAiQuota, membershipEnvironment } from "@/lib/membership.server";
 
 const jsonHeaders = { "Content-Type": "application/json" };
 
@@ -47,6 +48,19 @@ export const Route = createFileRoute("/api/ai-explain")({
               headers: jsonHeaders,
             });
           }
+           const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+           const quota = await consumeAiQuota(
+             supabaseAdmin,
+             user.userId,
+             "ai_explain",
+             membershipEnvironment(request),
+           );
+           if (!quota.allowed) {
+             return new Response(JSON.stringify({ error: "membership_quota_exhausted", ...quota }), {
+               status: 403,
+               headers: jsonHeaders,
+             });
+           }
 
           const system = `你是 AP 微观经济（AP Microeconomics）资深答疑助手，专为中国学生服务。
 严格规则：

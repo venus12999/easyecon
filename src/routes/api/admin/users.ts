@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { verifyAdminRequest } from "@/lib/admin-auth.server";
+import { z } from "zod";
 
 export const Route = createFileRoute("/api/admin/users")({
   server: {
@@ -21,9 +22,17 @@ export const Route = createFileRoute("/api/admin/users")({
           const { data: attempts } = await supabaseAdmin
             .from("answer_attempts")
             .select("user_id,is_correct,created_at");
-          const { data: mocks } = await supabaseAdmin
+           const { data: mocks } = await supabaseAdmin
             .from("mock_attempts")
             .select("user_id");
+           const { data: subscriptions } = await supabaseAdmin
+             .from("subscriptions")
+             .select("user_id,status,current_period_end,price_id,environment")
+             .order("created_at", { ascending: false });
+           const { data: adjustments } = await supabaseAdmin
+             .from("membership_adjustments")
+             .select("user_id,ends_at")
+             .gt("ends_at", new Date().toISOString());
           const stat: Record<string, { total: number; correct: number; last: string | null; mocks: number }> = {};
           (attempts ?? []).forEach((a) => {
             const s = (stat[a.user_id] ??= { total: 0, correct: 0, last: null, mocks: 0 });
@@ -35,12 +44,17 @@ export const Route = createFileRoute("/api/admin/users")({
             const s = (stat[m.user_id] ??= { total: 0, correct: 0, last: null, mocks: 0 });
             s.mocks += 1;
           });
-          const users = (profiles ?? []).map((p) => ({ ...p, ...(stat[p.user_id] ?? { total: 0, correct: 0, last: null, mocks: 0 }) }));
+           const users = (profiles ?? []).map((p) => ({
+             ...p,
+             ...(stat[p.user_id] ?? { total: 0, correct: 0, last: null, mocks: 0 }),
+             subscription: (subscriptions ?? []).find((s) => s.user_id === p.user_id) ?? null,
+             gifted_until: (adjustments ?? []).filter((a) => a.user_id === p.user_id).sort((a, b) => b.ends_at.localeCompare(a.ends_at))[0]?.ends_at ?? null,
+           }));
           return Response.json({ users });
         }
 
         // 详情
-        const [{ data: profile }, { data: attempts }, { data: mocks }, { data: wrongs }] = await Promise.all([
+         const [{ data: profile }, { data: attempts }, { data: mocks }, { data: wrongs }, { data: subscriptions }, { data: usage }, { data: adjustments }] = await Promise.all([
           supabaseAdmin.from("profiles").select("*").eq("user_id", userId).maybeSingle(),
           supabaseAdmin
             .from("answer_attempts")
@@ -57,6 +71,9 @@ export const Route = createFileRoute("/api/admin/users")({
             .from("wrong_questions")
             .select("question_id,added_at,source")
             .eq("user_id", userId),
+           supabaseAdmin.from("subscriptions").select("*").eq("user_id", userId).order("created_at", { ascending: false }),
+           supabaseAdmin.from("ai_daily_usage").select("usage_date,ai_explain_count,frq_grade_count").eq("user_id", userId).order("usage_date", { ascending: false }).limit(30),
+           supabaseAdmin.from("membership_adjustments").select("days_granted,starts_at,ends_at,note,created_at").eq("user_id", userId).order("created_at", { ascending: false }),
         ]);
         const qIds = Array.from(
           new Set([...(attempts ?? []).map((a) => a.question_id), ...(wrongs ?? []).map((w) => w.question_id)]),
@@ -69,8 +86,32 @@ export const Route = createFileRoute("/api/admin/users")({
             .in("id", qIds);
           (qs ?? []).forEach((q) => (qMap[q.id] = { stem: q.stem, correct_answer: q.correct_answer }));
         }
-        return Response.json({ profile, attempts, mocks, wrongs, questions: qMap });
+         return Response.json({ profile, attempts, mocks, wrongs, questions: qMap, subscriptions, usage, adjustments });
       },
+       POST: async ({ request }) => {
+         const admin = await verifyAdminRequest(request);
+         if (!admin) return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
+         const parsed = z.object({
+           user_id: z.string().uuid(),
+           days: z.number().int().min(1).max(3660),
+           note: z.string().max(200).optional(),
+         }).safeParse(await request.json());
+         if (!parsed.success) return Response.json({ error: "invalid fields" }, { status: 400 });
+         const now = new Date();
+         const { data: latest } = await supabaseAdmin.from("membership_adjustments").select("ends_at").eq("user_id", parsed.data.user_id).gt("ends_at", now.toISOString()).order("ends_at", { ascending: false }).limit(1).maybeSingle();
+         const startsAt = latest ? new Date(latest.ends_at) : now;
+         const endsAt = new Date(startsAt.getTime() + parsed.data.days * 86400000);
+         const { error } = await supabaseAdmin.from("membership_adjustments").insert({
+           user_id: parsed.data.user_id,
+           admin_user_id: admin.userId,
+           days_granted: parsed.data.days,
+           starts_at: startsAt.toISOString(),
+           ends_at: endsAt.toISOString(),
+           note: parsed.data.note || null,
+         });
+         if (error) return Response.json({ error: "save failed" }, { status: 500 });
+         return Response.json({ ok: true, ends_at: endsAt.toISOString() });
+       },
     },
   },
 });
