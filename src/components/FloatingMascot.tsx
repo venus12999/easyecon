@@ -36,14 +36,14 @@ function tipForToday() {
 export function FloatingMascot() {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [tip, setTip] = useState<string | null>(null);
-  const [variant, setVariant] = useState<number>(() => {
-    if (typeof window === "undefined") return 0;
-    const v = Number(localStorage.getItem(MASCOT_KEY) ?? 0);
-    return Number.isFinite(v) && v >= 0 && v < MASCOTS.length ? v : 0;
-  });
+  const [variant, setVariant] = useState(0);
   const dragRef = useRef<{ dx: number; dy: number; moved: boolean } | null>(null);
 
   useEffect(() => {
+    const savedVariant = Number(localStorage.getItem(MASCOT_KEY) ?? 0);
+    if (Number.isFinite(savedVariant) && savedVariant >= 0 && savedVariant < MASCOTS.length) {
+      setVariant(savedVariant);
+    }
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
