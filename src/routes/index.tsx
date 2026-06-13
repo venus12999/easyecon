@@ -86,6 +86,7 @@ type KpProgressInfo = {
 };
 
 function Index() {
+  const [currentDate, setCurrentDate] = useState<Date | null>(null);
   const [kps, setKps] = useState<Kp[]>([]);
   const [counts, setCounts] = useState<Counts>({});
   const [loading, setLoading] = useState(true);
@@ -97,6 +98,10 @@ function Index() {
     rate: null,
     totalAttempts: 0,
   });
+
+  useEffect(() => {
+    setCurrentDate(new Date());
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -201,13 +206,13 @@ function Index() {
   const visibleKps = unit == null ? kps : kps.filter((k) => k.unit === unit);
 
   // 问候语
-  const hour = new Date().getHours();
-  const greeting = hour < 6 ? "凌晨好" : hour < 12 ? "早上好" : hour < 14 ? "中午好" : hour < 18 ? "下午好" : "晚上好";
+  const hour = currentDate?.getHours();
+  const greeting = hour == null ? "你好" : hour < 6 ? "凌晨好" : hour < 12 ? "早上好" : hour < 14 ? "中午好" : hour < 18 ? "下午好" : "晚上好";
   const displayName = user?.email ? user.email.split("@")[0] : "同学";
 
   // 本周打卡（基于 stats.today 这种只能粗略；这里用一个简单展示）
   const weekDays = ["一", "二", "三", "四", "五", "六", "日"];
-  const todayIdx = (new Date().getDay() + 6) % 7; // 周一=0
+  const todayIdx = currentDate ? (currentDate.getDay() + 6) % 7 : -1; // 周一=0
 
   // 选一个有题目的 KP，用于 Practice 大卡的副标题与跳转
   const firstKpWithQuestions = kps.find((k) => (counts[k.id]?.total ?? 0) > 0) ?? kps[0];
