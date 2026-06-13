@@ -8,7 +8,7 @@ export const Route = createFileRoute("/legal/privacy")({
 
 function PrivacyNotice() {
   return <LegalPage title="隐私声明" updated="2026 年 6 月 13 日">
-    <LegalSection title="1. 数据控制者"><p>陈籽言是 EasyEcon 账号与学习数据的数据控制者。</p></LegalSection>
+    <LegalSection title="1. 数据控制者"><p>Ziyan Chen（陈籽言）是 EasyEcon 账号与学习数据的数据控制者。</p></LegalSection>
     <LegalSection title="2. 我们收集的数据"><p>我们处理邮箱、昵称和登录凭据；答题、错题、模考、AI 提问、上传答案及使用记录；支持消息；以及保障安全所需的 IP、设备和基础日志。付款资料由 Paddle 直接处理，我们不会存储完整银行卡信息。</p></LegalSection>
     <LegalSection title="3. 用途与法律基础"><p>我们基于履行合同处理账号、学习记录和会员权益；基于合法利益防欺诈、保障安全、诊断错误并改进产品；基于法律义务保存必要交易或争议记录；需要时基于同意发送非必要通信。</p></LegalSection>
     <LegalSection title="4. 数据共享"><p>数据可与托管、认证、AI、存储和支持服务商共享；与 Merchant of Record Paddle 共享销售、订阅管理、付款、税务和开票所需信息；也可在法律要求下与专业顾问或主管机关共享。我们不出售个人数据。</p></LegalSection>

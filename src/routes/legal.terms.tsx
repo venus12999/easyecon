@@ -8,7 +8,7 @@ export const Route = createFileRoute("/legal/terms")({
 
 function TermsOfService() {
   return <LegalPage title="服务条款" updated="2026 年 6 月 13 日">
-    <LegalSection title="1. 合同主体与接受"><p>EasyEcon 由陈籽言（“我们”）提供。注册、购买或继续使用本服务，即表示你同意本条款。你须达到所在地法定年龄，或已获得监护人同意。</p></LegalSection>
+    <LegalSection title="1. 合同主体与接受"><p>EasyEcon 由 Ziyan Chen（陈籽言，“我们”）提供，你与 Ziyan Chen 订立本服务合同。注册、购买或继续使用本服务，即表示你同意本条款。你须达到所在地法定年龄，或已获得监护人同意。</p></LegalSection>
     <LegalSection title="2. 服务与许可"><p>EasyEcon 提供 AP 经济学练习、模考与 AI 辅助讲解/评分。我们授予你在所选方案有效期内有限、非独占、不可转让的个人使用权。服务可能调整、中断或出错，我们不保证持续、无误或完全符合特定目的。</p></LegalSection>
     <LegalSection title="3. 账号责任"><p>你应提供准确信息、保护登录凭据，并对账号内活动负责。不得共享、转售账号或规避配额及功能限制。</p></LegalSection>
     <LegalSection title="4. 订阅、付款与退款"><p>订单由在线经销商 Paddle.com 处理。Paddle.com 是所有订单的 Merchant of Record，负责付款相关客服与退款。计费、税费、续费、取消及退款机制适用 <a href="https://www.paddle.com/legal/checkout-buyer-terms" target="_blank" rel="noreferrer">Paddle Buyer Terms</a>。月付与年付切换即时生效并按比例结算；取消后权益保留至已付周期结束；付款失败时 Pro 权益立即暂停。</p></LegalSection>
