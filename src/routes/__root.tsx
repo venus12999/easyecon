@@ -99,6 +99,7 @@ function RootComponent() {
               <Outlet />
             </main>
             <footer className="flex flex-wrap justify-center gap-x-5 gap-y-2 border-t px-4 py-4 text-xs text-muted-foreground">
+              <Link to="/pricing">定价</Link>
               <Link to="/legal/terms">服务条款</Link>
               <Link to="/legal/refunds">退款政策</Link>
               <Link to="/legal/privacy">隐私声明</Link>
