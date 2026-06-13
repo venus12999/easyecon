@@ -9,6 +9,7 @@ import { optionStyles, type OptKey } from "@/lib/option-colors";
 import { recordAnswer } from "@/lib/storage";
 import { Clock, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/mock/random")({
   head: () => ({ meta: [{ title: "模考模式 · AP 微观经济" }] }),
@@ -85,8 +86,27 @@ function Mock() {
   }, [timeUp]);
 
   async function start() {
+    if (!user) {
+      toast.error("请先登录后参加完整模考");
+      return;
+    }
     setLoading(true);
     setShortageNote(null);
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    if (!token) {
+      setLoading(false);
+      toast.error("登录状态已过期，请重新登录");
+      return;
+    }
+    const accessResponse = await fetch("/api/membership/mock-access?exam_key=random-full", { headers: { Authorization: `Bearer ${token}` } });
+    const access = await accessResponse.json().catch(() => ({}));
+    if (!accessResponse.ok || !access.allowed) {
+      setLoading(false);
+      const date = access.nextAvailableAt ? new Date(access.nextAvailableAt).toLocaleString() : null;
+      toast.error(date ? `免费用户下次可于 ${date} 参加模考` : "免费用户每 7 天可参加 1 次模考，可在个人资料页升级会员");
+      return;
+    }
     const { data } = await supabase
       .from("questions")
       .select("id,knowledge_point_id,stem,option_a,option_b,option_c,option_d,option_e,correct_answer,explanation,image_url,term_tags,knowledge_points!inner(name_zh,unit)")

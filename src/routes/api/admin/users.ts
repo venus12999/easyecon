@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { verifyAdminRequest } from "@/lib/admin-auth.server";
 import { verifyUserRequest } from "@/lib/user-auth.server";
 import { z } from "zod";
+import { isPaidSubscriptionActive, membershipEnvironment } from "@/lib/membership.server";
 
 export const Route = createFileRoute("/api/admin/users")({
   server: {
@@ -13,6 +14,7 @@ export const Route = createFileRoute("/api/admin/users")({
         }
         const url = new URL(request.url);
         const userId = url.searchParams.get("user_id");
+        const environment = membershipEnvironment(request);
 
         if (!userId) {
           // 列表：所有 profiles + 聚合答题数与正确率 + 模考次数
@@ -29,6 +31,7 @@ export const Route = createFileRoute("/api/admin/users")({
            const { data: subscriptions } = await supabaseAdmin
              .from("subscriptions")
              .select("user_id,status,current_period_end,price_id,environment")
+             .eq("environment", environment)
              .order("created_at", { ascending: false });
            const { data: adjustments } = await supabaseAdmin
              .from("membership_adjustments")
@@ -48,7 +51,7 @@ export const Route = createFileRoute("/api/admin/users")({
            const users = (profiles ?? []).map((p) => ({
              ...p,
              ...(stat[p.user_id] ?? { total: 0, correct: 0, last: null, mocks: 0 }),
-             subscription: (subscriptions ?? []).find((s) => s.user_id === p.user_id) ?? null,
+              subscription: (subscriptions ?? []).find((s) => s.user_id === p.user_id && isPaidSubscriptionActive(s)) ?? (subscriptions ?? []).find((s) => s.user_id === p.user_id) ?? null,
              gifted_until: (adjustments ?? []).filter((a) => a.user_id === p.user_id).sort((a, b) => b.ends_at.localeCompare(a.ends_at))[0]?.ends_at ?? null,
            }));
           return Response.json({ users });
@@ -72,7 +75,7 @@ export const Route = createFileRoute("/api/admin/users")({
             .from("wrong_questions")
             .select("question_id,added_at,source")
             .eq("user_id", userId),
-           supabaseAdmin.from("subscriptions").select("*").eq("user_id", userId).order("created_at", { ascending: false }),
+           supabaseAdmin.from("subscriptions").select("*").eq("user_id", userId).eq("environment", environment).order("created_at", { ascending: false }),
            supabaseAdmin.from("ai_daily_usage").select("usage_date,ai_explain_count,frq_grade_count").eq("user_id", userId).order("usage_date", { ascending: false }).limit(30),
            supabaseAdmin.from("membership_adjustments").select("days_granted,starts_at,ends_at,note,created_at").eq("user_id", userId).order("created_at", { ascending: false }),
         ]);
@@ -100,8 +103,12 @@ export const Route = createFileRoute("/api/admin/users")({
          }).safeParse(await request.json());
          if (!parsed.success) return Response.json({ error: "invalid fields" }, { status: 400 });
          const now = new Date();
-         const { data: latest } = await supabaseAdmin.from("membership_adjustments").select("ends_at").eq("user_id", parsed.data.user_id).gt("ends_at", now.toISOString()).order("ends_at", { ascending: false }).limit(1).maybeSingle();
-         const startsAt = latest ? new Date(latest.ends_at) : now;
+          const [{ data: latest }, { data: paid }] = await Promise.all([
+            supabaseAdmin.from("membership_adjustments").select("ends_at").eq("user_id", parsed.data.user_id).gt("ends_at", now.toISOString()).order("ends_at", { ascending: false }).limit(1).maybeSingle(),
+            supabaseAdmin.from("subscriptions").select("status,current_period_end").eq("user_id", parsed.data.user_id).eq("environment", membershipEnvironment(request)).in("status", ["active", "trialing", "canceled"]).gt("current_period_end", now.toISOString()).order("current_period_end", { ascending: false }).limit(1).maybeSingle(),
+          ]);
+          const candidates = [now.getTime(), latest ? new Date(latest.ends_at).getTime() : 0, paid?.current_period_end ? new Date(paid.current_period_end).getTime() : 0];
+          const startsAt = new Date(Math.max(...candidates));
          const endsAt = new Date(startsAt.getTime() + parsed.data.days * 86400000);
          const { error } = await supabaseAdmin.from("membership_adjustments").insert({
            user_id: parsed.data.user_id,

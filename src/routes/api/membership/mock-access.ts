@@ -8,13 +8,24 @@ export const Route = createFileRoute("/api/membership/mock-access")({
       GET: async ({ request }) => {
         const user = await verifyUserRequest(request);
         if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
+        const examKey = new URL(request.url).searchParams.get("exam_key")?.slice(0, 120) || "full-mock";
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
         const environment = membershipEnvironment(request);
-        const { data: isPro } = await supabaseAdmin.rpc("has_active_subscription", { user_uuid: user.userId, check_env: environment });
-        if (isPro) return Response.json({ allowed: true, isPro: true });
-        const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
-        const { count } = await supabaseAdmin.from("mock_attempts").select("id", { count: "exact", head: true }).eq("user_id", user.userId).gte("created_at", weekAgo);
-        return Response.json({ allowed: (count ?? 0) < 1, isPro: false });
+        const { data, error } = await supabaseAdmin.rpc("consume_mock_access", {
+          p_user_id: user.userId,
+          p_environment: environment,
+          p_exam_key: examKey,
+        });
+        if (error) {
+          console.error("Mock access check failed", error);
+          return Response.json({ error: "access_check_failed" }, { status: 500 });
+        }
+        const result = data?.[0];
+        return Response.json({
+          allowed: result?.allowed === true,
+          isPro: result?.is_pro === true,
+          nextAvailableAt: result?.next_available_at ?? null,
+        });
       },
     },
   },

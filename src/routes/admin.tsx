@@ -9,7 +9,6 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Loader2, Plus, Trash2, Upload, Image as ImageIcon, Sparkles, Inbox } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
-import { isAdminEmail } from "@/lib/admin-emails";
 import { supabase } from "@/integrations/supabase/client";
 
 // 判断题干是否提示包含图表（导入时在题干里以「[此题含图…]」「见原 PDF」「见图」等方式标注）
@@ -50,17 +49,21 @@ function Admin() {
   const [token, setToken] = useState<string | null>(null);
   const [denied, setDenied] = useState(false);
 
-  // 已登录且邮箱在白名单 → 直接拿 Supabase JWT 作为后台请求凭证。
+  // 服务端角色校验通过后，使用登录 JWT 调用后台接口。
   useEffect(() => {
     if (authLoading || !user) return;
-    if (!isAdminEmail(user.email)) {
-      setDenied(true);
-      setToken(null);
-      return;
-    }
-    setDenied(false);
     supabase.auth.getSession().then(({ data }) => {
-      setToken(data.session?.access_token ?? null);
+      const nextToken = data.session?.access_token;
+      if (!nextToken) return;
+      fetch("/api/admin/login", { method: "POST", headers: { Authorization: `Bearer ${nextToken}` } })
+        .then((response) => {
+          setDenied(!response.ok);
+          setToken(response.ok ? nextToken : null);
+        })
+        .catch(() => {
+          setDenied(true);
+          setToken(null);
+        });
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
       setToken(s?.access_token ?? null);
@@ -88,7 +91,7 @@ function Admin() {
     );
   }
 
-  if (denied || !isAdminEmail(user.email)) {
+  if (denied) {
     return (
       <main className="mx-auto max-w-md px-4 py-16 text-center space-y-3">
         <h1 className="text-xl font-bold">无访问权限</h1>
@@ -1137,11 +1140,16 @@ function UsersPanel({ token }: { token: string }) {
   const [loading, setLoading] = useState(true);
   const [grantDays, setGrantDays] = useState("30");
 
-  useEffect(() => {
-    fetch("/api/admin/users", { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => r.json())
-      .then((j) => { setUsers(j.users ?? []); setLoading(false); });
+  const loadUsers = useCallback(async () => {
+    const response = await fetch("/api/admin/users", { headers: { Authorization: `Bearer ${token}` } });
+    const result = await response.json();
+    setUsers(result.users ?? []);
+    setLoading(false);
   }, [token]);
+
+  useEffect(() => {
+    void loadUsers();
+  }, [loadUsers]);
 
   async function open(uid: string) {
     setPicked(uid);
@@ -1161,7 +1169,7 @@ function UsersPanel({ token }: { token: string }) {
     });
     if (!response.ok) return toast.error("开通失败");
     toast.success(`已赠送 ${days} 天 Pro 会员`);
-    await open(picked);
+    await Promise.all([open(picked), loadUsers()]);
   }
 
   if (loading) return <div className="text-sm text-muted-foreground">加载中…</div>;
@@ -1182,7 +1190,7 @@ function UsersPanel({ token }: { token: string }) {
                 <div className="text-xs text-muted-foreground truncate">{u.email}</div>
                  <div className="mt-1 text-xs font-medium text-primary">
                    {(u.gifted_until && new Date(u.gifted_until).getTime() > Date.now()) ||
-                   (u.subscription && ["active", "trialing", "past_due", "canceled"].includes(u.subscription.status) && (!u.subscription.current_period_end || new Date(u.subscription.current_period_end).getTime() > Date.now()))
+                    (u.subscription && ["active", "trialing", "canceled"].includes(u.subscription.status) && (!u.subscription.current_period_end || new Date(u.subscription.current_period_end).getTime() > Date.now()))
                      ? "Pro 会员"
                      : "免费用户"}
                  </div>

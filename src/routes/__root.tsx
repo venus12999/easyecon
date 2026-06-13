@@ -76,7 +76,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
 function RootComponent() {
   const path = useRouterState({ select: (r) => r.location.pathname });
-  const isAuthRoute = path === "/auth";
+  const isAuthRoute = path === "/auth" || path === "/reset-password";
   if (isAuthRoute) {
     return (
       <AuthProvider>
@@ -98,6 +98,11 @@ function RootComponent() {
             <main className="flex-1 min-w-0">
               <Outlet />
             </main>
+            <footer className="flex flex-wrap justify-center gap-x-5 gap-y-2 border-t px-4 py-4 text-xs text-muted-foreground">
+              <Link to="/legal/terms">服务条款</Link>
+              <Link to="/legal/refunds">退款政策</Link>
+              <Link to="/legal/privacy">隐私声明</Link>
+            </footer>
           </div>
         </div>
         <FloatingMascot />

@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Check, Crown, Loader2, Save, Sparkles, UserRound } from "lucide-react";
 import { toast } from "sonner";
@@ -14,6 +14,7 @@ type Membership = {
   isPro: boolean;
   plan: string | null;
   status: string | null;
+  source: "paid" | "gift" | "free";
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
   canManage: boolean;
@@ -27,11 +28,23 @@ export const Route = createFileRoute("/profile")({
 
 function ProfilePage() {
   const { user, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [membership, setMembership] = useState<Membership | null>(null);
+  const [newEmail, setNewEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [syncingPayment, setSyncingPayment] = useState(false);
   const { openCheckout, loading: checkoutLoading } = usePaddleCheckout();
+
+  async function loadMembership() {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) return null;
+    const response = await fetch("/api/membership", { headers: { Authorization: `Bearer ${token}` } });
+    return response.ok ? await response.json() as Membership : null;
+  }
 
   useEffect(() => {
     if (authLoading) return;
@@ -41,18 +54,33 @@ function ProfilePage() {
     }
     void Promise.all([
       supabase.from("profiles").select("display_name").eq("user_id", user.id).maybeSingle(),
-      supabase.auth.getSession().then(async ({ data }) => {
-        const token = data.session?.access_token;
-        if (!token) return null;
-        const response = await fetch("/api/membership", { headers: { Authorization: `Bearer ${token}` } });
-        return response.ok ? (await response.json()) as Membership : null;
-      }),
+      loadMembership(),
     ]).then(([profile, member]) => {
       setName(profile.data?.display_name ?? "");
       setMembership(member);
       setLoading(false);
     });
   }, [authLoading, user]);
+
+  useEffect(() => {
+    if (!user || new URLSearchParams(window.location.search).get("checkout") !== "success") return;
+    setSyncingPayment(true);
+    let attempts = 0;
+    const timer = window.setInterval(() => {
+      attempts += 1;
+      void loadMembership().then((next) => {
+        if (next) setMembership(next);
+        if (next?.isPro || attempts >= 10) {
+          window.clearInterval(timer);
+          setSyncingPayment(false);
+          navigate({ to: "/profile", replace: true });
+          if (next?.isPro) toast.success("付款已确认，Pro 权益已生效");
+          else toast.info("付款仍在同步，请稍后刷新查看");
+        }
+      });
+    }, 2000);
+    return () => window.clearInterval(timer);
+  }, [user, navigate]);
 
   async function saveProfile() {
     if (!user) return;
@@ -83,6 +111,22 @@ function ProfilePage() {
     const result = await response.json();
     if (!response.ok || !result.url) return toast.error("暂时无法打开订阅管理");
     window.open(result.url, "_blank", "noopener,noreferrer");
+  }
+
+  async function updateEmail() {
+    if (!newEmail.trim()) return;
+    const { error } = await supabase.auth.updateUser({ email: newEmail.trim() }, { emailRedirectTo: `${window.location.origin}/profile` });
+    if (error) return toast.error(/registered|exists/i.test(error.message) ? "该邮箱已被使用" : "邮箱修改失败，请稍后重试");
+    setNewEmail("");
+    toast.success("确认邮件已发送到新邮箱，请完成确认");
+  }
+
+  async function updatePassword() {
+    if (newPassword.length < 8) return toast.error("新密码至少 8 位");
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) return toast.error("密码修改失败，请稍后重试");
+    setNewPassword("");
+    toast.success("密码已更新");
   }
 
   if (authLoading || loading) {
@@ -133,6 +177,13 @@ function ProfilePage() {
           </Button>
         </CardContent>
       </Card>
+      <Card className="mb-5">
+        <CardHeader><CardTitle className="text-base">账号安全</CardTitle></CardHeader>
+        <CardContent className="grid gap-5 sm:grid-cols-2">
+          <div className="space-y-2"><Label htmlFor="new-email">修改邮箱</Label><Input id="new-email" type="email" value={newEmail} onChange={(event) => setNewEmail(event.target.value)} placeholder="新邮箱地址" /><Button variant="outline" onClick={() => void updateEmail()} disabled={!newEmail.trim()}>发送确认邮件</Button></div>
+          <div className="space-y-2"><Label htmlFor="new-account-password">修改密码</Label><Input id="new-account-password" type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder="至少 8 位" /><Button variant="outline" onClick={() => void updatePassword()} disabled={!newPassword}>保存新密码</Button></div>
+        </CardContent>
+      </Card>
       <Card className="overflow-hidden border-primary/25">
         <CardHeader className="bg-primary/5">
           <div className="flex items-center justify-between gap-4">
@@ -141,13 +192,17 @@ function ProfilePage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-5 pt-5">
+          {syncingPayment && <div className="flex items-center gap-2 rounded-md border border-primary/25 bg-primary/5 px-3 py-2 text-sm"><Loader2 className="h-4 w-4 animate-spin" />付款成功，正在确认会员权益…</div>}
+          {membership?.status === "past_due" && <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">续费付款失败，Pro 权益已暂停。请打开订阅管理更新付款方式。</div>}
+          {membership?.status === "paused" && <div className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning-foreground">订阅已暂停，当前不享受 Pro 权益。</div>}
           {membership?.isPro ? (
             <>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-lg border p-4"><div className="text-xs text-muted-foreground">AI 答疑</div><div className="mt-1 text-xl font-bold">{membership.usage.aiExplain}/{membership.usage.aiExplainLimit}</div></div>
                 <div className="rounded-lg border p-4"><div className="text-xs text-muted-foreground">FRQ 评分</div><div className="mt-1 text-xl font-bold">{membership.usage.frqGrade}/{membership.usage.frqGradeLimit}</div></div>
               </div>
-              {membership.currentPeriodEnd && <div className="text-sm">{membership.cancelAtPeriodEnd ? "有效期至" : "下次续费"}：{new Date(membership.currentPeriodEnd).toLocaleDateString()}</div>}
+              <div className="text-sm text-muted-foreground">权益来源：{membership.source === "gift" ? "管理员赠送" : membership.plan === "ap_micro_pro_yearly" ? "年度会员" : "月度会员"}</div>
+              {membership.currentPeriodEnd && <div className="text-sm">{membership.source === "gift" || membership.cancelAtPeriodEnd ? "有效期至" : "下次续费"}：{new Date(membership.currentPeriodEnd).toLocaleDateString()}</div>}
               {membership.canManage && <Button variant="outline" onClick={() => void manageMembership()}>管理订阅</Button>}
             </>
           ) : (
@@ -161,6 +216,7 @@ function ProfilePage() {
                 <Button className="h-auto justify-between px-4 py-3" disabled={checkoutLoading} onClick={() => void openCheckout({ priceId: "ap_micro_pro_monthly", userId: user.id, email: user.email })}><span>月度会员</span><span>¥29/月</span></Button>
                 <Button className="h-auto justify-between px-4 py-3" variant="outline" disabled={checkoutLoading} onClick={() => void openCheckout({ priceId: "ap_micro_pro_yearly", userId: user.id, email: user.email })}><span>年度会员</span><span className="flex items-center gap-1"><Sparkles className="h-4 w-4" />¥199/年</span></Button>
               </div>
+              <p className="text-xs text-muted-foreground">购买即表示同意 <Link to="/legal/terms" className="text-primary underline">服务条款</Link>、<Link to="/legal/refunds" className="text-primary underline">14 天退款政策</Link>与 <Link to="/legal/privacy" className="text-primary underline">隐私声明</Link>。付款由 Paddle 安全处理。</p>
             </>
           )}
         </CardContent>

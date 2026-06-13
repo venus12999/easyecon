@@ -19,6 +19,14 @@ type SubscriptionEventData = {
   items?: Array<{ price?: { importMeta?: { externalId?: string } }; product?: { importMeta?: { externalId?: string } } }>;
 };
 
+function externalIds(data: SubscriptionEventData) {
+  const item = data.items?.[0];
+  return {
+    priceId: item?.price?.importMeta?.externalId,
+    productId: item?.product?.importMeta?.externalId,
+  };
+}
+
 async function created(data: SubscriptionEventData, environment: PaddleEnv) {
   const userId = data.customData?.userId;
   const item = data.items?.[0];
@@ -44,13 +52,17 @@ async function created(data: SubscriptionEventData, environment: PaddleEnv) {
 }
 
 async function updated(data: SubscriptionEventData, environment: PaddleEnv, canceled = false) {
-  const { error } = await getAdminClient().from("subscriptions").update({
+  const { priceId, productId } = externalIds(data);
+  const patch: Record<string, unknown> = {
     status: canceled ? "canceled" : data.status,
     current_period_start: data.currentBillingPeriod?.startsAt ?? null,
     current_period_end: data.currentBillingPeriod?.endsAt ?? null,
     cancel_at_period_end: data.scheduledChange?.action === "cancel",
     updated_at: new Date().toISOString(),
-  }).eq("paddle_subscription_id", data.id).eq("environment", environment);
+  };
+  if (priceId) patch.price_id = priceId;
+  if (productId) patch.product_id = productId;
+  const { error } = await getAdminClient().from("subscriptions").update(patch).eq("paddle_subscription_id", data.id).eq("environment", environment);
   if (error) throw error;
 }
 
@@ -62,9 +74,13 @@ export const Route = createFileRoute("/api/public/payments/webhook")({
         if (rawEnv !== "sandbox" && rawEnv !== "live") return new Response("Invalid environment", { status: 400 });
         try {
           const event = await verifyWebhook(request, rawEnv);
+          console.info("Payment webhook received", { eventId: event.eventId, eventType: event.eventType, environment: rawEnv });
           if (event.eventType === EventName.SubscriptionCreated) await created(event.data as SubscriptionEventData, rawEnv);
           if (event.eventType === EventName.SubscriptionUpdated) await updated(event.data as SubscriptionEventData, rawEnv);
           if (event.eventType === EventName.SubscriptionCanceled) await updated(event.data as SubscriptionEventData, rawEnv, true);
+          if (event.eventType === EventName.TransactionPaymentFailed) {
+            console.warn("Recurring payment failed", { eventId: event.eventId, environment: rawEnv });
+          }
           return Response.json({ received: true });
         } catch (error) {
           console.error("Payment webhook failed", error);

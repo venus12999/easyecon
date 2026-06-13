@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WrongRouteImport } from './routes/wrong'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as FrqRouteImport } from './routes/frq'
 import { Route as AuthRouteImport } from './routes/auth'
@@ -20,6 +21,9 @@ import { Route as MockIndexRouteImport } from './routes/mock.index'
 import { Route as PracticeSlugRouteImport } from './routes/practice.$slug'
 import { Route as MockRandomRouteImport } from './routes/mock.random'
 import { Route as MockSlugRouteImport } from './routes/mock.$slug'
+import { Route as LegalTermsRouteImport } from './routes/legal.terms'
+import { Route as LegalRefundsRouteImport } from './routes/legal.refunds'
+import { Route as LegalPrivacyRouteImport } from './routes/legal.privacy'
 import { Route as ApiMembershipRouteImport } from './routes/api/membership'
 import { Route as ApiFeedbackRouteImport } from './routes/api/feedback'
 import { Route as ApiAiExplainRouteImport } from './routes/api/ai-explain'
@@ -45,6 +49,11 @@ const WrongRoute = WrongRouteImport.update({
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProfileRoute = ProfileRouteImport.update({
@@ -90,6 +99,21 @@ const MockRandomRoute = MockRandomRouteImport.update({
 const MockSlugRoute = MockSlugRouteImport.update({
   id: '/mock/$slug',
   path: '/mock/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LegalTermsRoute = LegalTermsRouteImport.update({
+  id: '/legal/terms',
+  path: '/legal/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LegalRefundsRoute = LegalRefundsRouteImport.update({
+  id: '/legal/refunds',
+  path: '/legal/refunds',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LegalPrivacyRoute = LegalPrivacyRouteImport.update({
+  id: '/legal/privacy',
+  path: '/legal/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiMembershipRoute = ApiMembershipRouteImport.update({
@@ -180,11 +204,15 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/frq': typeof FrqRoute
   '/profile': typeof ProfileRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/terms': typeof TermsRoute
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/api/feedback': typeof ApiFeedbackRoute
   '/api/membership': typeof ApiMembershipRouteWithChildren
+  '/legal/privacy': typeof LegalPrivacyRoute
+  '/legal/refunds': typeof LegalRefundsRoute
+  '/legal/terms': typeof LegalTermsRoute
   '/mock/$slug': typeof MockSlugRoute
   '/mock/random': typeof MockRandomRoute
   '/practice/$slug': typeof PracticeSlugRoute
@@ -209,11 +237,15 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/frq': typeof FrqRoute
   '/profile': typeof ProfileRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/terms': typeof TermsRoute
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/api/feedback': typeof ApiFeedbackRoute
   '/api/membership': typeof ApiMembershipRouteWithChildren
+  '/legal/privacy': typeof LegalPrivacyRoute
+  '/legal/refunds': typeof LegalRefundsRoute
+  '/legal/terms': typeof LegalTermsRoute
   '/mock/$slug': typeof MockSlugRoute
   '/mock/random': typeof MockRandomRoute
   '/practice/$slug': typeof PracticeSlugRoute
@@ -239,11 +271,15 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/frq': typeof FrqRoute
   '/profile': typeof ProfileRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/terms': typeof TermsRoute
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/api/feedback': typeof ApiFeedbackRoute
   '/api/membership': typeof ApiMembershipRouteWithChildren
+  '/legal/privacy': typeof LegalPrivacyRoute
+  '/legal/refunds': typeof LegalRefundsRoute
+  '/legal/terms': typeof LegalTermsRoute
   '/mock/$slug': typeof MockSlugRoute
   '/mock/random': typeof MockRandomRoute
   '/practice/$slug': typeof PracticeSlugRoute
@@ -270,11 +306,15 @@ export interface FileRouteTypes {
     | '/auth'
     | '/frq'
     | '/profile'
+    | '/reset-password'
     | '/terms'
     | '/wrong'
     | '/api/ai-explain'
     | '/api/feedback'
     | '/api/membership'
+    | '/legal/privacy'
+    | '/legal/refunds'
+    | '/legal/terms'
     | '/mock/$slug'
     | '/mock/random'
     | '/practice/$slug'
@@ -299,11 +339,15 @@ export interface FileRouteTypes {
     | '/auth'
     | '/frq'
     | '/profile'
+    | '/reset-password'
     | '/terms'
     | '/wrong'
     | '/api/ai-explain'
     | '/api/feedback'
     | '/api/membership'
+    | '/legal/privacy'
+    | '/legal/refunds'
+    | '/legal/terms'
     | '/mock/$slug'
     | '/mock/random'
     | '/practice/$slug'
@@ -328,11 +372,15 @@ export interface FileRouteTypes {
     | '/auth'
     | '/frq'
     | '/profile'
+    | '/reset-password'
     | '/terms'
     | '/wrong'
     | '/api/ai-explain'
     | '/api/feedback'
     | '/api/membership'
+    | '/legal/privacy'
+    | '/legal/refunds'
+    | '/legal/terms'
     | '/mock/$slug'
     | '/mock/random'
     | '/practice/$slug'
@@ -358,11 +406,15 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   FrqRoute: typeof FrqRoute
   ProfileRoute: typeof ProfileRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
   TermsRoute: typeof TermsRoute
   WrongRoute: typeof WrongRoute
   ApiAiExplainRoute: typeof ApiAiExplainRoute
   ApiFeedbackRoute: typeof ApiFeedbackRoute
   ApiMembershipRoute: typeof ApiMembershipRouteWithChildren
+  LegalPrivacyRoute: typeof LegalPrivacyRoute
+  LegalRefundsRoute: typeof LegalRefundsRoute
+  LegalTermsRoute: typeof LegalTermsRoute
   MockSlugRoute: typeof MockSlugRoute
   MockRandomRoute: typeof MockRandomRoute
   PracticeSlugRoute: typeof PracticeSlugRoute
@@ -395,6 +447,13 @@ declare module '@tanstack/react-router' {
       path: '/terms'
       fullPath: '/terms'
       preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/profile': {
@@ -458,6 +517,27 @@ declare module '@tanstack/react-router' {
       path: '/mock/$slug'
       fullPath: '/mock/$slug'
       preLoaderRoute: typeof MockSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/legal/terms': {
+      id: '/legal/terms'
+      path: '/legal/terms'
+      fullPath: '/legal/terms'
+      preLoaderRoute: typeof LegalTermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/legal/refunds': {
+      id: '/legal/refunds'
+      path: '/legal/refunds'
+      fullPath: '/legal/refunds'
+      preLoaderRoute: typeof LegalRefundsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/legal/privacy': {
+      id: '/legal/privacy'
+      path: '/legal/privacy'
+      fullPath: '/legal/privacy'
+      preLoaderRoute: typeof LegalPrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/membership': {
@@ -593,11 +673,15 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   FrqRoute: FrqRoute,
   ProfileRoute: ProfileRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
   TermsRoute: TermsRoute,
   WrongRoute: WrongRoute,
   ApiAiExplainRoute: ApiAiExplainRoute,
   ApiFeedbackRoute: ApiFeedbackRoute,
   ApiMembershipRoute: ApiMembershipRouteWithChildren,
+  LegalPrivacyRoute: LegalPrivacyRoute,
+  LegalRefundsRoute: LegalRefundsRoute,
+  LegalTermsRoute: LegalTermsRoute,
   MockSlugRoute: MockSlugRoute,
   MockRandomRoute: MockRandomRoute,
   PracticeSlugRoute: PracticeSlugRoute,
