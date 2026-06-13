@@ -101,7 +101,8 @@ function Practice() {
         const { data: wrongs } = await supabase
           .from("wrong_questions")
           .select("question_id")
-          .eq("user_id", user.id);
+          .eq("user_id", user.id)
+          .eq("source", "practice");
         setWrongSet(new Set((wrongs ?? []).map((r) => r.question_id)));
       } else {
         setWrongSet(new Set(getWrong()));
@@ -130,8 +131,8 @@ function Practice() {
       });
       if (!ok && !wrongSet.has(cur.id)) {
         await supabase.from("wrong_questions").upsert(
-          { user_id: user.id, question_id: cur.id },
-          { onConflict: "user_id,question_id" },
+          { user_id: user.id, question_id: cur.id, source: "practice" },
+          { onConflict: "user_id,question_id,source" },
         );
         setWrongSet((s) => new Set(s).add(cur.id));
       }
@@ -240,8 +241,8 @@ function Practice() {
               addWrong(cur.id);
               if (user) {
                 await supabase.from("wrong_questions").upsert(
-                  { user_id: user.id, question_id: cur.id },
-                  { onConflict: "user_id,question_id" },
+                  { user_id: user.id, question_id: cur.id, source: "practice" },
+                  { onConflict: "user_id,question_id,source" },
                 );
               }
               setWrongSet((s) => new Set(s).add(cur.id));

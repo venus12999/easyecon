@@ -55,7 +55,7 @@ export const Route = createFileRoute("/api/admin/users")({
             .order("created_at", { ascending: false }),
           supabaseAdmin
             .from("wrong_questions")
-            .select("question_id,added_at")
+            .select("question_id,added_at,source")
             .eq("user_id", userId),
         ]);
         const qIds = Array.from(
