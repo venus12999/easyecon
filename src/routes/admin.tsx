@@ -9,7 +9,6 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Loader2, Plus, Trash2, Upload, Image as ImageIcon, Sparkles, Inbox } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
-import { isAdminEmail } from "@/lib/admin-emails";
 import { supabase } from "@/integrations/supabase/client";
 
 // 判断题干是否提示包含图表（导入时在题干里以「[此题含图…]」「见原 PDF」「见图」等方式标注）
