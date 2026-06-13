@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { renderStemWithTerms, type TermInfo } from "@/lib/term-render";
 import { optionStyles, type OptKey } from "@/lib/option-colors";
-import { addWrong, recordAnswer } from "@/lib/storage";
+import { recordAnswer } from "@/lib/storage";
 import { Clock, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
