@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { renderStemWithTerms, type TermInfo } from "@/lib/term-render";
 import { optionStyles, type OptKey } from "@/lib/option-colors";
-import { addWrong, recordAnswer } from "@/lib/storage";
+import { recordAnswer } from "@/lib/storage";
 import { Clock, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -134,7 +134,6 @@ function Mock() {
       const a = answers[q.id];
       const ok = a === q.correct_answer;
       recordAnswer(q.knowledge_point_id, ok);
-      if (!ok && a) addWrong(q.id);
     });
     if (user) {
       const total = questions.length;
@@ -164,14 +163,6 @@ function Mock() {
           mode: "mock",
         }));
       if (rows.length > 0) void supabase.from("answer_attempts").insert(rows);
-      const wrongRows = questions
-        .filter((q) => answers[q.id] !== q.correct_answer)
-        .map((q) => ({ user_id: user.id, question_id: q.id }));
-      if (wrongRows.length > 0) {
-        void supabase
-          .from("wrong_questions")
-          .upsert(wrongRows, { onConflict: "user_id,question_id" });
-      }
     }
     setPhase("done");
   }

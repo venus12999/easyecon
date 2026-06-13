@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { renderStemWithTerms, type TermInfo } from "@/lib/term-render";
 import { optionStyles, type OptKey } from "@/lib/option-colors";
-import { addWrong, recordAnswer } from "@/lib/storage";
+import { recordAnswer } from "@/lib/storage";
 import { Loader2, ArrowLeft, Bookmark, ChevronDown, ChevronUp, X, MoreVertical, Highlighter, Calculator as CalcIcon, MapPin, Move, Delete } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
@@ -213,7 +213,6 @@ function PaperRunner() {
       const a = answers[q.id];
       const ok = a === q.correct_answer;
       recordAnswer(q.knowledge_point_id, ok);
-      if (!ok && a) addWrong(q.id);
     });
     if (user) {
       const total = questions.length;
@@ -243,14 +242,6 @@ function PaperRunner() {
           mode: "mock",
         }));
       if (rows.length > 0) void supabase.from("answer_attempts").insert(rows);
-      const wrongRows = questions
-        .filter((q) => answers[q.id] !== q.correct_answer)
-        .map((q) => ({ user_id: user.id, question_id: q.id }));
-      if (wrongRows.length > 0) {
-        void supabase
-          .from("wrong_questions")
-          .upsert(wrongRows, { onConflict: "user_id,question_id" });
-      }
     }
     // 有 FRQ 则进入大题阶段；仿真模式先走休息，练习模式直接进 FRQ
     if (frqs.length > 0) {
