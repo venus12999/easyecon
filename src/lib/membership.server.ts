@@ -19,7 +19,9 @@ export function isPaidSubscriptionActive(subscription: SubscriptionSummary, now 
 
 export function membershipEnvironment(request: Request): MembershipEnvironment {
   const host = new URL(request.url).hostname;
-  return host.includes("preview") || host.includes("-dev.") || host === "localhost" ? "sandbox" : "live";
+  return host.includes("preview") || host.includes("-dev.") || host.endsWith(".lovableproject.com") || host === "localhost"
+    ? "sandbox"
+    : "live";
 }
 
 export async function consumeAiQuota(
