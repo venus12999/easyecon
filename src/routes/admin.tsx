@@ -1180,7 +1180,12 @@ function UsersPanel({ token }: { token: string }) {
               >
                 <div className="font-medium truncate">{u.display_name?.trim() || "未设置昵称"}</div>
                 <div className="text-xs text-muted-foreground truncate">{u.email}</div>
-                 <div className="mt-1 text-xs font-medium text-primary">{u.subscription || u.gifted_until ? "Pro 会员" : "免费用户"}</div>
+                 <div className="mt-1 text-xs font-medium text-primary">
+                   {(u.gifted_until && new Date(u.gifted_until).getTime() > Date.now()) ||
+                   (u.subscription && ["active", "trialing", "past_due", "canceled"].includes(u.subscription.status) && (!u.subscription.current_period_end || new Date(u.subscription.current_period_end).getTime() > Date.now()))
+                     ? "Pro 会员"
+                     : "免费用户"}
+                 </div>
                 <div className="text-xs text-muted-foreground mt-0.5">
                   答题 {u.total} · 正确 {u.total ? Math.round((u.correct / u.total) * 100) : 0}% · 模考 {u.mocks}
                 </div>
