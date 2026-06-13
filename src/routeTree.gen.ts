@@ -20,6 +20,7 @@ import { Route as MockIndexRouteImport } from './routes/mock.index'
 import { Route as PracticeSlugRouteImport } from './routes/practice.$slug'
 import { Route as MockRandomRouteImport } from './routes/mock.random'
 import { Route as MockSlugRouteImport } from './routes/mock.$slug'
+import { Route as ApiMembershipRouteImport } from './routes/api/membership'
 import { Route as ApiFeedbackRouteImport } from './routes/api/feedback'
 import { Route as ApiAiExplainRouteImport } from './routes/api/ai-explain'
 import { Route as ApiFrqUploadRouteImport } from './routes/api/frq/upload'
@@ -88,6 +89,11 @@ const MockRandomRoute = MockRandomRouteImport.update({
 const MockSlugRoute = MockSlugRouteImport.update({
   id: '/mock/$slug',
   path: '/mock/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMembershipRoute = ApiMembershipRouteImport.update({
+  id: '/api/membership',
+  path: '/api/membership',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiFeedbackRoute = ApiFeedbackRouteImport.update({
@@ -172,6 +178,7 @@ export interface FileRoutesByFullPath {
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/api/feedback': typeof ApiFeedbackRoute
+  '/api/membership': typeof ApiMembershipRoute
   '/mock/$slug': typeof MockSlugRoute
   '/mock/random': typeof MockRandomRoute
   '/practice/$slug': typeof PracticeSlugRoute
@@ -199,6 +206,7 @@ export interface FileRoutesByTo {
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/api/feedback': typeof ApiFeedbackRoute
+  '/api/membership': typeof ApiMembershipRoute
   '/mock/$slug': typeof MockSlugRoute
   '/mock/random': typeof MockRandomRoute
   '/practice/$slug': typeof PracticeSlugRoute
@@ -227,6 +235,7 @@ export interface FileRoutesById {
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/api/feedback': typeof ApiFeedbackRoute
+  '/api/membership': typeof ApiMembershipRoute
   '/mock/$slug': typeof MockSlugRoute
   '/mock/random': typeof MockRandomRoute
   '/practice/$slug': typeof PracticeSlugRoute
@@ -256,6 +265,7 @@ export interface FileRouteTypes {
     | '/wrong'
     | '/api/ai-explain'
     | '/api/feedback'
+    | '/api/membership'
     | '/mock/$slug'
     | '/mock/random'
     | '/practice/$slug'
@@ -283,6 +293,7 @@ export interface FileRouteTypes {
     | '/wrong'
     | '/api/ai-explain'
     | '/api/feedback'
+    | '/api/membership'
     | '/mock/$slug'
     | '/mock/random'
     | '/practice/$slug'
@@ -310,6 +321,7 @@ export interface FileRouteTypes {
     | '/wrong'
     | '/api/ai-explain'
     | '/api/feedback'
+    | '/api/membership'
     | '/mock/$slug'
     | '/mock/random'
     | '/practice/$slug'
@@ -338,6 +350,7 @@ export interface RootRouteChildren {
   WrongRoute: typeof WrongRoute
   ApiAiExplainRoute: typeof ApiAiExplainRoute
   ApiFeedbackRoute: typeof ApiFeedbackRoute
+  ApiMembershipRoute: typeof ApiMembershipRoute
   MockSlugRoute: typeof MockSlugRoute
   MockRandomRoute: typeof MockRandomRoute
   PracticeSlugRoute: typeof PracticeSlugRoute
@@ -433,6 +446,13 @@ declare module '@tanstack/react-router' {
       path: '/mock/$slug'
       fullPath: '/mock/$slug'
       preLoaderRoute: typeof MockSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/membership': {
+      id: '/api/membership'
+      path: '/api/membership'
+      fullPath: '/api/membership'
+      preLoaderRoute: typeof ApiMembershipRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/feedback': {
@@ -546,6 +566,7 @@ const rootRouteChildren: RootRouteChildren = {
   WrongRoute: WrongRoute,
   ApiAiExplainRoute: ApiAiExplainRoute,
   ApiFeedbackRoute: ApiFeedbackRoute,
+  ApiMembershipRoute: ApiMembershipRoute,
   MockSlugRoute: MockSlugRoute,
   MockRandomRoute: MockRandomRoute,
   PracticeSlugRoute: PracticeSlugRoute,
