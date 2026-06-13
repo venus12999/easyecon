@@ -38,6 +38,36 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_daily_usage: {
+        Row: {
+          ai_explain_count: number
+          created_at: string
+          frq_grade_count: number
+          id: string
+          updated_at: string
+          usage_date: string
+          user_id: string
+        }
+        Insert: {
+          ai_explain_count?: number
+          created_at?: string
+          frq_grade_count?: number
+          id?: string
+          updated_at?: string
+          usage_date?: string
+          user_id: string
+        }
+        Update: {
+          ai_explain_count?: number
+          created_at?: string
+          frq_grade_count?: number
+          id?: string
+          updated_at?: string
+          usage_date?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       answer_attempts: {
         Row: {
           created_at: string
@@ -191,6 +221,42 @@ export type Database = {
           sort_order?: number
           unit?: number
           updated_at?: string
+        }
+        Relationships: []
+      }
+      membership_adjustments: {
+        Row: {
+          admin_user_id: string
+          created_at: string
+          days_granted: number
+          ends_at: string
+          id: string
+          note: string | null
+          starts_at: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          admin_user_id: string
+          created_at?: string
+          days_granted: number
+          ends_at: string
+          id?: string
+          note?: string | null
+          starts_at: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          admin_user_id?: string
+          created_at?: string
+          days_granted?: number
+          ends_at?: string
+          id?: string
+          note?: string | null
+          starts_at?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -467,6 +533,54 @@ export type Database = {
           },
         ]
       }
+      subscriptions: {
+        Row: {
+          cancel_at_period_end: boolean
+          created_at: string
+          current_period_end: string | null
+          current_period_start: string | null
+          environment: string
+          id: string
+          paddle_customer_id: string
+          paddle_subscription_id: string
+          price_id: string
+          product_id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cancel_at_period_end?: boolean
+          created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          environment?: string
+          id?: string
+          paddle_customer_id: string
+          paddle_subscription_id: string
+          price_id: string
+          product_id: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cancel_at_period_end?: boolean
+          created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          environment?: string
+          id?: string
+          paddle_customer_id?: string
+          paddle_subscription_id?: string
+          price_id?: string
+          product_id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       terms: {
         Row: {
           confusable_with: string[] | null
@@ -526,7 +640,19 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      consume_ai_quota: {
+        Args: { p_environment: string; p_kind: string; p_user_id: string }
+        Returns: {
+          allowed: boolean
+          is_pro: boolean
+          quota: number
+          used: number
+        }[]
+      }
+      has_active_subscription: {
+        Args: { check_env?: string; user_uuid: string }
+        Returns: boolean
+      }
     }
     Enums: {
       feedback_category: "bug" | "suggestion"
