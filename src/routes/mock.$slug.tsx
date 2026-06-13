@@ -12,9 +12,13 @@ import { cn } from "@/lib/utils";
 import { FrqAnswerBox, EMPTY_ANSWER, type FrqAnswerState } from "@/components/frq/FrqAnswerBox";
 import { FrqGradeCard, type GradeResult } from "@/components/frq/FrqGradeCard";
 import { toast } from "sonner";
+import { FRQ_CATEGORIES, getFrqUnit } from "@/lib/frq-categories";
 
 export const Route = createFileRoute("/mock/$slug")({
   head: () => ({ meta: [{ title: "真题卷 · AP 微观经济" }] }),
+  validateSearch: (search: Record<string, unknown>) => ({
+    unit: typeof search.unit === "number" && search.unit >= 1 && search.unit <= 6 ? search.unit : undefined,
+  }),
   component: PaperRunner,
 });
 
@@ -56,6 +60,7 @@ type Frq = {
 
 function PaperRunner() {
   const { slug } = useParams({ from: "/mock/$slug" });
+  const { unit: selectedFrqUnit } = Route.useSearch();
   const { user } = useAuth();
   const [paper, setPaper] = useState<Paper | null>(null);
   const [questions, setQuestions] = useState<Q[]>([]);
@@ -170,13 +175,18 @@ function PaperRunner() {
       ]);
       const qs = ((pqs ?? []) as unknown as Array<{ questions: Q }>).map((row) => row.questions);
       setQuestions(qs);
-      setFrqs((fr ?? []) as Frq[]);
+      const loadedFrqs = (fr ?? []) as Frq[];
+      setFrqs(
+        slug === "frq-pdf-practice" && selectedFrqUnit
+          ? loadedFrqs.filter((item) => getFrqUnit(item.title) === selectedFrqUnit)
+          : loadedFrqs,
+      );
       const d: Record<string, TermInfo> = {};
       (terms ?? []).forEach((t) => (d[t.term_en.toLowerCase()] = t as TermInfo));
       setTermDict(d);
       setLoading(false);
     })();
-  }, [slug]);
+  }, [selectedFrqUnit, slug]);
 
   useEffect(() => {
     if (phase !== "running") return;
@@ -358,15 +368,18 @@ function PaperRunner() {
 
   if (phase === "idle") {
     const isFrqPractice = questions.length === 0 && frqs.length > 0;
+    const selectedCategory = FRQ_CATEGORIES.find((category) => category.unit === selectedFrqUnit);
     return (
       <main className="mx-auto max-w-2xl px-4 py-10">
         <Link
-          to={isFrqPractice ? "/" : "/mock"}
+          to={isFrqPractice ? "/frq" : "/mock"}
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
         >
-          <ArrowLeft className="h-3.5 w-3.5" /> {isFrqPractice ? "返回刷题" : "卷库"}
+          <ArrowLeft className="h-3.5 w-3.5" /> {isFrqPractice ? "返回大题分类" : "卷库"}
         </Link>
-        <h1 className="text-2xl font-bold mb-2">{paper.title}</h1>
+        <h1 className="text-2xl font-bold mb-2">
+          {selectedCategory ? `Unit ${selectedCategory.unit} · ${selectedCategory.nameZh}` : paper.title}
+        </h1>
         {paper.description && (
           <p className="text-sm text-muted-foreground mb-6">{paper.description}</p>
         )}
