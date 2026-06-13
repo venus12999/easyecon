@@ -367,7 +367,7 @@ function PaperRunner() {
   }
 
   if (phase === "idle") {
-    const isFrqPractice = questions.length === 0 && frqs.length > 0;
+    const isFrqPractice = slug === "frq-pdf-practice";
     const selectedCategory = FRQ_CATEGORIES.find((category) => category.unit === selectedFrqUnit);
     return (
       <main className="mx-auto max-w-2xl px-4 py-10">
