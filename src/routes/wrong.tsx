@@ -368,7 +368,7 @@ function WrongBook() {
                       size="sm"
                       variant="ghost"
                       onClick={async () => {
-                        removeWrong(q.id);
+                        if (q.source === "practice") removeWrong(q.id);
                         if (user) {
                           await supabase
                             .from("wrong_questions")
