@@ -18,6 +18,7 @@ export const Route = createFileRoute("/mock/$slug")({
   head: () => ({ meta: [{ title: "真题卷 · AP 微观经济" }] }),
   validateSearch: (search: Record<string, unknown>) => ({
     unit: typeof search.unit === "number" && search.unit >= 1 && search.unit <= 6 ? search.unit : undefined,
+    frq: typeof search.frq === "string" && /^[0-9a-f-]{36}$/i.test(search.frq) ? search.frq : undefined,
   }),
   component: PaperRunner,
 });
@@ -60,7 +61,7 @@ type Frq = {
 
 function PaperRunner() {
   const { slug } = useParams({ from: "/mock/$slug" });
-  const { unit: selectedFrqUnit } = Route.useSearch();
+  const { unit: selectedFrqUnit, frq: selectedFrqId } = Route.useSearch();
   const { user } = useAuth();
   const [paper, setPaper] = useState<Paper | null>(null);
   const [questions, setQuestions] = useState<Q[]>([]);
@@ -176,17 +177,17 @@ function PaperRunner() {
       const qs = ((pqs ?? []) as unknown as Array<{ questions: Q }>).map((row) => row.questions);
       setQuestions(qs);
       const loadedFrqs = (fr ?? []) as Frq[];
-      setFrqs(
-        slug === "frq-pdf-practice" && selectedFrqUnit
-          ? loadedFrqs.filter((item) => getFrqUnit(item.title) === selectedFrqUnit)
-          : loadedFrqs,
-      );
+      setFrqs(slug === "frq-pdf-practice"
+        ? loadedFrqs.filter((item) =>
+            selectedFrqId ? item.id === selectedFrqId : !selectedFrqUnit || getFrqUnit(item.title) === selectedFrqUnit,
+          )
+        : loadedFrqs);
       const d: Record<string, TermInfo> = {};
       (terms ?? []).forEach((t) => (d[t.term_en.toLowerCase()] = t as TermInfo));
       setTermDict(d);
       setLoading(false);
     })();
-  }, [selectedFrqUnit, slug]);
+  }, [selectedFrqId, selectedFrqUnit, slug]);
 
   useEffect(() => {
     if (phase !== "running") return;
@@ -373,9 +374,10 @@ function PaperRunner() {
       <main className="mx-auto max-w-2xl px-4 py-10">
         <Link
           to={isFrqPractice ? "/frq" : "/mock"}
+          search={isFrqPractice && selectedFrqUnit ? { unit: selectedFrqUnit } : undefined}
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
         >
-          <ArrowLeft className="h-3.5 w-3.5" /> {isFrqPractice ? "返回大题分类" : "卷库"}
+          <ArrowLeft className="h-3.5 w-3.5" /> {isFrqPractice ? "返回题目列表" : "卷库"}
         </Link>
         <h1 className="text-2xl font-bold mb-2">
           {selectedCategory ? `Unit ${selectedCategory.unit} · ${selectedCategory.nameZh}` : paper.title}
