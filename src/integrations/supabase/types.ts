@@ -290,6 +290,30 @@ export type Database = {
         }
         Relationships: []
       }
+      mock_exam_starts: {
+        Row: {
+          environment: string
+          exam_key: string
+          id: string
+          started_at: string
+          user_id: string
+        }
+        Insert: {
+          environment: string
+          exam_key: string
+          id?: string
+          started_at?: string
+          user_id: string
+        }
+        Update: {
+          environment?: string
+          exam_key?: string
+          id?: string
+          started_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       mock_papers: {
         Row: {
           break_seconds: number
@@ -614,6 +638,27 @@ export type Database = {
         }
         Relationships: []
       }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
       wrong_questions: {
         Row: {
           added_at: string
@@ -649,12 +694,32 @@ export type Database = {
           used: number
         }[]
       }
+      consume_mock_access: {
+        Args: { p_environment: string; p_exam_key: string; p_user_id: string }
+        Returns: {
+          allowed: boolean
+          is_pro: boolean
+          next_available_at: string
+        }[]
+      }
       has_active_subscription: {
         Args: { check_env?: string; user_uuid: string }
         Returns: boolean
       }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      release_ai_quota: {
+        Args: { p_kind: string; p_user_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
+      app_role: "admin" | "user"
       feedback_category: "bug" | "suggestion"
       feedback_status: "new" | "in_progress" | "resolved"
       question_status: "draft" | "published"
@@ -786,6 +851,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      app_role: ["admin", "user"],
       feedback_category: ["bug", "suggestion"],
       feedback_status: ["new", "in_progress", "resolved"],
       question_status: ["draft", "published"],
