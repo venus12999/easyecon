@@ -269,7 +269,7 @@ function WrongBook() {
                     </ResponsiveContainer>
                   </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground">登录后可显示按天的新增错题趋势。</p>
+                  <div className="h-40 flex items-center justify-center text-muted-foreground text-sm" />
                 )}
               </CardContent>
             </Card>

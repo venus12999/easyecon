@@ -109,9 +109,6 @@ function AuthPage() {
                     {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : tab === "register" ? "注册并登录" : "登录"}
                   </Button>
                 </form>
-                <p className="text-xs text-muted-foreground mt-3 text-center">
-                  每个邮箱只能注册一次。注册即可立即开始刷题。
-                </p>
               </TabsContent>
             </Tabs>
           </CardContent>
