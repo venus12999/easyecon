@@ -189,3 +189,25 @@
   50% { transform: translateY(-6px); }
 }
 
+@keyframes mascot-wave {
+  0%, 100% { transform: translateY(0) rotate(0deg) scale(1); }
+  25% { transform: translateY(-10px) rotate(-9deg) scale(1.06); }
+  50% { transform: translateY(-4px) rotate(9deg) scale(1.03); }
+  75% { transform: translateY(-8px) rotate(-5deg) scale(1.05); }
+}
+
+@keyframes mascot-drag {
+  0%, 100% { transform: rotate(-5deg) scale(1.06); }
+  50% { transform: rotate(5deg) scale(1.1); }
+}
+
+.animate-mascot-float { animation: float 3s ease-in-out infinite; }
+.animate-mascot-wave { animation: mascot-wave 650ms ease-out; }
+.animate-mascot-drag { animation: mascot-drag 360ms ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-mascot-float,
+  .animate-mascot-wave,
+  .animate-mascot-drag { animation: none; }
+}
+

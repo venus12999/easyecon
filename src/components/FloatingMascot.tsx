@@ -37,6 +37,8 @@ export function FloatingMascot() {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [tip, setTip] = useState<string | null>(null);
   const [variant, setVariant] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [action, setAction] = useState(0);
   const dragRef = useRef<{ dx: number; dy: number; moved: boolean } | null>(null);
 
   useEffect(() => {
@@ -74,6 +76,7 @@ export function FloatingMascot() {
   function onPointerDown(e: React.PointerEvent<HTMLImageElement>) {
     if (!pos) return;
     (e.target as HTMLImageElement).setPointerCapture(e.pointerId);
+    setIsDragging(true);
     dragRef.current = { dx: e.clientX - pos.x, dy: e.clientY - pos.y, moved: false };
   }
 
@@ -86,11 +89,14 @@ export function FloatingMascot() {
 
   function onPointerUp(e: React.PointerEvent<HTMLImageElement>) {
     if (!dragRef.current) return;
+    const moved = dragRef.current.moved;
     try { (e.target as HTMLImageElement).releasePointerCapture(e.pointerId); } catch {}
-    if (dragRef.current.moved && pos) {
+    if (moved && pos) {
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(pos)); } catch {}
     }
     dragRef.current = null;
+    setIsDragging(false);
+    if (!moved) setAction((current) => current + 1);
   }
 
   function onDoubleClick() {
@@ -132,6 +138,7 @@ export function FloatingMascot() {
         </aside>
       )}
       <img
+        key={`${variant}-${action}`}
         src={MASCOTS[variant]}
         alt=""
         aria-hidden="true"
@@ -141,7 +148,9 @@ export function FloatingMascot() {
         onPointerCancel={onPointerUp}
         onDoubleClick={onDoubleClick}
         onDragStart={(e) => e.preventDefault()}
-        className="fixed z-50 h-20 w-20 select-none drop-shadow-lg touch-none cursor-grab active:cursor-grabbing"
+        className={`fixed z-50 h-20 w-20 select-none drop-shadow-lg touch-none cursor-grab active:cursor-grabbing ${
+          isDragging ? "animate-mascot-drag" : action > 0 ? "animate-mascot-wave" : "animate-mascot-float"
+        }`}
         style={{ left: pos.x, top: pos.y, imageRendering: "pixelated" }}
       />
     </>
