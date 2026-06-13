@@ -478,16 +478,19 @@ export type Database = {
         Row: {
           added_at: string
           question_id: string
+          source: string
           user_id: string
         }
         Insert: {
           added_at?: string
           question_id: string
+          source?: string
           user_id: string
         }
         Update: {
           added_at?: string
           question_id?: string
+          source?: string
           user_id?: string
         }
         Relationships: []
