@@ -230,14 +230,19 @@ function PaperRunner() {
   }
 
   async function start() {
+    if (!user && slug !== "frq-pdf-practice") {
+      toast.error("请先登录后参加完整模考");
+      return;
+    }
     if (user && slug !== "frq-pdf-practice") {
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
       if (token) {
-        const response = await fetch("/api/membership/mock-access", { headers: { Authorization: `Bearer ${token}` } });
+        const response = await fetch(`/api/membership/mock-access?exam_key=${encodeURIComponent(slug)}`, { headers: { Authorization: `Bearer ${token}` } });
         const access = await response.json();
         if (response.ok && !access.allowed) {
-          toast.error("免费用户每 7 天可参加 1 次模考，可在个人资料页升级会员");
+          const date = access.nextAvailableAt ? new Date(access.nextAvailableAt).toLocaleString() : null;
+          toast.error(date ? `免费用户下次可于 ${date} 参加模考` : "免费用户每 7 天可参加 1 次模考，可在个人资料页升级会员");
           return;
         }
       }

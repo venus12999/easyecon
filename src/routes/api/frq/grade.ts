@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { verifyUserRequest } from "@/lib/user-auth.server";
-import { consumeAiQuota, membershipEnvironment } from "@/lib/membership.server";
+import { consumeAiQuota, membershipEnvironment, releaseAiQuota } from "@/lib/membership.server";
 
 function err(msg: string, status = 400) {
   return new Response(JSON.stringify({ error: msg }), {
@@ -167,17 +167,25 @@ export const Route = createFileRoute("/api/frq/grade")({
             response_format: { type: "json_object" },
           }),
         });
-        if (upstream.status === 429) return err("rate_limited", 429);
-        if (upstream.status === 402) return err("credits_exhausted", 402);
+        if (upstream.status === 429) {
+          await releaseAiQuota(supabaseAdmin, u.userId, "frq_grade");
+          return err("rate_limited", 429);
+        }
+        if (upstream.status === 402) {
+          await releaseAiQuota(supabaseAdmin, u.userId, "frq_grade");
+          return err("credits_exhausted", 402);
+        }
         if (!upstream.ok) {
           const t = await upstream.text();
           console.error("frq grade error", upstream.status, t);
+          await releaseAiQuota(supabaseAdmin, u.userId, "frq_grade");
           return err("ai_failed", 500);
         }
         const data = await upstream.json();
         const raw = String(data?.choices?.[0]?.message?.content ?? "");
         const grade = tryParseJson(raw);
         if (!grade) {
+          await releaseAiQuota(supabaseAdmin, u.userId, "frq_grade");
           return Response.json({
             total_score: 0,
             max_score: maxScore,

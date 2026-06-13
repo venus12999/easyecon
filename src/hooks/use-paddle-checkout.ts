@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { getPaddlePriceId, initializePaddle } from "@/lib/paddle";
+import { toast } from "sonner";
 
 export function usePaddleCheckout() {
   const [loading, setLoading] = useState(false);
@@ -20,6 +21,9 @@ export function usePaddleCheckout() {
           variant: "one-page",
         },
       });
+    } catch (error) {
+      console.error("Unable to open checkout", error);
+      toast.error("暂时无法打开结账，请稍后重试");
     } finally {
       setLoading(false);
     }
