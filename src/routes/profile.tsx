@@ -95,7 +95,6 @@ function ProfilePage() {
               placeholder="给自己取个名字"
               maxLength={40}
             />
-            <p className="text-xs text-muted-foreground">昵称会显示在首页和管理后台。</p>
           </div>
           <div className="space-y-2">
             <Label>登录邮箱</Label>
