@@ -136,11 +136,11 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
         supabase.from("paper_questions").select("paper_id,question_id,sort_order"),
         supabase
           .from("paper_frqs")
-          .select("id,paper_id,sort_order,title,content,image_url,image_text,max_score,rubric_note")
+          .select("id,paper_id,sort_order,title,content,image_url,image_text,max_score")
           .order("sort_order", { ascending: true }),
       ]);
       setPapers(p ?? []);
-      setFrqs((fq ?? []) as FrqRow[]);
+      setFrqs(((fq ?? []) as Omit<FrqRow, "rubric_note">[]).map((frq) => ({ ...frq, rubric_note: null })));
       const m: Record<string, Map<string, number>> = {};
       (pq ?? []).forEach((r: { paper_id: string; question_id: string; sort_order: number }) => {
         (m[r.paper_id] ??= new Map()).set(r.question_id, r.sort_order);
