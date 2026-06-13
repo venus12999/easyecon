@@ -106,7 +106,7 @@ function AuthPage() {
               </TabsList>
               <TabsContent value={tab} className="mt-4">
                 <form onSubmit={onSubmit} className="space-y-3">
-                  {!forgot && <Input
+                  <Input
                     type="email"
                     placeholder="邮箱"
                     value={email}
@@ -114,7 +114,7 @@ function AuthPage() {
                     autoComplete="email"
                     required
                   />
-                  <Input
+                  {!forgot && <Input
                     type="password"
                     placeholder="密码（至少 6 位）"
                     value={password}
