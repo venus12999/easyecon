@@ -16,10 +16,13 @@ import { FRQ_CATEGORIES, getFrqUnit } from "@/lib/frq-categories";
 
 export const Route = createFileRoute("/mock/$slug")({
   head: () => ({ meta: [{ title: "真题卷 · AP 微观经济" }] }),
-  validateSearch: (search: Record<string, unknown>) => ({
-    unit: typeof search.unit === "number" && search.unit >= 1 && search.unit <= 6 ? search.unit : undefined,
-    frq: typeof search.frq === "string" && /^[0-9a-f-]{36}$/i.test(search.frq) ? search.frq : undefined,
-  }),
+  validateSearch: (search: Record<string, unknown>) => {
+    const unit = Number(search.unit);
+    return {
+      unit: Number.isInteger(unit) && unit >= 1 && unit <= 6 ? unit : undefined,
+      frq: typeof search.frq === "string" && /^[0-9a-f-]{36}$/i.test(search.frq) ? search.frq : undefined,
+    };
+  },
   component: PaperRunner,
 });
 
