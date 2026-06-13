@@ -485,7 +485,6 @@ function AskAi({ q }: { q: Q }) {
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-primary" />
           <span className="text-sm font-medium">还有疑问？问 AI</span>
-          <span className="text-xs text-muted-foreground">（仅解释，不会修改正确答案）</span>
         </div>
         <Textarea
           value={input}

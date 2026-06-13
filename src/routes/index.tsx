@@ -403,7 +403,6 @@ function Index() {
                 <div className="text-sm font-semibold flex items-center gap-1">
                   今日打卡 <Flame className="h-4 w-4 text-orange-500" />
                 </div>
-                <div className="text-xs text-muted-foreground">坚持每天一点点</div>
               </div>
             </div>
             <div className="flex-1 grid grid-cols-7 gap-1.5 text-center">
@@ -436,9 +435,6 @@ function Index() {
             <CardContent className="p-5 flex items-center justify-between gap-4">
               <div className="text-sm">
                 <div className="font-semibold">注册后所有进度自动云端保存</div>
-                <div className="text-muted-foreground text-xs mt-1">
-                  每个邮箱仅可注册一次。当前为游客模式。
-                </div>
               </div>
               <Link
                 to="/auth"
