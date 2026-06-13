@@ -138,7 +138,6 @@ export function FloatingMascot() {
         </aside>
       )}
       <img
-        key={`${variant}-${action}`}
         src={MASCOTS[variant]}
         alt=""
         aria-hidden="true"
@@ -147,6 +146,7 @@ export function FloatingMascot() {
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
         onDoubleClick={onDoubleClick}
+        onAnimationEnd={() => setAction(0)}
         onDragStart={(e) => e.preventDefault()}
         className={`fixed z-50 h-20 w-20 select-none drop-shadow-lg touch-none cursor-grab active:cursor-grabbing ${
           isDragging ? "animate-mascot-drag" : action > 0 ? "animate-mascot-wave" : "animate-mascot-float"
