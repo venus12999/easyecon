@@ -17,8 +17,8 @@ export function getFrqUnit(title: string | null) {
   const value = (title ?? "").toLowerCase();
   if (value.includes("basic economic concepts")) return 1;
   if (value.includes("supply and demand")) return 2;
-  if (value.includes("production, cost") || value.includes("perfect competition")) return 3;
   if (value.includes("imperfect competition")) return 4;
+  if (value.includes("production, cost") || value.includes("perfect competition")) return 3;
   if (value.includes("factor markets")) return 5;
   if (value.includes("market failure") || value.includes("role of government")) return 6;
   return null;
