@@ -14,6 +14,7 @@ import {
   ArrowRight,
   Flame,
   Check,
+  SquarePen,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -248,8 +249,11 @@ function Index() {
           )}
         </section>
 
-        {/* 双大卡 */}
-        <section className="grid gap-4 md:grid-cols-2 mb-5">
+        {/* 题型选择 */}
+        <section className="mb-3 flex items-center gap-2 text-xs text-primary font-medium">
+          <Sparkles className="h-3.5 w-3.5" /> 选择刷题类型
+        </section>
+        <section className="grid gap-4 md:grid-cols-3 mb-5">
           <Link
             to={firstKpWithQuestions ? "/practice/$slug" : "/"}
             params={firstKpWithQuestions ? { slug: firstKpWithQuestions.slug } : undefined as never}
@@ -263,14 +267,34 @@ function Index() {
               <ArrowRight className="h-5 w-5 opacity-70 group-hover:translate-x-1 transition-transform" />
             </div>
             <div>
-              <div className="text-2xl font-bold">刷题练习</div>
+              <div className="text-2xl font-bold">选择题</div>
               <div className="text-sm opacity-80 mt-1">
                 {firstKpWithQuestions
                   ? `Unit ${firstKpWithQuestions.unit} · ${firstKpWithQuestions.name_zh}`
                   : "选择知识点开始训练"}
               </div>
               <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/60 backdrop-blur px-4 py-2 text-sm font-medium">
-                继续上次的进度
+                开始刷选择题
+              </div>
+            </div>
+          </Link>
+
+          <Link
+            to="/mock/$slug"
+            params={{ slug: "frq-pdf-practice" }}
+            className="group relative overflow-hidden rounded-2xl border bg-primary/10 p-6 min-h-[230px] flex flex-col justify-between text-foreground shadow-sm hover:shadow-md hover:border-primary/40 transition-all"
+          >
+            <div className="flex items-start justify-between">
+              <div className="h-12 w-12 rounded-2xl bg-primary/15 flex items-center justify-center">
+                <SquarePen className="h-6 w-6 text-primary" />
+              </div>
+              <ArrowRight className="h-5 w-5 text-primary group-hover:translate-x-1 transition-transform" />
+            </div>
+            <div>
+              <div className="text-2xl font-bold">大题</div>
+              <div className="text-sm text-muted-foreground mt-1">FRQ 专项训练 · 按得分点评分</div>
+              <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-primary/15 px-4 py-2 text-sm font-medium text-primary">
+                开始刷大题
               </div>
             </div>
           </Link>
