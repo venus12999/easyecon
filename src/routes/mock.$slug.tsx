@@ -193,6 +193,13 @@ function PaperRunner() {
   }, [selectedFrqId, selectedFrqUnit, slug]);
 
   useEffect(() => {
+    if (!loading && slug === "frq-pdf-practice" && phase === "idle" && frqs.length > 0) {
+      start();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, slug, phase, frqs.length]);
+
+  useEffect(() => {
     if (phase !== "running") return;
     const t = setInterval(() => setSeconds((s) => s + 1), 1000);
     return () => clearInterval(t);
