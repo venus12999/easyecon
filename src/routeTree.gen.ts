@@ -23,6 +23,7 @@ import { Route as MockSlugRouteImport } from './routes/mock.$slug'
 import { Route as ApiMembershipRouteImport } from './routes/api/membership'
 import { Route as ApiFeedbackRouteImport } from './routes/api/feedback'
 import { Route as ApiAiExplainRouteImport } from './routes/api/ai-explain'
+import { Route as ApiMembershipMockAccessRouteImport } from './routes/api/membership/mock-access'
 import { Route as ApiFrqUploadRouteImport } from './routes/api/frq/upload'
 import { Route as ApiFrqGradeRouteImport } from './routes/api/frq/grade'
 import { Route as ApiAdminUsersRouteImport } from './routes/api/admin/users'
@@ -106,6 +107,11 @@ const ApiAiExplainRoute = ApiAiExplainRouteImport.update({
   path: '/api/ai-explain',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiMembershipMockAccessRoute = ApiMembershipMockAccessRouteImport.update({
+  id: '/mock-access',
+  path: '/mock-access',
+  getParentRoute: () => ApiMembershipRoute,
+} as any)
 const ApiFrqUploadRoute = ApiFrqUploadRouteImport.update({
   id: '/api/frq/upload',
   path: '/api/frq/upload',
@@ -178,7 +184,7 @@ export interface FileRoutesByFullPath {
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/api/feedback': typeof ApiFeedbackRoute
-  '/api/membership': typeof ApiMembershipRoute
+  '/api/membership': typeof ApiMembershipRouteWithChildren
   '/mock/$slug': typeof MockSlugRoute
   '/mock/random': typeof MockRandomRoute
   '/practice/$slug': typeof PracticeSlugRoute
@@ -194,6 +200,7 @@ export interface FileRoutesByFullPath {
   '/api/admin/users': typeof ApiAdminUsersRoute
   '/api/frq/grade': typeof ApiFrqGradeRoute
   '/api/frq/upload': typeof ApiFrqUploadRoute
+  '/api/membership/mock-access': typeof ApiMembershipMockAccessRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
 }
 export interface FileRoutesByTo {
@@ -206,7 +213,7 @@ export interface FileRoutesByTo {
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/api/feedback': typeof ApiFeedbackRoute
-  '/api/membership': typeof ApiMembershipRoute
+  '/api/membership': typeof ApiMembershipRouteWithChildren
   '/mock/$slug': typeof MockSlugRoute
   '/mock/random': typeof MockRandomRoute
   '/practice/$slug': typeof PracticeSlugRoute
@@ -222,6 +229,7 @@ export interface FileRoutesByTo {
   '/api/admin/users': typeof ApiAdminUsersRoute
   '/api/frq/grade': typeof ApiFrqGradeRoute
   '/api/frq/upload': typeof ApiFrqUploadRoute
+  '/api/membership/mock-access': typeof ApiMembershipMockAccessRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
 }
 export interface FileRoutesById {
@@ -235,7 +243,7 @@ export interface FileRoutesById {
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/api/feedback': typeof ApiFeedbackRoute
-  '/api/membership': typeof ApiMembershipRoute
+  '/api/membership': typeof ApiMembershipRouteWithChildren
   '/mock/$slug': typeof MockSlugRoute
   '/mock/random': typeof MockRandomRoute
   '/practice/$slug': typeof PracticeSlugRoute
@@ -251,6 +259,7 @@ export interface FileRoutesById {
   '/api/admin/users': typeof ApiAdminUsersRoute
   '/api/frq/grade': typeof ApiFrqGradeRoute
   '/api/frq/upload': typeof ApiFrqUploadRoute
+  '/api/membership/mock-access': typeof ApiMembershipMockAccessRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
 }
 export interface FileRouteTypes {
@@ -281,6 +290,7 @@ export interface FileRouteTypes {
     | '/api/admin/users'
     | '/api/frq/grade'
     | '/api/frq/upload'
+    | '/api/membership/mock-access'
     | '/api/public/payments/webhook'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -309,6 +319,7 @@ export interface FileRouteTypes {
     | '/api/admin/users'
     | '/api/frq/grade'
     | '/api/frq/upload'
+    | '/api/membership/mock-access'
     | '/api/public/payments/webhook'
   id:
     | '__root__'
@@ -337,6 +348,7 @@ export interface FileRouteTypes {
     | '/api/admin/users'
     | '/api/frq/grade'
     | '/api/frq/upload'
+    | '/api/membership/mock-access'
     | '/api/public/payments/webhook'
   fileRoutesById: FileRoutesById
 }
@@ -350,7 +362,7 @@ export interface RootRouteChildren {
   WrongRoute: typeof WrongRoute
   ApiAiExplainRoute: typeof ApiAiExplainRoute
   ApiFeedbackRoute: typeof ApiFeedbackRoute
-  ApiMembershipRoute: typeof ApiMembershipRoute
+  ApiMembershipRoute: typeof ApiMembershipRouteWithChildren
   MockSlugRoute: typeof MockSlugRoute
   MockRandomRoute: typeof MockRandomRoute
   PracticeSlugRoute: typeof PracticeSlugRoute
@@ -469,6 +481,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAiExplainRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/membership/mock-access': {
+      id: '/api/membership/mock-access'
+      path: '/mock-access'
+      fullPath: '/api/membership/mock-access'
+      preLoaderRoute: typeof ApiMembershipMockAccessRouteImport
+      parentRoute: typeof ApiMembershipRoute
+    }
     '/api/frq/upload': {
       id: '/api/frq/upload'
       path: '/api/frq/upload'
@@ -556,6 +575,18 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface ApiMembershipRouteChildren {
+  ApiMembershipMockAccessRoute: typeof ApiMembershipMockAccessRoute
+}
+
+const ApiMembershipRouteChildren: ApiMembershipRouteChildren = {
+  ApiMembershipMockAccessRoute: ApiMembershipMockAccessRoute,
+}
+
+const ApiMembershipRouteWithChildren = ApiMembershipRoute._addFileChildren(
+  ApiMembershipRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
@@ -566,7 +597,7 @@ const rootRouteChildren: RootRouteChildren = {
   WrongRoute: WrongRoute,
   ApiAiExplainRoute: ApiAiExplainRoute,
   ApiFeedbackRoute: ApiFeedbackRoute,
-  ApiMembershipRoute: ApiMembershipRoute,
+  ApiMembershipRoute: ApiMembershipRouteWithChildren,
   MockSlugRoute: MockSlugRoute,
   MockRandomRoute: MockRandomRoute,
   PracticeSlugRoute: PracticeSlugRoute,
