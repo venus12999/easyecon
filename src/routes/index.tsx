@@ -12,7 +12,6 @@ import {
   BarChart3,
   Library,
   ArrowRight,
-  Lightbulb,
   Flame,
   Check,
 } from "lucide-react";
@@ -332,8 +331,8 @@ function Index() {
           />
         </section>
 
-        {/* 打卡 + Tip */}
-        <section className="grid gap-3 lg:grid-cols-[1.4fr_1fr] mb-8">
+        {/* 打卡 */}
+        <section className="mb-8">
           <div className="rounded-2xl border bg-card p-4 flex items-center gap-5">
             <div className="flex items-center gap-3 pr-4 border-r">
               <div className="text-3xl font-bold">{stats.today > 0 ? "+1" : "0"}</div>
@@ -365,17 +364,6 @@ function Index() {
                   </div>
                 );
               })}
-            </div>
-          </div>
-          <div className="rounded-2xl border bg-card p-4 flex items-start gap-3">
-            <div className="h-9 w-9 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
-              <Lightbulb className="h-5 w-5 text-amber-500" />
-            </div>
-            <div className="text-sm">
-              <div className="font-semibold mb-1">今日小贴士</div>
-              <div className="text-muted-foreground">
-                读图题先看坐标轴和曲线方向，再去判断价格/数量的变化。
-              </div>
             </div>
           </div>
         </section>
