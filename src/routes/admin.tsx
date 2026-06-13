@@ -1137,11 +1137,16 @@ function UsersPanel({ token }: { token: string }) {
   const [loading, setLoading] = useState(true);
   const [grantDays, setGrantDays] = useState("30");
 
-  useEffect(() => {
-    fetch("/api/admin/users", { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => r.json())
-      .then((j) => { setUsers(j.users ?? []); setLoading(false); });
+  const loadUsers = useCallback(async () => {
+    const response = await fetch("/api/admin/users", { headers: { Authorization: `Bearer ${token}` } });
+    const result = await response.json();
+    setUsers(result.users ?? []);
+    setLoading(false);
   }, [token]);
+
+  useEffect(() => {
+    void loadUsers();
+  }, [loadUsers]);
 
   async function open(uid: string) {
     setPicked(uid);
@@ -1161,7 +1166,7 @@ function UsersPanel({ token }: { token: string }) {
     });
     if (!response.ok) return toast.error("开通失败");
     toast.success(`已赠送 ${days} 天 Pro 会员`);
-    await open(picked);
+    await Promise.all([open(picked), loadUsers()]);
   }
 
   if (loading) return <div className="text-sm text-muted-foreground">加载中…</div>;
@@ -1182,7 +1187,7 @@ function UsersPanel({ token }: { token: string }) {
                 <div className="text-xs text-muted-foreground truncate">{u.email}</div>
                  <div className="mt-1 text-xs font-medium text-primary">
                    {(u.gifted_until && new Date(u.gifted_until).getTime() > Date.now()) ||
-                   (u.subscription && ["active", "trialing", "past_due", "canceled"].includes(u.subscription.status) && (!u.subscription.current_period_end || new Date(u.subscription.current_period_end).getTime() > Date.now()))
+                    (u.subscription && ["active", "trialing", "canceled"].includes(u.subscription.status) && (!u.subscription.current_period_end || new Date(u.subscription.current_period_end).getTime() > Date.now()))
                      ? "Pro 会员"
                      : "免费用户"}
                  </div>
