@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { verifyAdminRequest } from "@/lib/admin-auth.server";
+import { verifyUserRequest } from "@/lib/user-auth.server";
 import { z } from "zod";
 
 export const Route = createFileRoute("/api/admin/users")({
@@ -89,7 +90,8 @@ export const Route = createFileRoute("/api/admin/users")({
          return Response.json({ profile, attempts, mocks, wrongs, questions: qMap, subscriptions, usage, adjustments });
       },
        POST: async ({ request }) => {
-         const admin = await verifyAdminRequest(request);
+         if (!(await verifyAdminRequest(request))) return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
+         const admin = await verifyUserRequest(request);
          if (!admin) return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
          const parsed = z.object({
            user_id: z.string().uuid(),
