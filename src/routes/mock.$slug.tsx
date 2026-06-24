@@ -81,6 +81,9 @@ function PaperRunner() {
   const [frqGrades, setFrqGrades] = useState<Record<string, GradeResult>>({});
   const [grading, setGrading] = useState<Record<string, boolean>>({});
   const [frqSubmitted, setFrqSubmitted] = useState(false);
+  const [draftSaving, setDraftSaving] = useState<Record<string, boolean>>({});
+  const [draftSavedAt, setDraftSavedAt] = useState<Record<string, number>>({});
+  const [draftHydrated, setDraftHydrated] = useState(false);
   const [answers, setAnswers] = useState<Record<string, OptKey>>({});
   const [idx, setIdx] = useState(0);
   const [seconds, setSeconds] = useState(0);
@@ -199,6 +202,134 @@ function PaperRunner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, slug, phase, frqs.length]);
 
+  // 加载已提交的评分与未提交的草稿，确保下次登录可继续
+  useEffect(() => {
+    if (!user || !paper || frqs.length === 0) {
+      setDraftHydrated(true);
+      return;
+    }
+    setDraftHydrated(false);
+    const frqIds = frqs.map((f) => f.id);
+    void Promise.all([
+      supabase
+        .from("frq_submissions")
+        .select("frq_id,ai_score,ai_max_score,ai_breakdown,ai_overall,ai_suggestions,answer_text,answer_file_url,answer_file_kind,created_at")
+        .eq("user_id", user.id)
+        .eq("paper_id", paper.id)
+        .in("frq_id", frqIds)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("frq_drafts")
+        .select("frq_id,answer_text,answer_file_url,answer_file_kind,answer_file_name")
+        .eq("user_id", user.id)
+        .eq("paper_id", paper.id)
+        .in("frq_id", frqIds),
+    ]).then(([subRes, draftRes]) => {
+      const grades: Record<string, GradeResult> = {};
+      const answersFromSubs: Record<string, FrqAnswerState> = {};
+      const submitted = new Set<string>();
+      ((subRes.data ?? []) as Array<{
+        frq_id: string;
+        ai_score: number | null;
+        ai_max_score: number | null;
+        ai_breakdown: GradeResult["breakdown"] | null;
+        ai_overall: string | null;
+        ai_suggestions: string | null;
+        answer_text: string | null;
+        answer_file_url: string | null;
+        answer_file_kind: FrqAnswerState["fileKind"];
+      }>).forEach((r) => {
+        if (submitted.has(r.frq_id)) return;
+        submitted.add(r.frq_id);
+        if (r.ai_score != null && r.ai_max_score != null) {
+          grades[r.frq_id] = {
+            total_score: r.ai_score,
+            max_score: r.ai_max_score,
+            breakdown: r.ai_breakdown ?? [],
+            overall_comment: r.ai_overall ?? "",
+            suggestions: r.ai_suggestions ?? "",
+          };
+        }
+        answersFromSubs[r.frq_id] = {
+          text: r.answer_text ?? "",
+          fileUrl: r.answer_file_url,
+          fileKind: r.answer_file_kind,
+          fileName: null,
+        };
+      });
+      const answersFromDrafts: Record<string, FrqAnswerState> = {};
+      ((draftRes.data ?? []) as Array<{
+        frq_id: string;
+        answer_text: string | null;
+        answer_file_url: string | null;
+        answer_file_kind: FrqAnswerState["fileKind"];
+        answer_file_name: string | null;
+      }>).forEach((r) => {
+        if (submitted.has(r.frq_id)) return;
+        answersFromDrafts[r.frq_id] = {
+          text: r.answer_text ?? "",
+          fileUrl: r.answer_file_url,
+          fileKind: r.answer_file_kind,
+          fileName: r.answer_file_name,
+        };
+      });
+      setFrqGrades(grades);
+      setFrqAnswers({ ...answersFromSubs, ...answersFromDrafts });
+      setDraftHydrated(true);
+      const hasDraft = Object.keys(answersFromDrafts).length > 0;
+      if (hasDraft) toast.success("已恢复上次未完成的草稿");
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, paper?.id, frqs.length]);
+
+  // 自动保存草稿（去抖 800ms）
+  useEffect(() => {
+    if (!user || !paper || !draftHydrated || phase !== "frq") return;
+    const handles: Array<ReturnType<typeof setTimeout>> = [];
+    frqs.forEach((f) => {
+      if (frqGrades[f.id]) return; // 已评分不再保存草稿
+      const ans = frqAnswers[f.id];
+      if (!ans) return;
+      const t = setTimeout(() => {
+        setDraftSaving((s) => ({ ...s, [f.id]: true }));
+        const hasContent = !!(ans.text?.trim() || ans.fileUrl);
+        if (!hasContent) {
+          void supabase
+            .from("frq_drafts")
+            .delete()
+            .eq("user_id", user.id)
+            .eq("frq_id", f.id)
+            .then(() => {
+              setDraftSaving((s) => ({ ...s, [f.id]: false }));
+            });
+        } else {
+          void supabase
+            .from("frq_drafts")
+            .upsert(
+              {
+                user_id: user.id,
+                paper_id: paper.id,
+                frq_id: f.id,
+                answer_text: ans.text || null,
+                answer_file_url: ans.fileUrl,
+                answer_file_kind: ans.fileKind,
+                answer_file_name: ans.fileName,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: "user_id,frq_id" },
+            )
+            .then(({ error }) => {
+              setDraftSaving((s) => ({ ...s, [f.id]: false }));
+              if (!error) setDraftSavedAt((s) => ({ ...s, [f.id]: Date.now() }));
+            });
+        }
+      }, 800);
+      handles.push(t);
+    });
+    return () => handles.forEach((h) => clearTimeout(h));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [frqAnswers, draftHydrated, phase, user?.id, paper?.id]);
+
   useEffect(() => {
     if (phase !== "running") return;
     const t = setInterval(() => setSeconds((s) => s + 1), 1000);
@@ -214,8 +345,12 @@ function PaperRunner() {
     setAnswers({});
     setIdx(0);
     setSeconds(0);
-    setFrqAnswers({});
-    setFrqGrades({});
+    // 仅当存在选择题（即非 FRQ-only 卷）时清空 FRQ 状态；
+    // FRQ 整卷会从草稿与已有评分恢复，不能清空
+    if (questions.length > 0) {
+      setFrqAnswers({});
+      setFrqGrades({});
+    }
     setFrqSubmitted(false);
     if (paper) {
       setBreakSeconds(paper.break_seconds ?? 600);
@@ -363,6 +498,14 @@ function PaperRunner() {
       }
       const grade = (await r.json()) as GradeResult;
       setFrqGrades((g) => ({ ...g, [f.id]: grade }));
+      // 评分成功，删除草稿
+      if (user) {
+        void supabase
+          .from("frq_drafts")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("frq_id", f.id);
+      }
       return true;
     } catch {
       toast.error("AI 评分失败，请检查网络后重试");
@@ -570,6 +713,8 @@ function PaperRunner() {
         {frqs.map((f, i) => {
           const ans = frqAnswers[f.id] ?? EMPTY_ANSWER;
           const grade = frqGrades[f.id];
+          const saving = draftSaving[f.id];
+          const savedAt = draftSavedAt[f.id];
           return (
             <Card key={f.id}>
               <CardContent className="p-5 space-y-4">
@@ -577,6 +722,11 @@ function PaperRunner() {
                   Question {i + 1}
                   {f.title ? ` · ${f.title}` : ""}
                   <span className="ml-2 text-xs text-muted-foreground">满分 {f.max_score} 分</span>
+                  {user && !grade && (
+                    <span className="ml-2 text-[11px] text-muted-foreground font-normal">
+                      {saving ? "保存中…" : savedAt ? "已自动保存" : ans.text || ans.fileUrl ? "已恢复草稿" : ""}
+                    </span>
+                  )}
                 </div>
                 <div
                   onMouseUp={(e) => onHighlightableMouseUp(e.currentTarget)}

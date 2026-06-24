@@ -29,6 +29,7 @@ import { Route as LegalPrivacyRouteImport } from './routes/legal.privacy'
 import { Route as ApiMembershipRouteImport } from './routes/api/membership'
 import { Route as ApiFeedbackRouteImport } from './routes/api/feedback'
 import { Route as ApiAiExplainRouteImport } from './routes/api/ai-explain'
+import { Route as FrqReviewSlugRouteImport } from './routes/frq.review.$slug'
 import { Route as ApiMembershipMockAccessRouteImport } from './routes/api/membership/mock-access'
 import { Route as ApiFrqUploadRouteImport } from './routes/api/frq/upload'
 import { Route as ApiFrqGradeRouteImport } from './routes/api/frq/grade'
@@ -143,6 +144,11 @@ const ApiAiExplainRoute = ApiAiExplainRouteImport.update({
   path: '/api/ai-explain',
   getParentRoute: () => rootRouteImport,
 } as any)
+const FrqReviewSlugRoute = FrqReviewSlugRouteImport.update({
+  id: '/review/$slug',
+  path: '/review/$slug',
+  getParentRoute: () => FrqRoute,
+} as any)
 const ApiMembershipMockAccessRoute = ApiMembershipMockAccessRouteImport.update({
   id: '/mock-access',
   path: '/mock-access',
@@ -214,7 +220,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
-  '/frq': typeof FrqRoute
+  '/frq': typeof FrqRouteWithChildren
   '/pricing': typeof PricingRoute
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -243,13 +249,14 @@ export interface FileRoutesByFullPath {
   '/api/frq/grade': typeof ApiFrqGradeRoute
   '/api/frq/upload': typeof ApiFrqUploadRoute
   '/api/membership/mock-access': typeof ApiMembershipMockAccessRoute
+  '/frq/review/$slug': typeof FrqReviewSlugRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
-  '/frq': typeof FrqRoute
+  '/frq': typeof FrqRouteWithChildren
   '/pricing': typeof PricingRoute
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -278,6 +285,7 @@ export interface FileRoutesByTo {
   '/api/frq/grade': typeof ApiFrqGradeRoute
   '/api/frq/upload': typeof ApiFrqUploadRoute
   '/api/membership/mock-access': typeof ApiMembershipMockAccessRoute
+  '/frq/review/$slug': typeof FrqReviewSlugRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
 }
 export interface FileRoutesById {
@@ -285,7 +293,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
-  '/frq': typeof FrqRoute
+  '/frq': typeof FrqRouteWithChildren
   '/pricing': typeof PricingRoute
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -314,6 +322,7 @@ export interface FileRoutesById {
   '/api/frq/grade': typeof ApiFrqGradeRoute
   '/api/frq/upload': typeof ApiFrqUploadRoute
   '/api/membership/mock-access': typeof ApiMembershipMockAccessRoute
+  '/frq/review/$slug': typeof FrqReviewSlugRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
 }
 export interface FileRouteTypes {
@@ -351,6 +360,7 @@ export interface FileRouteTypes {
     | '/api/frq/grade'
     | '/api/frq/upload'
     | '/api/membership/mock-access'
+    | '/frq/review/$slug'
     | '/api/public/payments/webhook'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -386,6 +396,7 @@ export interface FileRouteTypes {
     | '/api/frq/grade'
     | '/api/frq/upload'
     | '/api/membership/mock-access'
+    | '/frq/review/$slug'
     | '/api/public/payments/webhook'
   id:
     | '__root__'
@@ -421,6 +432,7 @@ export interface FileRouteTypes {
     | '/api/frq/grade'
     | '/api/frq/upload'
     | '/api/membership/mock-access'
+    | '/frq/review/$slug'
     | '/api/public/payments/webhook'
   fileRoutesById: FileRoutesById
 }
@@ -428,7 +440,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
   AuthRoute: typeof AuthRoute
-  FrqRoute: typeof FrqRoute
+  FrqRoute: typeof FrqRouteWithChildren
   PricingRoute: typeof PricingRoute
   ProfileRoute: typeof ProfileRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
@@ -601,6 +613,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAiExplainRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/frq/review/$slug': {
+      id: '/frq/review/$slug'
+      path: '/review/$slug'
+      fullPath: '/frq/review/$slug'
+      preLoaderRoute: typeof FrqReviewSlugRouteImport
+      parentRoute: typeof FrqRoute
+    }
     '/api/membership/mock-access': {
       id: '/api/membership/mock-access'
       path: '/mock-access'
@@ -695,6 +714,16 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface FrqRouteChildren {
+  FrqReviewSlugRoute: typeof FrqReviewSlugRoute
+}
+
+const FrqRouteChildren: FrqRouteChildren = {
+  FrqReviewSlugRoute: FrqReviewSlugRoute,
+}
+
+const FrqRouteWithChildren = FrqRoute._addFileChildren(FrqRouteChildren)
+
 interface ApiMembershipRouteChildren {
   ApiMembershipMockAccessRoute: typeof ApiMembershipMockAccessRoute
 }
@@ -711,7 +740,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
   AuthRoute: AuthRoute,
-  FrqRoute: FrqRoute,
+  FrqRoute: FrqRouteWithChildren,
   PricingRoute: PricingRoute,
   ProfileRoute: ProfileRoute,
   ResetPasswordRoute: ResetPasswordRoute,
