@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import mascot1Url from "@/assets/mascot.png";
 import mascot2Url from "@/assets/mascot2.png";
+import mascot3Url from "@/assets/mascot3.png";
 import { Button } from "@/components/ui/button";
 
-const MASCOTS = [mascot1Url, mascot2Url];
+const MASCOTS = [mascot1Url, mascot2Url, mascot3Url];
 const MASCOT_KEY = "mascot-variant-v1";
 
 const SIZE = 80;
