@@ -25,6 +25,7 @@ function MockLibrary() {
     supabase
       .from("mock_papers")
       .select("id,slug,title,year,total_seconds,description")
+      .not("slug", "like", "frq-%")
       .order("sort_order", { ascending: true })
       .order("year", { ascending: false })
       .then(({ data }) => setPapers((data ?? []) as Paper[]));
