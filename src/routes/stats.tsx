@@ -17,6 +17,9 @@ import {
   Cell,
 } from "recharts";
 import { BarChart3, Target, Flame, BookOpen, SquarePen, ArrowRight, CheckCircle2, XCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Info, RefreshCw, CheckCircle, AlertTriangle } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/stats")({
   head: () => ({
@@ -52,6 +55,15 @@ function StatsPage() {
   const [frqs, setFrqs] = useState<Frq[]>([]);
   const [mocks, setMocks] = useState<Mock[]>([]);
   const [wrongCount, setWrongCount] = useState(0);
+  const [verifying, setVerifying] = useState(false);
+  const [verifyResult, setVerifyResult] = useState<
+    | null
+    | {
+        at: string;
+        ok: boolean;
+        rows: { name: string; ui: string; db: string; pass: boolean; note?: string }[];
+      }
+  >(null);
 
   useEffect(() => {
     if (!user) {
@@ -202,6 +214,78 @@ function StatsPage() {
   const mockBest = mocks.length
     ? Math.max(...mocks.map((m) => (m.total ? Math.round((m.correct / m.total) * 100) : 0)))
     : null;
+
+  async function runVerify() {
+    if (!user) return;
+    setVerifying(true);
+    try {
+      // 重新独立查询，避免使用页面缓存
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      const [totalRes, correctRes, allDatesRes] = await Promise.all([
+        supabase
+          .from("answer_attempts")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id),
+        supabase
+          .from("answer_attempts")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .eq("is_correct", true),
+        supabase
+          .from("answer_attempts")
+          .select("created_at")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false })
+          .limit(2000),
+      ]);
+      const dbTotal = totalRes.count ?? 0;
+      const dbCorrect = correctRes.count ?? 0;
+      const dbRate = dbTotal ? Math.round((dbCorrect / dbTotal) * 100) : 0;
+      const dates = (allDatesRes.data ?? []).map((r: { created_at: string }) =>
+        dayKey(new Date(r.created_at)),
+      );
+      const dbDaySet = new Set(dates);
+      let dbStreak = 0;
+      const cur = new Date(startOfToday);
+      if (!dbDaySet.has(dayKey(cur))) cur.setDate(cur.getDate() - 1);
+      while (dbDaySet.has(dayKey(cur))) {
+        dbStreak += 1;
+        cur.setDate(cur.getDate() - 1);
+      }
+      const rows = [
+        {
+          name: "累计答题",
+          ui: String(total),
+          db: String(dbTotal),
+          pass: total === dbTotal,
+          note: "来源：answer_attempts 行数",
+        },
+        {
+          name: "总体正确率",
+          ui: total ? `${rate}%` : "—",
+          db: dbTotal ? `${dbRate}%` : "—",
+          pass: rate === dbRate && total === dbTotal,
+          note: "来源：is_correct=true 行数 ÷ 总行数",
+        },
+        {
+          name: "连续打卡天数",
+          ui: `${streak} 天`,
+          db: `${dbStreak} 天`,
+          pass: streak === dbStreak,
+          note: "来源：按 created_at 日期去重后从今天向前数",
+        },
+      ];
+      const ok = rows.every((r) => r.pass);
+      setVerifyResult({ at: new Date().toLocaleTimeString(), ok, rows });
+      if (ok) toast.success("校验通过：3 项指标与数据库一致");
+      else toast.error("发现差异，请查看校验明细");
+    } catch (e) {
+      toast.error("校验失败：" + (e as Error).message);
+    } finally {
+      setVerifying(false);
+    }
+  }
 
   if (authLoading) {
     return <main className="mx-auto max-w-6xl px-4 py-10">加载中…</main>;
@@ -398,6 +482,102 @@ function StatsPage() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* 数据口径 / 校验 */}
+      <Card>
+        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+          <div>
+            <CardTitle className="text-base flex items-center gap-1.5">
+              <Info className="h-4 w-4 text-primary" /> 数据口径 / 来源说明
+            </CardTitle>
+            <CardDescription>所有数字均按当前登录账号实时计算，无缓存</CardDescription>
+          </div>
+          <Button size="sm" onClick={runVerify} disabled={verifying} className="shrink-0">
+            <RefreshCw className={`h-4 w-4 ${verifying ? "animate-spin" : ""}`} />
+            {verifying ? "校验中…" : "一键校验"}
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-4 text-sm">
+          <ul className="space-y-1.5 text-muted-foreground leading-relaxed">
+            <li>
+              <span className="text-foreground font-medium">累计答题</span>：来自 <code>answer_attempts</code>{" "}
+              表中当前用户的全部答题行数。
+            </li>
+            <li>
+              <span className="text-foreground font-medium">总体正确率</span>：<code>is_correct = true</code>{" "}
+              的行数 ÷ 总行数，四舍五入到整数百分比。
+            </li>
+            <li>
+              <span className="text-foreground font-medium">连续打卡天数</span>
+              ：按 <code>created_at</code> 当日是否有答题，从今天向前连续累计；今天未答题则从昨天起算。
+            </li>
+            <li>
+              <span className="text-foreground font-medium">14 天趋势 / Unit 正确率 / 知识点表现</span>
+              ：均由同一份 <code>answer_attempts</code> 数据按日期或 <code>knowledge_point_id</code> 聚合得出。
+            </li>
+            <li>
+              <span className="text-foreground font-medium">FRQ / 模拟卷</span>：分别来自{" "}
+              <code>frq_submissions</code>（AI 得分率）与 <code>mock_attempts</code>（最高正确率）。
+            </li>
+            <li>
+              <span className="text-foreground font-medium">错题本</span>：<code>wrong_questions</code> 表当前用户的去重数。
+            </li>
+          </ul>
+
+          {verifyResult && (
+            <div
+              className={`rounded-lg border p-3 ${
+                verifyResult.ok ? "border-emerald-500/40 bg-emerald-500/5" : "border-amber-500/40 bg-amber-500/5"
+              }`}
+            >
+              <div className="flex items-center gap-2 text-sm font-medium">
+                {verifyResult.ok ? (
+                  <CheckCircle className="h-4 w-4 text-emerald-600" />
+                ) : (
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                )}
+                {verifyResult.ok ? "全部一致" : "发现差异"}
+                <span className="text-xs text-muted-foreground ml-1">({verifyResult.at})</span>
+              </div>
+              <div className="mt-2 overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="text-muted-foreground">
+                    <tr className="text-left">
+                      <th className="py-1 pr-3 font-medium">指标</th>
+                      <th className="py-1 pr-3 font-medium">页面显示</th>
+                      <th className="py-1 pr-3 font-medium">数据库实时</th>
+                      <th className="py-1 font-medium">结果</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {verifyResult.rows.map((r) => (
+                      <tr key={r.name} className="border-t">
+                        <td className="py-1.5 pr-3">
+                          <div className="font-medium text-foreground">{r.name}</div>
+                          {r.note && <div className="text-[11px] text-muted-foreground">{r.note}</div>}
+                        </td>
+                        <td className="py-1.5 pr-3 tabular-nums">{r.ui}</td>
+                        <td className="py-1.5 pr-3 tabular-nums">{r.db}</td>
+                        <td className="py-1.5">
+                          {r.pass ? (
+                            <span className="inline-flex items-center gap-1 text-emerald-600">
+                              <CheckCircle className="h-3.5 w-3.5" /> 通过
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-amber-600">
+                              <AlertTriangle className="h-3.5 w-3.5" /> 不一致
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </CardContent>
