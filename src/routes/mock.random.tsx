@@ -456,7 +456,14 @@ function Mock() {
             </div>
           )}
           <div className="mb-4 flex items-center justify-between">
-            <div className="text-sm text-muted-foreground">{idx + 1} / {questions.length}</div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span>{idx + 1} / {questions.length}</span>
+              {frqs.length > 0 && (
+                <span className="rounded-full border border-primary/30 bg-primary/5 px-2 py-0.5 text-[11px] font-medium text-primary">
+                  Section II 待命 · {frqs.length} 道大题
+                </span>
+              )}
+            </div>
             <div className={`flex items-center gap-1.5 text-sm font-mono ${lowTime ? "text-destructive font-bold" : ""}`}>
               <Clock className={`h-4 w-4 ${lowTime ? "text-destructive" : "text-primary"}`} />
               {mm}:{ss}
@@ -508,11 +515,24 @@ function Mock() {
             <Button variant="outline" onClick={() => setIdx(Math.max(0, idx - 1))} disabled={idx === 0}>
               上一题
             </Button>
-            {idx < questions.length - 1 ? (
-              <Button onClick={() => setIdx(idx + 1)}>下一题</Button>
-            ) : (
-              <Button onClick={submit}>交卷</Button>
-            )}
+            <div className="flex items-center gap-2">
+              {idx < questions.length - 1 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    if (confirm(`确认提前交卷？已作答 ${Object.keys(answers).length}/${questions.length}，未答按错处理，随后进入 Section II 大题。`)) submit();
+                  }}
+                >
+                  提前交卷 → 大题
+                </Button>
+              )}
+              {idx < questions.length - 1 ? (
+                <Button onClick={() => setIdx(idx + 1)}>下一题</Button>
+              ) : (
+                <Button onClick={submit}>交卷 → 进入大题</Button>
+              )}
+            </div>
           </div>
         </main>
       </div>
