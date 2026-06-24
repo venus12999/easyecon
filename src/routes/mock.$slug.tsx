@@ -345,8 +345,12 @@ function PaperRunner() {
     setAnswers({});
     setIdx(0);
     setSeconds(0);
-    setFrqAnswers({});
-    setFrqGrades({});
+    // 仅当存在选择题（即非 FRQ-only 卷）时清空 FRQ 状态；
+    // FRQ 整卷会从草稿与已有评分恢复，不能清空
+    if (questions.length > 0) {
+      setFrqAnswers({});
+      setFrqGrades({});
+    }
     setFrqSubmitted(false);
     if (paper) {
       setBreakSeconds(paper.break_seconds ?? 600);
