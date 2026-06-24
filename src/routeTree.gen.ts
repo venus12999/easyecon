@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WrongRouteImport } from './routes/wrong'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as StatsRouteImport } from './routes/stats'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as PricingRouteImport } from './routes/pricing'
@@ -50,6 +51,11 @@ const WrongRoute = WrongRouteImport.update({
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StatsRoute = StatsRouteImport.update({
+  id: '/stats',
+  path: '/stats',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -212,6 +218,7 @@ export interface FileRoutesByFullPath {
   '/pricing': typeof PricingRoute
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/stats': typeof StatsRoute
   '/terms': typeof TermsRoute
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
@@ -246,6 +253,7 @@ export interface FileRoutesByTo {
   '/pricing': typeof PricingRoute
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/stats': typeof StatsRoute
   '/terms': typeof TermsRoute
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
@@ -281,6 +289,7 @@ export interface FileRoutesById {
   '/pricing': typeof PricingRoute
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/stats': typeof StatsRoute
   '/terms': typeof TermsRoute
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
@@ -317,6 +326,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/profile'
     | '/reset-password'
+    | '/stats'
     | '/terms'
     | '/wrong'
     | '/api/ai-explain'
@@ -351,6 +361,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/profile'
     | '/reset-password'
+    | '/stats'
     | '/terms'
     | '/wrong'
     | '/api/ai-explain'
@@ -385,6 +396,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/profile'
     | '/reset-password'
+    | '/stats'
     | '/terms'
     | '/wrong'
     | '/api/ai-explain'
@@ -420,6 +432,7 @@ export interface RootRouteChildren {
   PricingRoute: typeof PricingRoute
   ProfileRoute: typeof ProfileRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  StatsRoute: typeof StatsRoute
   TermsRoute: typeof TermsRoute
   WrongRoute: typeof WrongRoute
   ApiAiExplainRoute: typeof ApiAiExplainRoute
@@ -460,6 +473,13 @@ declare module '@tanstack/react-router' {
       path: '/terms'
       fullPath: '/terms'
       preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/stats': {
+      id: '/stats'
+      path: '/stats'
+      fullPath: '/stats'
+      preLoaderRoute: typeof StatsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reset-password': {
@@ -695,6 +715,7 @@ const rootRouteChildren: RootRouteChildren = {
   PricingRoute: PricingRoute,
   ProfileRoute: ProfileRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  StatsRoute: StatsRoute,
   TermsRoute: TermsRoute,
   WrongRoute: WrongRoute,
   ApiAiExplainRoute: ApiAiExplainRoute,
