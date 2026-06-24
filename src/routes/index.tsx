@@ -7,7 +7,6 @@ import {
   Sparkles,
   BookOpen,
   Target,
-  Bookmark,
   XCircle,
   BarChart3,
   Library,
