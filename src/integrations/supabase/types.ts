@@ -137,6 +137,54 @@ export type Database = {
         }
         Relationships: []
       }
+      frq_drafts: {
+        Row: {
+          answer_file_kind: string | null
+          answer_file_name: string | null
+          answer_file_url: string | null
+          answer_text: string | null
+          frq_id: string
+          paper_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          answer_file_kind?: string | null
+          answer_file_name?: string | null
+          answer_file_url?: string | null
+          answer_text?: string | null
+          frq_id: string
+          paper_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          answer_file_kind?: string | null
+          answer_file_name?: string | null
+          answer_file_url?: string | null
+          answer_text?: string | null
+          frq_id?: string
+          paper_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "frq_drafts_frq_id_fkey"
+            columns: ["frq_id"]
+            isOneToOne: false
+            referencedRelation: "paper_frqs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "frq_drafts_paper_id_fkey"
+            columns: ["paper_id"]
+            isOneToOne: false
+            referencedRelation: "mock_papers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       frq_submissions: {
         Row: {
           ai_breakdown: Json | null
