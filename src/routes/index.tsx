@@ -7,7 +7,6 @@ import {
   Sparkles,
   BookOpen,
   Target,
-  Bookmark,
   XCircle,
   BarChart3,
   Library,
@@ -354,17 +353,8 @@ function Index() {
           </Link>
         </section>
 
-        {/* 四张小卡 */}
-        <section className="grid gap-3 grid-cols-2 lg:grid-cols-4 mb-5">
-          <QuickCard
-            to="/wrong"
-            icon={<Bookmark className="h-5 w-5 text-amber-500" />}
-            iconBg="bg-amber-50"
-            title="收藏"
-            subtitle="标记题目复习"
-            accent="text-amber-600"
-            accentText="查看"
-          />
+        {/* 三张小卡 */}
+        <section className="grid gap-3 grid-cols-3 mb-5">
           <QuickCard
             to="/wrong"
             icon={<XCircle className="h-5 w-5 text-rose-500" />}
@@ -375,7 +365,7 @@ function Index() {
             accentText="去复习"
           />
           <QuickCard
-            to="/"
+            to="/stats"
             icon={<BarChart3 className="h-5 w-5 text-emerald-500" />}
             iconBg="bg-emerald-50"
             title="统计"
