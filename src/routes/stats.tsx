@@ -17,6 +17,9 @@ import {
   Cell,
 } from "recharts";
 import { BarChart3, Target, Flame, BookOpen, SquarePen, ArrowRight, CheckCircle2, XCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Info, RefreshCw, CheckCircle, AlertTriangle } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/stats")({
   head: () => ({
