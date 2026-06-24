@@ -341,6 +341,18 @@ function Mock() {
             按 AP 微观经济考试规格随机抽取 <b>60 道</b> 多选题（限时 <b>70 分钟</b>，时间到自动交卷），
             随后进入 Section II 大题：<b>1 道长题 + 2 道短题</b>，AI 按 rubric 评分。
           </p>
+          <Card className="mb-4 border-primary/30 bg-primary/5">
+            <CardContent className="p-4 space-y-1.5 text-sm">
+              <div className="font-semibold text-primary">Section II · 大题（AP 官方比例）</div>
+              <div className="text-muted-foreground text-xs leading-relaxed">
+                选择题交卷后将自动进入大题阶段，从大题题库随机抽取 <b>1 道长题（≥8 分）</b> + <b>2 道短题</b>，
+                作答后由 AI 按 rubric 逐点评分，并给出改进建议。
+              </div>
+              <div className="text-[11px] text-muted-foreground">
+                提示：免费用户每 7 天可参加 1 次完整模考；如已用尽冷却，可在个人资料页升级会员。
+              </div>
+            </CardContent>
+          </Card>
           <Card>
             <CardContent className="p-6 space-y-4">
               <div className="space-y-2 text-sm">
