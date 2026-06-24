@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, CheckCircle2, Clock, FileText, Loader2, PlayCircle, SquarePen } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, Clock, FileText, Loader2, PlayCircle, SquarePen, Trophy } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -283,15 +283,26 @@ function FrqCategoriesPage() {
                               ? "全部完成，可重做任意题"
                               : "尚未开始"}
                       </div>
-                      <Link
-                        to="/mock/$slug"
-                        params={{ slug: p.slug }}
-                        search={state === "continue" && nextFrq ? { frq: nextFrq } : undefined}
-                        className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
-                      >
-                        <PlayCircle className="h-3.5 w-3.5" />
-                        {label}
-                      </Link>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {user && state === "done" && (
+                          <Link
+                            to="/frq/review/$slug"
+                            params={{ slug: p.slug }}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-primary/40 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10"
+                          >
+                            <Trophy className="h-3.5 w-3.5" /> 评分回放
+                          </Link>
+                        )}
+                        <Link
+                          to="/mock/$slug"
+                          params={{ slug: p.slug }}
+                          search={state === "continue" && nextFrq ? { frq: nextFrq } : undefined}
+                          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+                        >
+                          <PlayCircle className="h-3.5 w-3.5" />
+                          {label}
+                        </Link>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
