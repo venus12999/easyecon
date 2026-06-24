@@ -7,9 +7,12 @@ import { Progress } from "@/components/ui/progress";
 import { renderStemWithTerms, type TermInfo } from "@/lib/term-render";
 import { optionStyles, type OptKey } from "@/lib/option-colors";
 import { recordAnswer } from "@/lib/storage";
-import { Clock, Loader2 } from "lucide-react";
+import { Clock, Loader2, SquarePen } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
+import { FrqAnswerBox, EMPTY_ANSWER, type FrqAnswerState } from "@/components/frq/FrqAnswerBox";
+import { FrqGradeCard, type GradeResult } from "@/components/frq/FrqGradeCard";
+import { Button as UiButton } from "@/components/ui/button";
 
 export const Route = createFileRoute("/mock/random")({
   head: () => ({ meta: [{ title: "模考模式 · AP 微观经济" }] }),
@@ -33,6 +36,17 @@ type Q = {
   knowledge_points: { name_zh: string; unit: number } | null;
 };
 
+type FrqItem = {
+  id: string;
+  title: string | null;
+  content: string;
+  image_url: string | null;
+  image_text: string | null;
+  max_score: number;
+  sort_order: number;
+  paper_id: string;
+};
+
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -44,7 +58,7 @@ function shuffle<T>(arr: T[]): T[] {
 
 function Mock() {
   const { user } = useAuth();
-  const [phase, setPhase] = useState<"idle" | "running" | "done">("idle");
+  const [phase, setPhase] = useState<"idle" | "running" | "frq" | "done">("idle");
   const [questions, setQuestions] = useState<Q[]>([]);
   const [answers, setAnswers] = useState<Record<string, OptKey>>({});
   const [idx, setIdx] = useState(0);
@@ -52,10 +66,16 @@ function Mock() {
   const [loading, setLoading] = useState(false);
   const [termDict, setTermDict] = useState<Record<string, TermInfo>>({});
   const [shortageNote, setShortageNote] = useState<string | null>(null);
+  const [frqs, setFrqs] = useState<FrqItem[]>([]);
+  const [frqAnswers, setFrqAnswers] = useState<Record<string, FrqAnswerState>>({});
+  const [frqGrades, setFrqGrades] = useState<Record<string, GradeResult>>({});
+  const [grading, setGrading] = useState<Record<string, boolean>>({});
 
   // 官方 AP 微观考试：60 题 / 70 分钟
   const TOTAL_QUESTIONS = 60;
   const TIME_LIMIT_SECONDS = 70 * 60;
+  // AP 微观考试 Section II 共 3 题：1 道长题 + 2 道短题
+  const FRQ_COUNT = 3;
   // 每个 Unit 的目标题数（均落在官方比例区间内，合计 60）
   // U1 13.3% / U2 23.3% / U3 20% / U4 18.3% / U5 11.7% / U6 13.3%
   const UNIT_TARGETS: Record<number, number> = { 1: 8, 2: 14, 3: 12, 4: 11, 5: 7, 6: 8 };
@@ -145,6 +165,43 @@ function Mock() {
     setAnswers({});
     setIdx(0);
     setSeconds(0);
+
+    // 抽取 3 道 FRQ（1 长 + 2 短，按 max_score 分组）
+    const { data: poolPaper } = await supabase
+      .from("mock_papers")
+      .select("id")
+      .eq("slug", "frq-pdf-practice")
+      .maybeSingle();
+    if (poolPaper) {
+      const { data: allFrqs } = await supabase
+        .from("paper_frqs")
+        .select("id,title,content,image_url,image_text,max_score,sort_order")
+        .eq("paper_id", poolPaper.id);
+      const list = ((allFrqs ?? []) as Omit<FrqItem, "paper_id">[]).map((f) => ({
+        ...f,
+        paper_id: poolPaper.id,
+      }));
+      const longs = shuffle(list.filter((f) => f.max_score >= 8));
+      const shorts = shuffle(list.filter((f) => f.max_score < 8));
+      const pickedFrqs: FrqItem[] = [];
+      if (longs[0]) pickedFrqs.push(longs[0]);
+      pickedFrqs.push(...shorts.slice(0, FRQ_COUNT - pickedFrqs.length));
+      // 兜底：题型不足时再从剩余里补齐
+      if (pickedFrqs.length < FRQ_COUNT) {
+        const usedIds = new Set(pickedFrqs.map((f) => f.id));
+        pickedFrqs.push(
+          ...shuffle(list.filter((f) => !usedIds.has(f.id))).slice(
+            0,
+            FRQ_COUNT - pickedFrqs.length,
+          ),
+        );
+      }
+      setFrqs(pickedFrqs);
+    } else {
+      setFrqs([]);
+    }
+    setFrqAnswers({});
+    setFrqGrades({});
     setPhase("running");
     setLoading(false);
   }
@@ -192,6 +249,69 @@ function Mock() {
         });
       }
     }
+    if (frqs.length > 0) setPhase("frq");
+    else setPhase("done");
+  }
+
+  async function gradeOneFrq(f: FrqItem): Promise<boolean> {
+    const ans = frqAnswers[f.id] ?? EMPTY_ANSWER;
+    if (!ans.text.trim() && !ans.fileUrl) return true;
+    setGrading((g) => ({ ...g, [f.id]: true }));
+    try {
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) {
+        toast.error("请先登录");
+        return false;
+      }
+      const r = await fetch("/api/frq/grade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          frq_id: f.id,
+          paper_id: f.paper_id,
+          mode: "exam",
+          answer_text: ans.text || null,
+          answer_file_url: ans.fileUrl,
+          answer_file_kind: ans.fileKind,
+        }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        const message =
+          j.error === "membership_quota_exhausted"
+            ? "今日 AI 评分次数已用完，可在个人资料页升级会员"
+            : j.error === "credits_exhausted"
+              ? "AI 评分额度暂时不足，请稍后重试"
+              : j.error === "rate_limited"
+                ? "AI 评分请求过多，请稍后重试"
+                : j.error || "AI 评分失败，请稍后重试";
+        toast.error(message);
+        return false;
+      }
+      const grade = (await r.json()) as GradeResult;
+      setFrqGrades((g) => ({ ...g, [f.id]: grade }));
+      return true;
+    } catch {
+      toast.error("AI 评分失败，请检查网络后重试");
+      return false;
+    } finally {
+      setGrading((g) => ({ ...g, [f.id]: false }));
+    }
+  }
+
+  async function submitAllFrqs() {
+    let ok = true;
+    for (const f of frqs) {
+      if (!frqGrades[f.id]) {
+        const succeeded = await gradeOneFrq(f);
+        if (!succeeded) ok = false;
+      }
+    }
+    if (!ok) {
+      toast.error("部分作答尚未评分，请重试后再查看结果");
+      return;
+    }
     setPhase("done");
   }
 
@@ -218,7 +338,8 @@ function Mock() {
         <main className="mx-auto max-w-2xl px-4 py-12">
           <h1 className="text-2xl font-bold mb-2">完整模考（AP 官方比例）</h1>
           <p className="text-muted-foreground text-sm mb-6">
-            按 AP 微观经济考试规格随机抽取 <b>60 道</b> 多选题，限时 <b>70 分钟</b>，时间到自动交卷。
+            按 AP 微观经济考试规格随机抽取 <b>60 道</b> 多选题（限时 <b>70 分钟</b>，时间到自动交卷），
+            随后进入 Section II 大题：<b>1 道长题 + 2 道短题</b>，AI 按 rubric 评分。
           </p>
           <Card>
             <CardContent className="p-6 space-y-4">
@@ -240,6 +361,75 @@ function Mock() {
               </Button>
             </CardContent>
           </Card>
+        </main>
+      </div>
+    );
+  }
+
+  if (phase === "frq") {
+    const allGrading = Object.values(grading).some(Boolean);
+    return (
+      <div className="min-h-screen bg-background">
+        <main className="mx-auto max-w-3xl px-4 py-8 space-y-6">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-medium text-primary">
+              <SquarePen className="h-4 w-4" /> Section II · FRQ
+            </div>
+            <h1 className="mt-1 text-2xl font-bold">大题部分（1 长 + 2 短）</h1>
+            <p className="mt-1 text-xs text-muted-foreground">
+              按 AP 考试规格作答，提交后 AI 将按官方得分点评分。
+            </p>
+          </div>
+          {frqs.map((f, i) => {
+            const ans = frqAnswers[f.id] ?? EMPTY_ANSWER;
+            const grade = frqGrades[f.id];
+            return (
+              <Card key={f.id}>
+                <CardContent className="space-y-4 p-5">
+                  <div className="font-semibold">
+                    Question {i + 1}
+                    {f.title ? ` · ${f.title}` : ""}
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      满分 {f.max_score} 分
+                    </span>
+                  </div>
+                  <div className="text-sm whitespace-pre-wrap leading-relaxed">{f.content}</div>
+                  {f.image_url && (
+                    <img
+                      src={f.image_url}
+                      alt="FRQ 图"
+                      className="max-h-80 w-auto rounded border border-border"
+                    />
+                  )}
+                  <FrqAnswerBox
+                    paperId={f.paper_id}
+                    frqId={f.id}
+                    value={ans}
+                    onChange={(v) => setFrqAnswers((s) => ({ ...s, [f.id]: v }))}
+                    disabled={!!grade}
+                  />
+                  {!grade && (
+                    <UiButton
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void gradeOneFrq(f)}
+                      disabled={grading[f.id] || (!ans.text.trim() && !ans.fileUrl)}
+                    >
+                      {grading[f.id] ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                      单独评分本题
+                    </UiButton>
+                  )}
+                  {grade && <FrqGradeCard grade={grade} />}
+                </CardContent>
+              </Card>
+            );
+          })}
+          <div className="flex justify-end">
+            <UiButton onClick={() => void submitAllFrqs()} disabled={allGrading}>
+              {allGrading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              完成大题并查看全部成绩
+            </UiButton>
+          </div>
         </main>
       </div>
     );
@@ -344,6 +534,47 @@ function Mock() {
             <div className="mt-2 text-sm text-muted-foreground">{stats.correct} / {stats.total} 题正确</div>
           </CardContent>
         </Card>
+
+        {frqs.length > 0 && (
+          <>
+            <h2 className="font-semibold mb-3">FRQ · AI 评分</h2>
+            <div className="space-y-3 mb-6">
+              {frqs.map((f, i) => {
+                const grade = frqGrades[f.id];
+                const ans = frqAnswers[f.id] ?? EMPTY_ANSWER;
+                return (
+                  <Card key={f.id}>
+                    <CardContent className="p-5 space-y-3">
+                      <div className="font-semibold text-sm">
+                        Question {i + 1}
+                        {f.title ? ` · ${f.title}` : ""}
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          满分 {f.max_score} 分
+                        </span>
+                      </div>
+                      {ans.text && (
+                        <details className="text-xs">
+                          <summary className="cursor-pointer text-muted-foreground">
+                            你的作答
+                          </summary>
+                          <pre className="mt-2 p-2 bg-muted rounded whitespace-pre-wrap text-[12px]">
+                            {ans.text}
+                          </pre>
+                        </details>
+                      )}
+                      {grade ? (
+                        <FrqGradeCard grade={grade} />
+                      ) : (
+                        <p className="text-xs text-muted-foreground">本题未提交，未评分。</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </>
+        )}
+
         <h2 className="font-semibold mb-3">按知识点</h2>
         <div className="space-y-2 mb-6">
           {Object.entries(stats.byKp).map(([k, v]) => (
