@@ -197,7 +197,8 @@ function PaperRunner() {
   }, [selectedFrqId, selectedFrqUnit, slug]);
 
   useEffect(() => {
-    if (!loading && slug === "frq-pdf-practice" && phase === "idle" && frqs.length > 0) {
+    const isFrqOnly = slug === "frq-pdf-practice" || slug.startsWith("frq-pack-");
+    if (!loading && isFrqOnly && phase === "idle" && frqs.length > 0) {
       start();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
