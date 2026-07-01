@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
-export const Route = createFileRoute("/tutor/bookings")({
+export const Route = createFileRoute("/tutor-bookings")({
   head: () => ({ meta: [{ title: "我的试课预约" }] }),
   component: MyBookingsPage,
 });
