@@ -367,11 +367,12 @@ function PaperRunner() {
   }
 
   async function start() {
-    if (!user && slug !== "frq-pdf-practice") {
+    const isFrqOnly = slug === "frq-pdf-practice" || slug.startsWith("frq-pack-");
+    if (!user && !isFrqOnly) {
       toast.error("请先登录后参加完整模考");
       return;
     }
-    if (user && slug !== "frq-pdf-practice") {
+    if (user && !isFrqOnly) {
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
       if (token) {
