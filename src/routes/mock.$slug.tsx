@@ -462,6 +462,34 @@ function PaperRunner() {
   }, [phase, mode, frqSeconds]);
 
   async function gradeOneFrq(f: Frq): Promise<boolean> {
+    return await runGradeOneFrq(f);
+  }
+
+  async function redoFrq(f: Frq) {
+    if (!paper) return;
+    setFrqGrades((g) => {
+      const n = { ...g };
+      delete n[f.id];
+      return n;
+    });
+    setFrqAnswers((s) => ({ ...s, [f.id]: EMPTY_ANSWER }));
+    if (user) {
+      await supabase
+        .from("frq_submissions")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("paper_id", paper.id)
+        .eq("frq_id", f.id);
+      await supabase
+        .from("frq_drafts")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("frq_id", f.id);
+    }
+    toast.success("已清空作答，可重新答题");
+  }
+
+  async function runGradeOneFrq(f: Frq): Promise<boolean> {
     if (!paper) return false;
     const ans = frqAnswers[f.id] ?? EMPTY_ANSWER;
     if (!ans.text.trim() && !ans.fileUrl) return true; // 未作答跳过
