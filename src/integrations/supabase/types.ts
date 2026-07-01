@@ -691,7 +691,9 @@ export type Database = {
           note: string | null
           preferred_time: string | null
           scheduled_at: string | null
+          status: string
           teacher: string
+          updated_at: string
           user_id: string
         }
         Insert: {
@@ -701,7 +703,9 @@ export type Database = {
           note?: string | null
           preferred_time?: string | null
           scheduled_at?: string | null
+          status?: string
           teacher: string
+          updated_at?: string
           user_id: string
         }
         Update: {
@@ -711,7 +715,9 @@ export type Database = {
           note?: string | null
           preferred_time?: string | null
           scheduled_at?: string | null
+          status?: string
           teacher?: string
+          updated_at?: string
           user_id?: string
         }
         Relationships: []
@@ -784,6 +790,21 @@ export type Database = {
         Args: { p_day: string; p_teacher: string }
         Returns: {
           scheduled_at: string
+        }[]
+      }
+      get_today_tutor_bookings: {
+        Args: never
+        Returns: {
+          contact: string
+          created_at: string
+          id: string
+          note: string
+          preferred_time: string
+          scheduled_at: string
+          status: string
+          teacher: string
+          user_email: string
+          user_id: string
         }[]
       }
       has_active_subscription: {
