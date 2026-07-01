@@ -201,7 +201,7 @@ function ProfilePage() {
                 <div className="rounded-lg border p-4"><div className="text-xs text-muted-foreground">AI 答疑</div><div className="mt-1 text-xl font-bold">{membership.usage.aiExplain}/{membership.usage.aiExplainLimit}</div></div>
                 <div className="rounded-lg border p-4"><div className="text-xs text-muted-foreground">FRQ 评分</div><div className="mt-1 text-xl font-bold">{membership.usage.frqGrade}/{membership.usage.frqGradeLimit}</div></div>
               </div>
-              <div className="text-sm text-muted-foreground">权益来源：{membership.source === "gift" ? "管理员赠送" : membership.plan === "ap_micro_pro_yearly" ? "年度会员" : "月度会员"}</div>
+              <div className="text-sm text-muted-foreground">权益来源：{membership.source === "gift" ? "管理员赠送" : membership.plan === "ap_micro_pro_yearly" ? "年度会员" : membership.plan === "ap_micro_pro_quarterly" ? "季度会员" : "月度会员"}</div>
               {membership.currentPeriodEnd && <div className="text-sm">{membership.source === "gift" || membership.cancelAtPeriodEnd ? "有效期至" : "下次续费"}：{new Date(membership.currentPeriodEnd).toLocaleDateString()}</div>}
               {membership.canManage && <Button variant="outline" onClick={() => void manageMembership()}>管理订阅</Button>}
             </>
@@ -212,8 +212,9 @@ function ProfilePage() {
                 <div className="flex items-center gap-2"><Check className="h-4 w-4 text-primary" />每天 10 次 FRQ 评分</div>
                 <div className="flex items-center gap-2"><Check className="h-4 w-4 text-primary" />刷题和模考不限次</div>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Button className="h-auto justify-between px-4 py-3" disabled={checkoutLoading} onClick={() => void openCheckout({ priceId: "ap_micro_pro_monthly", userId: user.id, email: user.email })}><span>月度会员</span><span>¥29/月</span></Button>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Button className="h-auto justify-between px-4 py-3" disabled={checkoutLoading} onClick={() => void openCheckout({ priceId: "ap_micro_pro_monthly", userId: user.id, email: user.email })}><span>月度会员</span><span>¥19/月</span></Button>
+                <Button className="h-auto justify-between px-4 py-3" variant="secondary" disabled={checkoutLoading} onClick={() => void openCheckout({ priceId: "ap_micro_pro_quarterly", userId: user.id, email: user.email })}><span>季度会员</span><span>¥55/季</span></Button>
                 <Button className="h-auto justify-between px-4 py-3" variant="outline" disabled={checkoutLoading} onClick={() => void openCheckout({ priceId: "ap_micro_pro_yearly", userId: user.id, email: user.email })}><span>年度会员</span><span className="flex items-center gap-1"><Sparkles className="h-4 w-4" />¥199/年</span></Button>
               </div>
               <p className="text-xs text-muted-foreground">购买即表示同意 <Link to="/legal/terms" className="text-primary underline">服务条款</Link>、<Link to="/legal/refunds" className="text-primary underline">14 天退款政策</Link>与 <Link to="/legal/privacy" className="text-primary underline">隐私声明</Link>。付款由 Paddle 安全处理。</p>
