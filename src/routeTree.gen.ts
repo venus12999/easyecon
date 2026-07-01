@@ -31,6 +31,7 @@ import { Route as LegalPrivacyRouteImport } from './routes/legal.privacy'
 import { Route as ApiMembershipRouteImport } from './routes/api/membership'
 import { Route as ApiFeedbackRouteImport } from './routes/api/feedback'
 import { Route as ApiAiExplainRouteImport } from './routes/api/ai-explain'
+import { Route as AdminTutorRouteImport } from './routes/admin.tutor'
 import { Route as FrqReviewSlugRouteImport } from './routes/frq.review.$slug'
 import { Route as ApiMembershipMockAccessRouteImport } from './routes/api/membership/mock-access'
 import { Route as ApiFrqUploadRouteImport } from './routes/api/frq/upload'
@@ -156,6 +157,11 @@ const ApiAiExplainRoute = ApiAiExplainRouteImport.update({
   path: '/api/ai-explain',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminTutorRoute = AdminTutorRouteImport.update({
+  id: '/tutor',
+  path: '/tutor',
+  getParentRoute: () => AdminRoute,
+} as any)
 const FrqReviewSlugRoute = FrqReviewSlugRouteImport.update({
   id: '/review/$slug',
   path: '/review/$slug',
@@ -230,7 +236,7 @@ const ApiPublicPaymentsWebhookRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/auth': typeof AuthRoute
   '/frq': typeof FrqRouteWithChildren
   '/pricing': typeof PricingRoute
@@ -240,6 +246,7 @@ export interface FileRoutesByFullPath {
   '/terms': typeof TermsRoute
   '/tutor': typeof TutorRouteWithChildren
   '/wrong': typeof WrongRoute
+  '/admin/tutor': typeof AdminTutorRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/api/feedback': typeof ApiFeedbackRoute
   '/api/membership': typeof ApiMembershipRouteWithChildren
@@ -268,7 +275,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/auth': typeof AuthRoute
   '/frq': typeof FrqRouteWithChildren
   '/pricing': typeof PricingRoute
@@ -278,6 +285,7 @@ export interface FileRoutesByTo {
   '/terms': typeof TermsRoute
   '/tutor': typeof TutorRouteWithChildren
   '/wrong': typeof WrongRoute
+  '/admin/tutor': typeof AdminTutorRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/api/feedback': typeof ApiFeedbackRoute
   '/api/membership': typeof ApiMembershipRouteWithChildren
@@ -307,7 +315,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/auth': typeof AuthRoute
   '/frq': typeof FrqRouteWithChildren
   '/pricing': typeof PricingRoute
@@ -317,6 +325,7 @@ export interface FileRoutesById {
   '/terms': typeof TermsRoute
   '/tutor': typeof TutorRouteWithChildren
   '/wrong': typeof WrongRoute
+  '/admin/tutor': typeof AdminTutorRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/api/feedback': typeof ApiFeedbackRoute
   '/api/membership': typeof ApiMembershipRouteWithChildren
@@ -357,6 +366,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/tutor'
     | '/wrong'
+    | '/admin/tutor'
     | '/api/ai-explain'
     | '/api/feedback'
     | '/api/membership'
@@ -395,6 +405,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/tutor'
     | '/wrong'
+    | '/admin/tutor'
     | '/api/ai-explain'
     | '/api/feedback'
     | '/api/membership'
@@ -433,6 +444,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/tutor'
     | '/wrong'
+    | '/admin/tutor'
     | '/api/ai-explain'
     | '/api/feedback'
     | '/api/membership'
@@ -462,7 +474,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AdminRoute: typeof AdminRoute
+  AdminRoute: typeof AdminRouteWithChildren
   AuthRoute: typeof AuthRoute
   FrqRoute: typeof FrqRouteWithChildren
   PricingRoute: typeof PricingRoute
@@ -652,6 +664,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAiExplainRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/tutor': {
+      id: '/admin/tutor'
+      path: '/tutor'
+      fullPath: '/admin/tutor'
+      preLoaderRoute: typeof AdminTutorRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/frq/review/$slug': {
       id: '/frq/review/$slug'
       path: '/review/$slug'
@@ -753,6 +772,16 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AdminRouteChildren {
+  AdminTutorRoute: typeof AdminTutorRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminTutorRoute: AdminTutorRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
 interface FrqRouteChildren {
   FrqReviewSlugRoute: typeof FrqReviewSlugRoute
 }
@@ -787,7 +816,7 @@ const ApiMembershipRouteWithChildren = ApiMembershipRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AdminRoute: AdminRoute,
+  AdminRoute: AdminRouteWithChildren,
   AuthRoute: AuthRoute,
   FrqRoute: FrqRouteWithChildren,
   PricingRoute: PricingRoute,
