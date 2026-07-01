@@ -1,6 +1,7 @@
 import { Outlet, Link, createRootRoute, HeadContent, Scripts, useRouterState } from "@tanstack/react-router";
 
 import appCss from "../styles.css?url";
+import logoAsset from "@/assets/logo.png.asset.json";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/hooks/use-auth";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
