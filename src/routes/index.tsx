@@ -14,6 +14,7 @@ import {
   Flame,
   Check,
   SquarePen,
+  GraduationCap,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 

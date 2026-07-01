@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WrongRouteImport } from './routes/wrong'
+import { Route as TutorRouteImport } from './routes/tutor'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as StatsRouteImport } from './routes/stats'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
@@ -47,6 +48,11 @@ import { Route as ApiPublicPaymentsWebhookRouteImport } from './routes/api/publi
 const WrongRoute = WrongRouteImport.update({
   id: '/wrong',
   path: '/wrong',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TutorRoute = TutorRouteImport.update({
+  id: '/tutor',
+  path: '/tutor',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TermsRoute = TermsRouteImport.update({
@@ -226,6 +232,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/stats': typeof StatsRoute
   '/terms': typeof TermsRoute
+  '/tutor': typeof TutorRoute
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/api/feedback': typeof ApiFeedbackRoute
@@ -262,6 +269,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/stats': typeof StatsRoute
   '/terms': typeof TermsRoute
+  '/tutor': typeof TutorRoute
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/api/feedback': typeof ApiFeedbackRoute
@@ -299,6 +307,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/stats': typeof StatsRoute
   '/terms': typeof TermsRoute
+  '/tutor': typeof TutorRoute
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/api/feedback': typeof ApiFeedbackRoute
@@ -337,6 +346,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/stats'
     | '/terms'
+    | '/tutor'
     | '/wrong'
     | '/api/ai-explain'
     | '/api/feedback'
@@ -373,6 +383,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/stats'
     | '/terms'
+    | '/tutor'
     | '/wrong'
     | '/api/ai-explain'
     | '/api/feedback'
@@ -409,6 +420,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/stats'
     | '/terms'
+    | '/tutor'
     | '/wrong'
     | '/api/ai-explain'
     | '/api/feedback'
@@ -446,6 +458,7 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   StatsRoute: typeof StatsRoute
   TermsRoute: typeof TermsRoute
+  TutorRoute: typeof TutorRoute
   WrongRoute: typeof WrongRoute
   ApiAiExplainRoute: typeof ApiAiExplainRoute
   ApiFeedbackRoute: typeof ApiFeedbackRoute
@@ -478,6 +491,13 @@ declare module '@tanstack/react-router' {
       path: '/wrong'
       fullPath: '/wrong'
       preLoaderRoute: typeof WrongRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tutor': {
+      id: '/tutor'
+      path: '/tutor'
+      fullPath: '/tutor'
+      preLoaderRoute: typeof TutorRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/terms': {
@@ -746,6 +766,7 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   StatsRoute: StatsRoute,
   TermsRoute: TermsRoute,
+  TutorRoute: TutorRoute,
   WrongRoute: WrongRoute,
   ApiAiExplainRoute: ApiAiExplainRoute,
   ApiFeedbackRoute: ApiFeedbackRoute,
