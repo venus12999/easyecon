@@ -408,42 +408,6 @@ function Index() {
           />
         </section>
 
-        {/* 打卡 */}
-        <section className="mb-8">
-          <div className="rounded-2xl border bg-card p-4 flex items-center gap-5">
-            <div className="flex items-center gap-3 pr-4 border-r">
-              <div className="text-3xl font-bold">{stats.today > 0 ? "+1" : "0"}</div>
-              <div>
-                <div className="text-sm font-semibold flex items-center gap-1">
-                  今日打卡 <Flame className="h-4 w-4 text-orange-500" />
-                </div>
-              </div>
-            </div>
-            <div className="flex-1 grid grid-cols-7 gap-1.5 text-center">
-              {weekDays.map((d, i) => {
-                const done = weekCheckins.has(i);
-                const isToday = i === todayIdx;
-                return (
-                  <div key={d} className="flex flex-col items-center gap-1">
-                    <div className="text-[11px] text-muted-foreground">{d}</div>
-                    <div
-                      className={`h-7 w-7 rounded-full flex items-center justify-center text-xs ${
-                        done
-                          ? "bg-primary text-primary-foreground"
-                          : isToday
-                            ? "border-2 border-primary text-primary"
-                            : "bg-muted text-muted-foreground"
-                      }`}
-                    >
-                      {done ? <Check className="h-3.5 w-3.5" /> : ""}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </section>
-
         {!user && (
           <Card className="mb-6 border-primary/30 bg-primary/5">
             <CardContent className="p-5 flex items-center justify-between gap-4">
