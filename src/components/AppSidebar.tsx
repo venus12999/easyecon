@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { BookOpen, ListChecks, Library, GraduationCap, LogOut, Bookmark, Shield, MessageSquarePlus, UserRound, Sparkles } from "lucide-react";
+import { BookOpen, ListChecks, Library, GraduationCap, LogOut, Bookmark, Shield, MessageSquarePlus, UserRound, Sparkles, CalendarCheck } from "lucide-react";
 import { useState } from "react";
 import {
   Sidebar,
@@ -108,12 +108,32 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               )}
+              {user && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive("/tutor-bookings")}>
+                    <Link to="/tutor-bookings" className="flex items-center gap-2">
+                      <CalendarCheck className="h-4 w-4" />
+                      {!collapsed && <span>我的试课预约</span>}
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
               {showAdmin && (
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild isActive={isActive("/admin")}>
                     <Link to="/admin" className="flex items-center gap-2">
                       <Shield className="h-4 w-4" />
                       {!collapsed && <span>管理后台</span>}
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+              {showAdmin && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive("/admin-tutor")}>
+                    <Link to="/admin-tutor" className="flex items-center gap-2">
+                      <CalendarCheck className="h-4 w-4" />
+                      {!collapsed && <span>试课预约管理</span>}
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
