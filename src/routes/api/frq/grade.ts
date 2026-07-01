@@ -52,6 +52,37 @@ function tryParseJson(raw: string): Grade | null {
   return null;
 }
 
+// 清理 AI 输出：仅保留中英文、数字、常见标点；去掉 Markdown 符号（* # ` _ ~ 等）与乱码字符
+function sanitizeText(s: unknown): string {
+  if (typeof s !== "string") return "";
+  let out = s
+    // 去掉 markdown emphasis / heading / code fence / bullet 符号
+    .replace(/[*_~`#>]+/g, "")
+    // 去掉行首列表破折号
+    .replace(/^\s*[-•]+\s?/gm, "")
+    // 去掉替换字符与私有区/未映射的乱码
+    .replace(/[\uFFFD\uE000-\uF8FF]/g, "");
+  // 白名单：CJK、拉丁字母数字、常见中英文标点、空白
+  out = out.replace(
+    /[^\u4E00-\u9FFF\u3400-\u4DBF\uFF00-\uFF65\u3000-\u303F\w\s.,;:!?()\[\]{}"'/%\-+=<>@¥$&|·—…“”‘’、。，；：！？（）《》【】]/g,
+    "",
+  );
+  return out.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function sanitizeGrade(g: Grade): Grade {
+  return {
+    ...g,
+    breakdown: (g.breakdown ?? []).map((b) => ({
+      point: sanitizeText(b.point),
+      awarded: !!b.awarded,
+      comment: sanitizeText(b.comment),
+    })),
+    overall_comment: sanitizeText(g.overall_comment),
+    suggestions: sanitizeText(g.suggestions),
+  };
+}
+
 export const Route = createFileRoute("/api/frq/grade")({
   server: {
     handlers: {
@@ -131,7 +162,8 @@ export const Route = createFileRoute("/api/frq/grade")({
         userTextParts.push(
           `【输出要求】仅输出一个 JSON 对象（不要 Markdown、不要 \`\`\` 代码块、不要解释文字），结构示例：\n` +
             `{"total_score": 数字, "max_score": ${maxScore}, "breakdown": [{"point":"得分点","awarded":true,"comment":"解释"}], "overall_comment":"中文整体评语", "suggestions":"中文改进建议"}\n` +
-            `max_score 必须等于 ${maxScore}。`,
+            `max_score 必须等于 ${maxScore}。\n` +
+            `【文本格式硬性要求】所有字符串字段（point/comment/overall_comment/suggestions）只能包含中文与英文（含数字与常见中英文标点），禁止使用任何 Markdown 符号（例如 * _ ~ \` # >）、项目符号、表情符号或其他特殊字符；禁止出现乱码。需要强调时用中文书写，不要加符号。`,
         );
         const userText = userTextParts.join("\n\n");
 
@@ -196,6 +228,7 @@ export const Route = createFileRoute("/api/frq/grade")({
         }
         // 兜底夹紧分数
         const total = Math.max(0, Math.min(maxScore, Math.round(grade.total_score)));
+        const clean = sanitizeGrade(grade);
 
         // 持久化（使用 service role，但记录 user_id）
         await supabaseAdmin.from("frq_submissions").insert({
@@ -208,17 +241,17 @@ export const Route = createFileRoute("/api/frq/grade")({
           answer_file_kind: body.answer_file_kind ?? (hasText ? "text" : null),
           ai_score: total,
           ai_max_score: maxScore,
-          ai_breakdown: grade.breakdown ?? [],
-          ai_overall: grade.overall_comment ?? "",
-          ai_suggestions: grade.suggestions ?? "",
+          ai_breakdown: clean.breakdown,
+          ai_overall: clean.overall_comment,
+          ai_suggestions: clean.suggestions,
         });
 
         return Response.json({
           total_score: total,
           max_score: maxScore,
-          breakdown: grade.breakdown ?? [],
-          overall_comment: grade.overall_comment ?? "",
-          suggestions: grade.suggestions ?? "",
+          breakdown: clean.breakdown,
+          overall_comment: clean.overall_comment,
+          suggestions: clean.suggestions,
         });
       },
     },
