@@ -11,6 +11,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { FrqAnswerBox, EMPTY_ANSWER, type FrqAnswerState } from "@/components/frq/FrqAnswerBox";
 import { FrqGradeCard, type GradeResult } from "@/components/frq/FrqGradeCard";
+import { FrqContent } from "@/components/frq/FrqContent";
 import { toast } from "sonner";
 import { FRQ_CATEGORIES, getFrqUnit } from "@/lib/frq-categories";
 
@@ -730,22 +731,10 @@ function PaperRunner() {
                 </div>
                 <div
                   onMouseUp={(e) => onHighlightableMouseUp(e.currentTarget)}
-                  className={cn(
-                    "text-sm whitespace-pre-wrap leading-relaxed select-text",
-                    highlightActive && "cursor-text",
-                  )}
+                  className={cn("select-text space-y-2", highlightActive && "cursor-text")}
                 >
-                  {f.content}
+                  <FrqContent content={f.content} />
                 </div>
-                {f.image_url && (
-                  <img src={f.image_url} alt="FRQ 图" className="max-h-80 w-auto rounded border border-border" />
-                )}
-                {f.image_text && (
-                  <details className="text-xs">
-                    <summary className="cursor-pointer text-muted-foreground hover:text-foreground">查看题图中的文字</summary>
-                    <pre className="mt-2 p-2 bg-muted rounded whitespace-pre-wrap font-mono text-[11px] leading-relaxed">{f.image_text}</pre>
-                  </details>
-                )}
                 <FrqAnswerBox
                   paperId={paper.id}
                   frqId={f.id}
@@ -1224,7 +1213,7 @@ function PaperRunner() {
                           {f.title ? ` · ${f.title}` : ""}
                           <span className="ml-2 text-xs text-muted-foreground">满分 {f.max_score} 分</span>
                         </div>
-                        <p className="text-sm whitespace-pre-wrap leading-relaxed">{f.content}</p>
+                        <FrqContent content={f.content} />
                         {ans.text && (
                           <details className="text-xs">
                             <summary className="cursor-pointer text-muted-foreground">你的作答</summary>
