@@ -517,7 +517,6 @@ function PaperRunner() {
   }
 
   async function submitAllFrqs() {
-    // placeholder anchor
     let gradingSucceeded = true;
     for (const f of frqs) {
       if (!frqGrades[f.id]) {
