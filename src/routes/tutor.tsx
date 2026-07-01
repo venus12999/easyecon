@@ -1,10 +1,17 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Check, GraduationCap, Sparkles, Users, Video } from "lucide-react";
+import { Check, GraduationCap, Sparkles, Users, Video, Gift } from "lucide-react";
 import { usePaddleCheckout } from "@/hooks/use-paddle-checkout";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export const Route = createFileRoute("/tutor")({
   head: () => ({
@@ -19,7 +26,7 @@ export const Route = createFileRoute("/tutor")({
 });
 
 type Plan = {
-  id: "tutor_single_lesson" | "tutor_pack_5" | "tutor_pack_10";
+  id: "tutor_single_lesson" | "tutor_pack_10";
   name: string;
   price: string;
   unit: string;
@@ -39,28 +46,77 @@ const PLANS: Plan[] = [
     perks: ["1v1 视频直播", "课后微信答疑 24h", "个性化学习建议"],
   },
   {
-    id: "tutor_pack_5",
-    name: "5 节冲刺包",
-    price: "¥1399",
-    unit: "/ 5 节 · 60 分钟/节",
-    desc: "覆盖薄弱 Unit + FRQ 精讲，性价比首选。",
-    perks: ["1v1 视频直播 5 节", "错题精讲 + FRQ 批改", "模考卷讲评 1 次"],
-    highlight: true,
-    badge: "推荐",
-  },
-  {
     id: "tutor_pack_10",
     name: "10 节满分包",
-    price: "¥2599",
+    price: "¥800",
     unit: "/ 10 节 · 60 分钟/节",
     desc: "系统覆盖全部 6 个 Unit + 3 套整卷模考。",
     perks: ["1v1 视频直播 10 节", "全套 Unit 精讲", "3 套模考全卷讲评"],
+    highlight: true,
+    badge: "推荐",
+  },
+];
+
+const TEACHERS = [
+  {
+    name: "Steve",
+    title: "AP 微观 5 分 · 4 年辅导经验",
+    desc: "擅长 FRQ 得分点拆解与图形分析，帮助 80+ 名学生冲上 5 分。风格耐心细致，适合基础到中等水平。",
+  },
+  {
+    name: "Venus",
+    title: "AP 微观 5 分 · Top 30 大学经济系",
+    desc: "擅长知识体系梳理与错题诊断，主攻高分冲刺与考前串讲，节奏紧凑，适合中高等水平快速提分。",
   },
 ];
 
 function TutorPage() {
   const { user } = useAuth();
   const { openCheckout, loading } = usePaddleCheckout();
+  const [existingBooking, setExistingBooking] = useState<{ teacher: string; created_at: string } | null>(null);
+  const [checking, setChecking] = useState(true);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [form, setForm] = useState({ teacher: "Steve", preferred_time: "", contact: "", note: "" });
+
+  useEffect(() => {
+    if (!user) { setChecking(false); return; }
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("tutor_trial_bookings")
+        .select("teacher, created_at")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (!cancelled) {
+        setExistingBooking(data ?? null);
+        setChecking(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user]);
+
+  async function submitTrial() {
+    if (!user) { toast.error("请先登录"); return; }
+    if (!form.contact.trim()) { toast.error("请填写联系方式，方便老师联系你排课"); return; }
+    setSubmitting(true);
+    const { error, data } = await supabase.from("tutor_trial_bookings").insert({
+      user_id: user.id,
+      teacher: form.teacher,
+      preferred_time: form.preferred_time || null,
+      contact: form.contact,
+      note: form.note || null,
+    }).select("teacher, created_at").maybeSingle();
+    setSubmitting(false);
+    if (error) {
+      if (error.code === "23505") toast.error("每个账号仅可预约一次免费试课");
+      else toast.error("预约失败，请稍后重试");
+      return;
+    }
+    setExistingBooking(data ?? { teacher: form.teacher, created_at: new Date().toISOString() });
+    setDialogOpen(false);
+    toast.success("已预约成功！老师将在 24 小时内与你联系");
+  }
 
   function onSubscribe(planId: Plan["id"]) {
     if (!user) {
@@ -81,6 +137,93 @@ function TutorPage() {
           直接跟着拿过 AP 微观经济 5 分的学长学姐上一对一直播辅导课，把不会的知识点、FRQ 逐一击破。
         </p>
       </header>
+
+      <section aria-label="免费试课" className="mx-auto mt-10 max-w-3xl">
+        <Card className="border-primary/40 bg-primary/5">
+          <CardContent className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/15">
+                <Gift className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <div className="font-semibold">每个账号赠送 1 节免费试课（60 分钟）</div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {existingBooking
+                    ? `你已预约了 ${existingBooking.teacher} 老师的免费试课，老师会通过你填写的联系方式与你排课。`
+                    : "选择 Steve 或 Venus 老师，留下联系方式，24 小时内我们会与你确认上课时间。"}
+                </p>
+              </div>
+            </div>
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <Button disabled={checking || !!existingBooking}>
+                  {existingBooking ? "已使用" : checking ? "加载中…" : "立即预约免费试课"}
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>预约免费 1 小时试课</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>选择老师</Label>
+                    <Select value={form.teacher} onValueChange={(v) => setForm((f) => ({ ...f, teacher: v }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Steve">Steve</SelectItem>
+                        <SelectItem value="Venus">Venus</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>期望上课时间（选填）</Label>
+                    <Input placeholder="例如 周末晚上 8 点" value={form.preferred_time}
+                      onChange={(e) => setForm((f) => ({ ...f, preferred_time: e.target.value }))} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>联系方式</Label>
+                    <Input placeholder="微信 / 邮箱 / 手机号" value={form.contact}
+                      onChange={(e) => setForm((f) => ({ ...f, contact: e.target.value }))} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>想重点讲解的内容（选填）</Label>
+                    <Textarea rows={3} value={form.note}
+                      onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))} />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setDialogOpen(false)}>取消</Button>
+                  <Button onClick={submitTrial} disabled={submitting}>{submitting ? "提交中…" : "确认预约"}</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section aria-label="教师团队" className="mx-auto mt-10 max-w-4xl">
+        <h2 className="text-xl font-semibold">教师团队</h2>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          {TEACHERS.map((t) => (
+            <Card key={t.name}>
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-lg font-bold text-primary">
+                    {t.name[0]}
+                  </div>
+                  <div>
+                    <CardTitle className="text-lg">{t.name}</CardTitle>
+                    <div className="mt-0.5 text-xs text-muted-foreground">{t.title}</div>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">{t.desc}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
 
       <section className="mx-auto mt-10 grid gap-4 sm:grid-cols-3">
         {PLANS.map((plan) => (
