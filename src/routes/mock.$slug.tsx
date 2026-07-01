@@ -1303,7 +1303,16 @@ function PaperRunner() {
       <div className="flex gap-2">
         <Button onClick={() => { setPhase("idle"); }}>再做一遍</Button>
         <Button asChild variant="outline">
-          <Link to="/mock">返回卷库</Link>
+          <Link
+            to={slug === "frq-pdf-practice" || slug.startsWith("frq-pack-") ? "/frq" : "/mock"}
+            search={
+              (slug === "frq-pdf-practice" || slug.startsWith("frq-pack-")) && selectedFrqUnit
+                ? { unit: selectedFrqUnit }
+                : undefined
+            }
+          >
+            {slug === "frq-pdf-practice" || slug.startsWith("frq-pack-") ? "返回题目列表" : "返回卷库"}
+          </Link>
         </Button>
       </div>
     </main>
