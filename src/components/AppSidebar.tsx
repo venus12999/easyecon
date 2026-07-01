@@ -1,6 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { BookOpen, ListChecks, Library, GraduationCap, LogOut, Bookmark, Shield, MessageSquarePlus, UserRound, Sparkles, CalendarCheck } from "lucide-react";
+import { BookOpen, ListChecks, Library, LogOut, Bookmark, Shield, MessageSquarePlus, UserRound, Sparkles, CalendarCheck } from "lucide-react";
 import { useState } from "react";
+import logoAsset from "@/assets/logo.png.asset.json";
 import {
   Sidebar,
   SidebarContent,
@@ -43,14 +44,16 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader className="px-3 py-4">
         <Link to="/" className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-            <GraduationCap className="h-5 w-5 text-primary" />
-          </div>
+          <img
+            src={logoAsset.url}
+            alt="EasyEcon"
+            className="h-8 w-8 rounded-lg object-cover shrink-0 bg-primary/10"
+          />
           {!collapsed && (
             <div className="leading-tight">
-              <div className="text-sm font-bold">APMicro</div>
+              <div className="text-sm font-bold">EasyEcon</div>
               <div className="inline-block mt-0.5 text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary">
-                练习平台
+                AP 经济练习
               </div>
             </div>
           )}
