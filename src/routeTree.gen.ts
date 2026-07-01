@@ -21,6 +21,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as MockIndexRouteImport } from './routes/mock.index'
+import { Route as TutorBookingsRouteImport } from './routes/tutor.bookings'
 import { Route as PracticeSlugRouteImport } from './routes/practice.$slug'
 import { Route as MockRandomRouteImport } from './routes/mock.random'
 import { Route as MockSlugRouteImport } from './routes/mock.$slug'
@@ -104,6 +105,11 @@ const MockIndexRoute = MockIndexRouteImport.update({
   id: '/mock/',
   path: '/mock/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const TutorBookingsRoute = TutorBookingsRouteImport.update({
+  id: '/bookings',
+  path: '/bookings',
+  getParentRoute: () => TutorRoute,
 } as any)
 const PracticeSlugRoute = PracticeSlugRouteImport.update({
   id: '/practice/$slug',
@@ -232,7 +238,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/stats': typeof StatsRoute
   '/terms': typeof TermsRoute
-  '/tutor': typeof TutorRoute
+  '/tutor': typeof TutorRouteWithChildren
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/api/feedback': typeof ApiFeedbackRoute
@@ -243,6 +249,7 @@ export interface FileRoutesByFullPath {
   '/mock/$slug': typeof MockSlugRoute
   '/mock/random': typeof MockRandomRoute
   '/practice/$slug': typeof PracticeSlugRoute
+  '/tutor/bookings': typeof TutorBookingsRoute
   '/mock/': typeof MockIndexRoute
   '/api/admin/audit': typeof ApiAdminAuditRoute
   '/api/admin/feedback': typeof ApiAdminFeedbackRoute
@@ -269,7 +276,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/stats': typeof StatsRoute
   '/terms': typeof TermsRoute
-  '/tutor': typeof TutorRoute
+  '/tutor': typeof TutorRouteWithChildren
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/api/feedback': typeof ApiFeedbackRoute
@@ -280,6 +287,7 @@ export interface FileRoutesByTo {
   '/mock/$slug': typeof MockSlugRoute
   '/mock/random': typeof MockRandomRoute
   '/practice/$slug': typeof PracticeSlugRoute
+  '/tutor/bookings': typeof TutorBookingsRoute
   '/mock': typeof MockIndexRoute
   '/api/admin/audit': typeof ApiAdminAuditRoute
   '/api/admin/feedback': typeof ApiAdminFeedbackRoute
@@ -307,7 +315,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/stats': typeof StatsRoute
   '/terms': typeof TermsRoute
-  '/tutor': typeof TutorRoute
+  '/tutor': typeof TutorRouteWithChildren
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/api/feedback': typeof ApiFeedbackRoute
@@ -318,6 +326,7 @@ export interface FileRoutesById {
   '/mock/$slug': typeof MockSlugRoute
   '/mock/random': typeof MockRandomRoute
   '/practice/$slug': typeof PracticeSlugRoute
+  '/tutor/bookings': typeof TutorBookingsRoute
   '/mock/': typeof MockIndexRoute
   '/api/admin/audit': typeof ApiAdminAuditRoute
   '/api/admin/feedback': typeof ApiAdminFeedbackRoute
@@ -357,6 +366,7 @@ export interface FileRouteTypes {
     | '/mock/$slug'
     | '/mock/random'
     | '/practice/$slug'
+    | '/tutor/bookings'
     | '/mock/'
     | '/api/admin/audit'
     | '/api/admin/feedback'
@@ -394,6 +404,7 @@ export interface FileRouteTypes {
     | '/mock/$slug'
     | '/mock/random'
     | '/practice/$slug'
+    | '/tutor/bookings'
     | '/mock'
     | '/api/admin/audit'
     | '/api/admin/feedback'
@@ -431,6 +442,7 @@ export interface FileRouteTypes {
     | '/mock/$slug'
     | '/mock/random'
     | '/practice/$slug'
+    | '/tutor/bookings'
     | '/mock/'
     | '/api/admin/audit'
     | '/api/admin/feedback'
@@ -458,7 +470,7 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   StatsRoute: typeof StatsRoute
   TermsRoute: typeof TermsRoute
-  TutorRoute: typeof TutorRoute
+  TutorRoute: typeof TutorRouteWithChildren
   WrongRoute: typeof WrongRoute
   ApiAiExplainRoute: typeof ApiAiExplainRoute
   ApiFeedbackRoute: typeof ApiFeedbackRoute
@@ -569,6 +581,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/mock/'
       preLoaderRoute: typeof MockIndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/tutor/bookings': {
+      id: '/tutor/bookings'
+      path: '/bookings'
+      fullPath: '/tutor/bookings'
+      preLoaderRoute: typeof TutorBookingsRouteImport
+      parentRoute: typeof TutorRoute
     }
     '/practice/$slug': {
       id: '/practice/$slug'
@@ -744,6 +763,16 @@ const FrqRouteChildren: FrqRouteChildren = {
 
 const FrqRouteWithChildren = FrqRoute._addFileChildren(FrqRouteChildren)
 
+interface TutorRouteChildren {
+  TutorBookingsRoute: typeof TutorBookingsRoute
+}
+
+const TutorRouteChildren: TutorRouteChildren = {
+  TutorBookingsRoute: TutorBookingsRoute,
+}
+
+const TutorRouteWithChildren = TutorRoute._addFileChildren(TutorRouteChildren)
+
 interface ApiMembershipRouteChildren {
   ApiMembershipMockAccessRoute: typeof ApiMembershipMockAccessRoute
 }
@@ -766,7 +795,7 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   StatsRoute: StatsRoute,
   TermsRoute: TermsRoute,
-  TutorRoute: TutorRoute,
+  TutorRoute: TutorRouteWithChildren,
   WrongRoute: WrongRoute,
   ApiAiExplainRoute: ApiAiExplainRoute,
   ApiFeedbackRoute: ApiFeedbackRoute,
