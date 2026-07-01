@@ -12,6 +12,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { CalendarIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { format } from "date-fns";
+
+const TIME_SLOTS = ["10:00", "14:00", "16:00", "19:00", "20:00", "21:00"];
+
+function toSlotISO(day: Date, hhmm: string) {
+  const [h, m] = hhmm.split(":").map(Number);
+  const d = new Date(day);
+  d.setHours(h, m, 0, 0);
+  return d.toISOString();
+}
 
 export const Route = createFileRoute("/tutor")({
   head: () => ({
@@ -67,11 +81,15 @@ const TEACHERS = [
 function TutorPage() {
   const { user } = useAuth();
   const { openCheckout, loading } = usePaddleCheckout();
-  const [existingBooking, setExistingBooking] = useState<{ teacher: string; created_at: string } | null>(null);
+  const [existingBooking, setExistingBooking] = useState<{ teacher: string; created_at: string; scheduled_at: string | null } | null>(null);
   const [checking, setChecking] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState({ teacher: "Steve", preferred_time: "", contact: "", note: "" });
+  const [form, setForm] = useState<{ teacher: string; date: Date | undefined; slot: string; contact: string; note: string }>({
+    teacher: "Steve", date: undefined, slot: "", contact: "", note: "",
+  });
+  const [takenSlots, setTakenSlots] = useState<string[]>([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
 
   useEffect(() => {
     if (!user) { setChecking(false); return; }
@@ -79,7 +97,7 @@ function TutorPage() {
     (async () => {
       const { data } = await supabase
         .from("tutor_trial_bookings")
-        .select("teacher, created_at")
+        .select("teacher, created_at, scheduled_at")
         .eq("user_id", user.id)
         .maybeSingle();
       if (!cancelled) {
@@ -90,24 +108,64 @@ function TutorPage() {
     return () => { cancelled = true; };
   }, [user]);
 
+  // Fetch taken slots whenever teacher or date changes.
+  useEffect(() => {
+    if (!dialogOpen || !form.date) { setTakenSlots([]); return; }
+    let cancelled = false;
+    setLoadingSlots(true);
+    (async () => {
+      const dayStr = format(form.date as Date, "yyyy-MM-dd");
+      const { data, error } = await supabase.rpc("get_taken_tutor_slots", {
+        p_teacher: form.teacher, p_day: dayStr,
+      });
+      if (cancelled) return;
+      if (error) { setTakenSlots([]); }
+      else {
+        const taken = (data ?? []).map((r: { scheduled_at: string }) => {
+          const d = new Date(r.scheduled_at);
+          return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+        });
+        setTakenSlots(taken);
+      }
+      setLoadingSlots(false);
+    })();
+    return () => { cancelled = true; };
+  }, [form.teacher, form.date, dialogOpen]);
+
+  function openBookingFor(teacher: string) {
+    if (!user) { toast.error("请先登录"); return; }
+    if (existingBooking) { toast.info("你已使用过免费试课"); return; }
+    setForm({ teacher, date: undefined, slot: "", contact: "", note: "" });
+    setDialogOpen(true);
+  }
+
   async function submitTrial() {
     if (!user) { toast.error("请先登录"); return; }
     if (!form.contact.trim()) { toast.error("请填写联系方式，方便老师联系你排课"); return; }
+    if (!form.date) { toast.error("请选择上课日期"); return; }
+    if (!form.slot) { toast.error("请选择时间段"); return; }
+    const scheduledISO = toSlotISO(form.date, form.slot);
+    if (new Date(scheduledISO).getTime() < Date.now()) { toast.error("请选择未来的时间"); return; }
+    if (takenSlots.includes(form.slot)) { toast.error("该时间段已被预约，请换一个"); return; }
     setSubmitting(true);
     const { error, data } = await supabase.from("tutor_trial_bookings").insert({
       user_id: user.id,
       teacher: form.teacher,
-      preferred_time: form.preferred_time || null,
+      preferred_time: `${format(form.date, "yyyy-MM-dd")} ${form.slot}`,
+      scheduled_at: scheduledISO,
       contact: form.contact,
       note: form.note || null,
-    }).select("teacher, created_at").maybeSingle();
+    }).select("teacher, created_at, scheduled_at").maybeSingle();
     setSubmitting(false);
     if (error) {
-      if (error.code === "23505") toast.error("每个账号仅可预约一次免费试课");
+      if (error.code === "23505") {
+        // could be user unique or slot unique
+        toast.error("预约冲突：你已预约过或该时间段刚被抢占，请换一个时间");
+      }
       else toast.error("预约失败，请稍后重试");
       return;
     }
-    setExistingBooking(data ?? { teacher: form.teacher, created_at: new Date().toISOString() });
+    setExistingBooking(data ?? { teacher: form.teacher, created_at: new Date().toISOString(), scheduled_at: scheduledISO });
     setDialogOpen(false);
     toast.success("已预约成功！老师将在 24 小时内与你联系");
   }
@@ -148,49 +206,9 @@ function TutorPage() {
                 </p>
               </div>
             </div>
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-              <DialogTrigger asChild>
-                <Button disabled={checking || !!existingBooking}>
-                  {existingBooking ? "已使用" : checking ? "加载中…" : "立即预约免费试课"}
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>预约免费 1 小时试课</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>选择老师</Label>
-                    <Select value={form.teacher} onValueChange={(v) => setForm((f) => ({ ...f, teacher: v }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Steve">Steve</SelectItem>
-                        <SelectItem value="Venus">Venus</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label>期望上课时间（选填）</Label>
-                    <Input placeholder="例如 周末晚上 8 点" value={form.preferred_time}
-                      onChange={(e) => setForm((f) => ({ ...f, preferred_time: e.target.value }))} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>联系方式</Label>
-                    <Input placeholder="微信 / 邮箱 / 手机号" value={form.contact}
-                      onChange={(e) => setForm((f) => ({ ...f, contact: e.target.value }))} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>想重点讲解的内容（选填）</Label>
-                    <Textarea rows={3} value={form.note}
-                      onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))} />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setDialogOpen(false)}>取消</Button>
-                  <Button onClick={submitTrial} disabled={submitting}>{submitting ? "提交中…" : "确认预约"}</Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+            <Button disabled={checking || !!existingBooking} onClick={() => openBookingFor(form.teacher || "Steve")}>
+              {existingBooking ? "已使用" : checking ? "加载中…" : "立即预约免费试课"}
+            </Button>
           </CardContent>
         </Card>
       </section>
@@ -218,11 +236,113 @@ function TutorPage() {
                 <p className="text-sm leading-relaxed text-muted-foreground sm:text-base">
                   {t.desc}
                 </p>
+                <Button
+                  className="w-full"
+                  variant="secondary"
+                  disabled={checking || !!existingBooking}
+                  onClick={() => openBookingFor(t.name)}
+                >
+                  {existingBooking
+                    ? (existingBooking.teacher === t.name ? "已预约本老师" : "已使用免费试课")
+                    : `预约 ${t.name} 老师试课`}
+                </Button>
               </CardContent>
             </Card>
           ))}
         </div>
       </section>
+
+      {/* Shared booking dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>预约免费 1 小时试课 · {form.teacher} 老师</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>选择老师</Label>
+              <Select value={form.teacher} onValueChange={(v) => setForm((f) => ({ ...f, teacher: v, slot: "" }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Steve">Steve</SelectItem>
+                  <SelectItem value="Venus">Venus</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label>上课日期</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn("w-full justify-start text-left font-normal", !form.date && "text-muted-foreground")}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {form.date ? format(form.date, "yyyy-MM-dd") : "选择日期"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={form.date}
+                      onSelect={(d) => setForm((f) => ({ ...f, date: d ?? undefined, slot: "" }))}
+                      disabled={(d) => {
+                        const today = new Date(); today.setHours(0,0,0,0);
+                        const max = new Date(); max.setDate(max.getDate() + 30);
+                        return d < today || d > max;
+                      }}
+                      initialFocus
+                      className={cn("p-3 pointer-events-auto")}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <div className="space-y-2">
+                <Label>时间段 {loadingSlots && <span className="text-xs text-muted-foreground">校验中…</span>}</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {TIME_SLOTS.map((s) => {
+                    const taken = takenSlots.includes(s);
+                    const past = form.date
+                      ? new Date(toSlotISO(form.date, s)).getTime() < Date.now()
+                      : false;
+                    const disabled = !form.date || taken || past;
+                    return (
+                      <Button
+                        key={s}
+                        type="button"
+                        size="sm"
+                        variant={form.slot === s ? "default" : "outline"}
+                        disabled={disabled}
+                        onClick={() => setForm((f) => ({ ...f, slot: s }))}
+                      >
+                        {s}{taken ? "×" : ""}
+                      </Button>
+                    );
+                  })}
+                </div>
+                {form.date && takenSlots.length > 0 && (
+                  <p className="text-xs text-muted-foreground">带 × 的时间段已被约</p>
+                )}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>联系方式</Label>
+              <Input placeholder="微信 / 邮箱 / 手机号" value={form.contact}
+                onChange={(e) => setForm((f) => ({ ...f, contact: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>想重点讲解的内容（选填）</Label>
+              <Textarea rows={3} value={form.note}
+                onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>取消</Button>
+            <Button onClick={submitTrial} disabled={submitting}>{submitting ? "提交中…" : "确认预约"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <section className="mx-auto mt-10 grid max-w-md gap-4">
         {PLANS.map((plan) => (
