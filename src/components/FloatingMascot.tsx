@@ -1,56 +1,38 @@
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
-import mascot1Url from "@/assets/mascot.png";
-import mascot2Url from "@/assets/mascot2.png";
-import mascot3Url from "@/assets/mascot3.png";
 import { Button } from "@/components/ui/button";
-
-const MASCOTS = [mascot1Url, mascot2Url, mascot3Url];
-const MASCOT_KEY = "mascot-variant-v1";
+import {
+  COMPANIONS,
+  COMPANION_KEY,
+  getCompanion,
+  pickContextualLine,
+  type CompanionId,
+} from "@/lib/mascot-lines";
 
 const SIZE = 80;
 const STORAGE_KEY = "mascot-pos-v1";
 const TIP_HIDDEN_KEY = "mascot-tip-hidden-date-v1";
-const TIPS = [
-  "读图题先看坐标轴和曲线方向，再判断价格与数量的变化。",
-  "看到 ceteris paribus，要记得其他条件保持不变。",
-  "需求量变化是沿曲线移动，需求变化才会让整条曲线移动。",
-  "先圈出题目问的是 marginal 还是 total，别被相似术语带偏。",
-  "价格上限只有低于均衡价格时才会真正产生约束。",
-  "做弹性题时，先判断百分比变化，再比较需求量与价格的反应幅度。",
-  "遇到税收题，先找买卖双方的新价格，税负不一定各承担一半。",
-  "短期做错题不可怕，把错误原因说清楚才是真正掌握。",
-];
 
 function localDateKey() {
   const now = new Date();
   return `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
 }
 
-function tipForToday() {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), 0, 0);
-  const day = Math.floor((now.getTime() - start.getTime()) / 86_400_000);
-  return TIPS[day % TIPS.length];
-}
-
 export function FloatingMascot() {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
   const [tip, setTip] = useState<string | null>(null);
-  const [variant, setVariant] = useState(0);
+  const [companionId, setCompanionId] = useState<CompanionId>("sarah");
   const [isDragging, setIsDragging] = useState(false);
   const [action, setAction] = useState(0);
   const dragRef = useRef<{ dx: number; dy: number; moved: boolean } | null>(null);
 
   useEffect(() => {
-    const savedVariant = Number(localStorage.getItem(MASCOT_KEY) ?? 0);
-    if (Number.isFinite(savedVariant) && savedVariant >= 0 && savedVariant < MASCOTS.length) {
-      setVariant(savedVariant);
-    }
+    const saved = localStorage.getItem(COMPANION_KEY);
+    setCompanionId(getCompanion(saved).id);
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const p = JSON.parse(saved);
+      const savedPos = localStorage.getItem(STORAGE_KEY);
+      if (savedPos) {
+        const p = JSON.parse(savedPos);
         if (typeof p.x === "number" && typeof p.y === "number") {
           setPos(clamp(p.x, p.y));
           return;
@@ -62,7 +44,21 @@ export function FloatingMascot() {
 
   useEffect(() => {
     const today = localDateKey();
-    setTip(localStorage.getItem(TIP_HIDDEN_KEY) === today ? null : tipForToday());
+    setTip(localStorage.getItem(TIP_HIDDEN_KEY) === today ? null : pickContextualLine());
+  }, []);
+
+  // Listen for companion switches from Profile page and show intro bubble.
+  useEffect(() => {
+    function onCompanionChange(event: Event) {
+      const detail = (event as CustomEvent<{ id: CompanionId }>).detail;
+      if (!detail?.id) return;
+      const next = getCompanion(detail.id);
+      setCompanionId(next.id);
+      setTip(next.intro);
+      try { localStorage.removeItem(TIP_HIDDEN_KEY); } catch {}
+    }
+    window.addEventListener("companion:change", onCompanionChange as EventListener);
+    return () => window.removeEventListener("companion:change", onCompanionChange as EventListener);
   }, []);
 
   function clamp(x: number, y: number) {
@@ -101,9 +97,12 @@ export function FloatingMascot() {
   }
 
   function onDoubleClick() {
-    const next = (variant + 1) % MASCOTS.length;
-    setVariant(next);
-    try { localStorage.setItem(MASCOT_KEY, String(next)); } catch {}
+    const idx = COMPANIONS.findIndex((c) => c.id === companionId);
+    const next = COMPANIONS[(idx + 1) % COMPANIONS.length];
+    setCompanionId(next.id);
+    try { localStorage.setItem(COMPANION_KEY, next.id); } catch {}
+    setTip(next.intro);
+    try { localStorage.removeItem(TIP_HIDDEN_KEY); } catch {}
   }
 
   function hideTip() {
@@ -115,22 +114,23 @@ export function FloatingMascot() {
 
   const bubbleLeft = pos.x >= 260 ? pos.x - 228 : pos.x + SIZE - 8;
   const bubbleTop = Math.max(8, pos.y + 4);
+  const companion = getCompanion(companionId);
 
   return (
     <>
       {tip && (
         <aside
-          aria-label="今日小贴士"
+          aria-label={`${companion.name} 的话`}
           className="fixed z-50 w-56 rounded-2xl border bg-popover p-3 pr-9 text-sm text-popover-foreground shadow-lg"
           style={{ left: bubbleLeft, top: bubbleTop }}
         >
-          <p className="mb-1 text-xs font-semibold text-primary">今日小贴士</p>
+          <p className="mb-1 text-xs font-semibold text-primary">{companion.name} 学姐/学长</p>
           <p className="leading-relaxed">{tip}</p>
           <Button
             type="button"
             variant="ghost"
             size="icon"
-            aria-label="关闭今日小贴士"
+            aria-label="关闭"
             onClick={hideTip}
             className="absolute right-1 top-1 h-7 w-7 rounded-full"
           >
@@ -139,9 +139,8 @@ export function FloatingMascot() {
         </aside>
       )}
       <img
-        src={MASCOTS[variant]}
-        alt=""
-        aria-hidden="true"
+        src={companion.image}
+        alt={companion.name}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
