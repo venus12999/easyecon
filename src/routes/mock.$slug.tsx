@@ -754,6 +754,17 @@ function PaperRunner() {
                   </Button>
                 )}
                 {grade && <FrqGradeCard grade={grade} />}
+                {grade && (
+                  <div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => void redoFrq(f)}
+                    >
+                      重新作答本题
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           );
