@@ -691,7 +691,9 @@ export type Database = {
           note: string | null
           preferred_time: string | null
           scheduled_at: string | null
+          status: string
           teacher: string
+          updated_at: string
           user_id: string
         }
         Insert: {
@@ -701,7 +703,9 @@ export type Database = {
           note?: string | null
           preferred_time?: string | null
           scheduled_at?: string | null
+          status?: string
           teacher: string
+          updated_at?: string
           user_id: string
         }
         Update: {
@@ -711,7 +715,9 @@ export type Database = {
           note?: string | null
           preferred_time?: string | null
           scheduled_at?: string | null
+          status?: string
           teacher?: string
+          updated_at?: string
           user_id?: string
         }
         Relationships: []

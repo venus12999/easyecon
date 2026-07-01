@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as WrongRouteImport } from './routes/wrong'
+import { Route as TutorBookingsRouteImport } from './routes/tutor-bookings'
 import { Route as TutorRouteImport } from './routes/tutor'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as StatsRouteImport } from './routes/stats'
@@ -18,6 +19,7 @@ import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as FrqRouteImport } from './routes/frq'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AdminTutorRouteImport } from './routes/admin-tutor'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as MockIndexRouteImport } from './routes/mock.index'
@@ -48,6 +50,11 @@ import { Route as ApiPublicPaymentsWebhookRouteImport } from './routes/api/publi
 const WrongRoute = WrongRouteImport.update({
   id: '/wrong',
   path: '/wrong',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TutorBookingsRoute = TutorBookingsRouteImport.update({
+  id: '/tutor-bookings',
+  path: '/tutor-bookings',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TutorRoute = TutorRouteImport.update({
@@ -88,6 +95,11 @@ const FrqRoute = FrqRouteImport.update({
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminTutorRoute = AdminTutorRouteImport.update({
+  id: '/admin-tutor',
+  path: '/admin-tutor',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminRoute = AdminRouteImport.update({
@@ -225,6 +237,7 @@ const ApiPublicPaymentsWebhookRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/admin-tutor': typeof AdminTutorRoute
   '/auth': typeof AuthRoute
   '/frq': typeof FrqRouteWithChildren
   '/pricing': typeof PricingRoute
@@ -233,6 +246,7 @@ export interface FileRoutesByFullPath {
   '/stats': typeof StatsRoute
   '/terms': typeof TermsRoute
   '/tutor': typeof TutorRoute
+  '/tutor-bookings': typeof TutorBookingsRoute
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/api/feedback': typeof ApiFeedbackRoute
@@ -262,6 +276,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/admin-tutor': typeof AdminTutorRoute
   '/auth': typeof AuthRoute
   '/frq': typeof FrqRouteWithChildren
   '/pricing': typeof PricingRoute
@@ -270,6 +285,7 @@ export interface FileRoutesByTo {
   '/stats': typeof StatsRoute
   '/terms': typeof TermsRoute
   '/tutor': typeof TutorRoute
+  '/tutor-bookings': typeof TutorBookingsRoute
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/api/feedback': typeof ApiFeedbackRoute
@@ -300,6 +316,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/admin-tutor': typeof AdminTutorRoute
   '/auth': typeof AuthRoute
   '/frq': typeof FrqRouteWithChildren
   '/pricing': typeof PricingRoute
@@ -308,6 +325,7 @@ export interface FileRoutesById {
   '/stats': typeof StatsRoute
   '/terms': typeof TermsRoute
   '/tutor': typeof TutorRoute
+  '/tutor-bookings': typeof TutorBookingsRoute
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/api/feedback': typeof ApiFeedbackRoute
@@ -339,6 +357,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/admin'
+    | '/admin-tutor'
     | '/auth'
     | '/frq'
     | '/pricing'
@@ -347,6 +366,7 @@ export interface FileRouteTypes {
     | '/stats'
     | '/terms'
     | '/tutor'
+    | '/tutor-bookings'
     | '/wrong'
     | '/api/ai-explain'
     | '/api/feedback'
@@ -376,6 +396,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/admin'
+    | '/admin-tutor'
     | '/auth'
     | '/frq'
     | '/pricing'
@@ -384,6 +405,7 @@ export interface FileRouteTypes {
     | '/stats'
     | '/terms'
     | '/tutor'
+    | '/tutor-bookings'
     | '/wrong'
     | '/api/ai-explain'
     | '/api/feedback'
@@ -413,6 +435,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/admin'
+    | '/admin-tutor'
     | '/auth'
     | '/frq'
     | '/pricing'
@@ -421,6 +444,7 @@ export interface FileRouteTypes {
     | '/stats'
     | '/terms'
     | '/tutor'
+    | '/tutor-bookings'
     | '/wrong'
     | '/api/ai-explain'
     | '/api/feedback'
@@ -451,6 +475,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
+  AdminTutorRoute: typeof AdminTutorRoute
   AuthRoute: typeof AuthRoute
   FrqRoute: typeof FrqRouteWithChildren
   PricingRoute: typeof PricingRoute
@@ -459,6 +484,7 @@ export interface RootRouteChildren {
   StatsRoute: typeof StatsRoute
   TermsRoute: typeof TermsRoute
   TutorRoute: typeof TutorRoute
+  TutorBookingsRoute: typeof TutorBookingsRoute
   WrongRoute: typeof WrongRoute
   ApiAiExplainRoute: typeof ApiAiExplainRoute
   ApiFeedbackRoute: typeof ApiFeedbackRoute
@@ -491,6 +517,13 @@ declare module '@tanstack/react-router' {
       path: '/wrong'
       fullPath: '/wrong'
       preLoaderRoute: typeof WrongRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tutor-bookings': {
+      id: '/tutor-bookings'
+      path: '/tutor-bookings'
+      fullPath: '/tutor-bookings'
+      preLoaderRoute: typeof TutorBookingsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/tutor': {
@@ -547,6 +580,13 @@ declare module '@tanstack/react-router' {
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin-tutor': {
+      id: '/admin-tutor'
+      path: '/admin-tutor'
+      fullPath: '/admin-tutor'
+      preLoaderRoute: typeof AdminTutorRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin': {
@@ -759,6 +799,7 @@ const ApiMembershipRouteWithChildren = ApiMembershipRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
+  AdminTutorRoute: AdminTutorRoute,
   AuthRoute: AuthRoute,
   FrqRoute: FrqRouteWithChildren,
   PricingRoute: PricingRoute,
@@ -767,6 +808,7 @@ const rootRouteChildren: RootRouteChildren = {
   StatsRoute: StatsRoute,
   TermsRoute: TermsRoute,
   TutorRoute: TutorRoute,
+  TutorBookingsRoute: TutorBookingsRoute,
   WrongRoute: WrongRoute,
   ApiAiExplainRoute: ApiAiExplainRoute,
   ApiFeedbackRoute: ApiFeedbackRoute,
