@@ -683,6 +683,36 @@ export type Database = {
         }
         Relationships: []
       }
+      tutor_trial_bookings: {
+        Row: {
+          contact: string | null
+          created_at: string
+          id: string
+          note: string | null
+          preferred_time: string | null
+          teacher: string
+          user_id: string
+        }
+        Insert: {
+          contact?: string | null
+          created_at?: string
+          id?: string
+          note?: string | null
+          preferred_time?: string | null
+          teacher: string
+          user_id: string
+        }
+        Update: {
+          contact?: string | null
+          created_at?: string
+          id?: string
+          note?: string | null
+          preferred_time?: string | null
+          teacher?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
