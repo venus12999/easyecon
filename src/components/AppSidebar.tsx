@@ -1,6 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { BookOpen, ListChecks, Library, GraduationCap, LogOut, Bookmark, Shield, MessageSquarePlus, UserRound, Sparkles, CalendarCheck } from "lucide-react";
+import { BookOpen, ListChecks, Library, LogOut, Bookmark, Shield, MessageSquarePlus, UserRound, Sparkles, CalendarCheck } from "lucide-react";
 import { useState } from "react";
+import logoAsset from "@/assets/logo.png.asset.json";
 import {
   Sidebar,
   SidebarContent,
