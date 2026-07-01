@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { BookOpen, ListChecks, Library, GraduationCap, LogOut, Bookmark, Shield, MessageSquarePlus, UserRound } from "lucide-react";
+import { BookOpen, ListChecks, Library, GraduationCap, LogOut, Bookmark, Shield, MessageSquarePlus, UserRound, Sparkles } from "lucide-react";
 import { useState } from "react";
 import {
   Sidebar,
@@ -23,6 +23,7 @@ const practiceItems = [
   { title: "刷题", url: "/", icon: BookOpen, exact: true },
   { title: "错题本", url: "/wrong", icon: Bookmark },
   { title: "模拟考试", url: "/mock", icon: ListChecks },
+  { title: "五分大神带你飞", url: "/tutor", icon: Sparkles },
 ];
 
 const refItems = [{ title: "术语表", url: "/terms", icon: Library }];
