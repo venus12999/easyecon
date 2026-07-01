@@ -26,7 +26,7 @@ export const Route = createFileRoute("/tutor")({
 });
 
 type Plan = {
-  id: "tutor_single_lesson" | "tutor_pack_10";
+  id: "tutor_pack_10";
   name: string;
   price: string;
   unit: string;
@@ -37,14 +37,6 @@ type Plan = {
 };
 
 const PLANS: Plan[] = [
-  {
-    id: "tutor_single_lesson",
-    name: "单次体验课",
-    price: "¥299",
-    unit: "/ 1 节 · 60 分钟",
-    desc: "先试一节，快速评估当前水平与备考差距。",
-    perks: ["1v1 视频直播", "课后微信答疑 24h", "个性化学习建议"],
-  },
   {
     id: "tutor_pack_10",
     name: "10 节满分包",
@@ -60,13 +52,13 @@ const PLANS: Plan[] = [
 const TEACHERS = [
   {
     name: "Steve",
-    title: "AP 微观 5 分 · 4 年辅导经验",
-    desc: "擅长 FRQ 得分点拆解与图形分析，帮助 80+ 名学生冲上 5 分。风格耐心细致，适合基础到中等水平。",
+    title: "十一年级在读学长 · 沉稳内敛",
+    desc: `他不会直接告诉你"应该背什么"，而是陪你把每一个难点真正弄懂。座右铭：逸一时，误一世。`,
   },
   {
     name: "Venus",
-    title: "AP 微观 5 分 · Top 30 大学经济系",
-    desc: "擅长知识体系梳理与错题诊断，主攻高分冲刺与考前串讲，节奏紧凑，适合中高等水平快速提分。",
+    title: "十一年级在读学姐 · 激情鲜活",
+    desc: `喜欢把经济学讲"活"，擅长用商业案例和生活中的真实场景讲清楚复杂的 AP Micro 概念。座右铭：希望每一节课结束，你都会觉得："原来 AP Micro 可以这么简单。"`,
   },
 ];
 
@@ -225,7 +217,7 @@ function TutorPage() {
         </div>
       </section>
 
-      <section className="mx-auto mt-10 grid gap-4 sm:grid-cols-2">
+      <section className="mx-auto mt-10 grid max-w-md gap-4">
         {PLANS.map((plan) => (
           <Card key={plan.id} className={plan.highlight ? "border-primary/50 shadow-md" : undefined}>
             <CardHeader>
