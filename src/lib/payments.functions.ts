@@ -4,7 +4,7 @@ import { z } from "zod";
 export const resolvePaddlePrice = createServerFn({ method: "GET" })
   .inputValidator((data) =>
     z.object({
-      priceId: z.enum(["ap_micro_pro_monthly", "ap_micro_pro_yearly"]),
+      priceId: z.enum(["ap_micro_pro_monthly", "ap_micro_pro_quarterly", "ap_micro_pro_yearly"]),
       environment: z.enum(["sandbox", "live"]),
     }).parse(data),
   )
