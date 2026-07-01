@@ -217,7 +217,7 @@ function TutorPage() {
         </div>
       </section>
 
-      <section className="mx-auto mt-10 grid gap-4 sm:grid-cols-2">
+      <section className="mx-auto mt-10 grid max-w-md gap-4">
         {PLANS.map((plan) => (
           <Card key={plan.id} className={plan.highlight ? "border-primary/50 shadow-md" : undefined}>
             <CardHeader>
