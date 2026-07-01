@@ -12,6 +12,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 import { FrqAnswerBox, EMPTY_ANSWER, type FrqAnswerState } from "@/components/frq/FrqAnswerBox";
 import { FrqGradeCard, type GradeResult } from "@/components/frq/FrqGradeCard";
+import { FrqContent } from "@/components/frq/FrqContent";
 import { Button as UiButton } from "@/components/ui/button";
 
 export const Route = createFileRoute("/mock/random")({
@@ -405,14 +406,7 @@ function Mock() {
                       满分 {f.max_score} 分
                     </span>
                   </div>
-                  <div className="text-sm whitespace-pre-wrap leading-relaxed">{f.content}</div>
-                  {f.image_url && (
-                    <img
-                      src={f.image_url}
-                      alt="FRQ 图"
-                      className="max-h-80 w-auto rounded border border-border"
-                    />
-                  )}
+                  <FrqContent content={f.content} />
                   <FrqAnswerBox
                     paperId={f.paper_id}
                     frqId={f.id}
