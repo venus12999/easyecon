@@ -161,7 +161,7 @@ function FrqCategoriesPage() {
                   </div>
                   <CardTitle className="text-base leading-snug">{frq.title ?? `FRQ ${index + 1}`}</CardTitle>
                   <CardDescription className="line-clamp-3 whitespace-pre-wrap leading-relaxed">
-                    {frq.content}
+                    {frq.content.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="mt-auto">
