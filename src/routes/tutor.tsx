@@ -224,9 +224,17 @@ function TutorPage() {
           {TEACHERS.map((t) => (
             <Card key={t.name} className="overflow-hidden">
               <CardHeader className="flex flex-col items-center pb-3 pt-6 text-center">
-                <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 text-2xl font-bold text-primary">
-                  {t.name[0]}
-                </div>
+                {t.avatar ? (
+                  <img
+                    src={t.avatar}
+                    alt={`${t.name} 头像`}
+                    className="h-20 w-20 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 text-2xl font-bold text-primary">
+                    {t.name[0]}
+                  </div>
+                )}
                 <div className="mt-4 space-y-1">
                   <CardTitle className="text-xl">{t.name}</CardTitle>
                   <div className="text-sm text-muted-foreground">{t.title}</div>
