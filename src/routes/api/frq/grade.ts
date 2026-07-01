@@ -52,22 +52,29 @@ function tryParseJson(raw: string): Grade | null {
   return null;
 }
 
-// 清理 AI 输出：仅保留中英文、数字、常见标点；去掉 Markdown 符号（* # ` _ ~ 等）与乱码字符
+// 清理 AI 输出：保留中英文、数字、常见中英文标点与 emoji；去掉 Markdown 符号与乱码
 function sanitizeText(s: unknown): string {
   if (typeof s !== "string") return "";
   let out = s
-    // 去掉 markdown emphasis / heading / code fence / bullet 符号
+    // 去掉 markdown 强调 / 标题 / 代码围栏 / 引用符号
+    .replace(/```+/g, "")
     .replace(/[*_~`#>]+/g, "")
-    // 去掉行首列表破折号
-    .replace(/^\s*[-•]+\s?/gm, "")
-    // 去掉替换字符与私有区/未映射的乱码
+    // 行首的 markdown 列表符号（-, •, +）统一去掉，段落自然分行
+    .replace(/^\s*[-•+]+\s?/gm, "")
+    // 替换字符与私有区乱码
     .replace(/[\uFFFD\uE000-\uF8FF]/g, "");
-  // 白名单：CJK、拉丁字母数字、常见中英文标点、空白
+  // 白名单：CJK + 拉丁字母数字 + 常见中英文标点 + 空白 + emoji 常见区段
   out = out.replace(
-    /[^\u4E00-\u9FFF\u3400-\u4DBF\uFF00-\uFF65\u3000-\u303F\w\s.,;:!?()\[\]{}"'/%\-+=<>@¥$&|·—…“”‘’、。，；：！？（）《》【】]/g,
+    /[^\u4E00-\u9FFF\u3400-\u4DBF\uFF00-\uFF65\u3000-\u303F\w\s.,;:!?()\[\]{}"'/%\-+=<>@¥$&|·—…“”‘’、。，；：！？（）《》【】\u2600-\u27BF\u2B00-\u2BFF\u{1F300}-\u{1FAFF}\u{1F900}-\u{1F9FF}\u{1F1E6}-\u{1F1FF}\u200D\uFE0F]/gu,
     "",
   );
-  return out.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  // 段落格式化：中文句末标点后若紧跟正文则补空行；统一空白
+  out = out
+    .replace(/\r\n?/g, "\n")
+    .replace(/[ \t]+/g, " ")
+    .replace(/ ?\n ?/g, "\n")
+    .replace(/\n{3,}/g, "\n\n");
+  return out.trim();
 }
 
 function sanitizeGrade(g: Grade): Grade {
