@@ -689,8 +689,18 @@ function PaperRunner() {
     const mm = String(Math.floor(frqSeconds / 60)).padStart(2, "0");
     const ss = String(frqSeconds % 60).padStart(2, "0");
     const allGrading = Object.values(grading).some(Boolean);
+    const isFrqOnly = slug === "frq-pdf-practice" || slug.startsWith("frq-pack-");
     return (
       <main className="mx-auto max-w-3xl px-4 py-8 space-y-6">
+        {isFrqOnly && (
+          <Link
+            to="/frq"
+            search={selectedFrqUnit ? { unit: selectedFrqUnit } : undefined}
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" /> 返回题目列表
+          </Link>
+        )}
         <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold">{questions.length === 0 ? "大题练习 · FRQ" : "Section II · FRQ"}</h1>
