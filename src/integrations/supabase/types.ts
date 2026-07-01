@@ -690,6 +690,7 @@ export type Database = {
           id: string
           note: string | null
           preferred_time: string | null
+          scheduled_at: string | null
           teacher: string
           user_id: string
         }
@@ -699,6 +700,7 @@ export type Database = {
           id?: string
           note?: string | null
           preferred_time?: string | null
+          scheduled_at?: string | null
           teacher: string
           user_id: string
         }
@@ -708,6 +710,7 @@ export type Database = {
           id?: string
           note?: string | null
           preferred_time?: string | null
+          scheduled_at?: string | null
           teacher?: string
           user_id?: string
         }
@@ -775,6 +778,12 @@ export type Database = {
           allowed: boolean
           is_pro: boolean
           next_available_at: string
+        }[]
+      }
+      get_taken_tutor_slots: {
+        Args: { p_day: string; p_teacher: string }
+        Returns: {
+          scheduled_at: string
         }[]
       }
       has_active_subscription: {
