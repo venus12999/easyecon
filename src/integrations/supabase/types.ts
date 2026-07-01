@@ -792,21 +792,6 @@ export type Database = {
           scheduled_at: string
         }[]
       }
-      get_today_tutor_bookings: {
-        Args: never
-        Returns: {
-          contact: string
-          created_at: string
-          id: string
-          note: string
-          preferred_time: string
-          scheduled_at: string
-          status: string
-          teacher: string
-          user_email: string
-          user_id: string
-        }[]
-      }
       has_active_subscription: {
         Args: { check_env?: string; user_uuid: string }
         Returns: boolean
