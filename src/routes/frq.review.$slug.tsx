@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { FrqGradeCard, type GradeResult } from "@/components/frq/FrqGradeCard";
+import { FrqContent } from "@/components/frq/FrqContent";
 
 export const Route = createFileRoute("/frq/review/$slug")({
   head: () => ({ meta: [{ title: "大题合集 · 评分回放" }] }),
@@ -201,9 +202,9 @@ function FrqReviewPage() {
                   <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
                     查看题目原文
                   </summary>
-                  <p className="mt-2 whitespace-pre-wrap rounded bg-muted p-3 text-[12px] leading-relaxed">
-                    {f.content}
-                  </p>
+                  <div className="mt-2 rounded bg-muted p-3 text-[12px] leading-relaxed">
+                    <FrqContent content={f.content} />
+                  </div>
                 </details>
                 {s?.answer_text && (
                   <details className="text-xs">
