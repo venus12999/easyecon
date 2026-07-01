@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { usePaddleCheckout } from "@/hooks/use-paddle-checkout";
+import { COMPANIONS, COMPANION_KEY, getCompanion, type CompanionId } from "@/lib/mascot-lines";
 
 type Membership = {
   isPro: boolean;
@@ -36,7 +37,19 @@ function ProfilePage() {
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [syncingPayment, setSyncingPayment] = useState(false);
+  const [companionId, setCompanionId] = useState<CompanionId>("sarah");
   const { openCheckout, loading: checkoutLoading } = usePaddleCheckout();
+
+  useEffect(() => {
+    setCompanionId(getCompanion(localStorage.getItem(COMPANION_KEY)).id);
+  }, []);
+
+  function pickCompanion(id: CompanionId) {
+    setCompanionId(id);
+    try { localStorage.setItem(COMPANION_KEY, id); } catch {}
+    window.dispatchEvent(new CustomEvent("companion:change", { detail: { id } }));
+    toast.success(`已选择 ${getCompanion(id).name} 作为你的学习伙伴`);
+  }
 
   async function loadMembership() {
     const { data } = await supabase.auth.getSession();
@@ -175,6 +188,33 @@ function ProfilePage() {
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             保存资料
           </Button>
+        </CardContent>
+      </Card>
+      <Card className="mb-5">
+        <CardHeader>
+          <CardTitle className="text-base">学习伙伴</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {COMPANIONS.map((c) => {
+              const active = c.id === companionId;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => pickCompanion(c.id)}
+                  className={`flex flex-col items-center gap-2 rounded-xl border p-4 text-center transition ${
+                    active ? "border-primary bg-primary/5 ring-2 ring-primary/40" : "hover:border-primary/40"
+                  }`}
+                >
+                  <img src={c.image} alt={c.name} className="h-16 w-16" style={{ imageRendering: "pixelated" }} />
+                  <div className="text-sm font-semibold">{c.name}</div>
+                  <div className="text-xs text-muted-foreground leading-snug">{c.tagline}</div>
+                  {active && <span className="text-[10px] font-semibold text-primary">当前伙伴</span>}
+                </button>
+              );
+            })}
+          </div>
         </CardContent>
       </Card>
       <Card className="mb-5">
