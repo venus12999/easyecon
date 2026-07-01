@@ -170,7 +170,8 @@ export const Route = createFileRoute("/api/frq/grade")({
           `【输出要求】仅输出一个 JSON 对象（不要 Markdown、不要 \`\`\` 代码块、不要解释文字），结构示例：\n` +
             `{"total_score": 数字, "max_score": ${maxScore}, "breakdown": [{"point":"得分点","awarded":true,"comment":"解释"}], "overall_comment":"中文整体评语", "suggestions":"中文改进建议"}\n` +
             `max_score 必须等于 ${maxScore}。\n` +
-            `【文本格式硬性要求】所有字符串字段（point/comment/overall_comment/suggestions）只能包含中文与英文（含数字与常见中英文标点），禁止使用任何 Markdown 符号（例如 * _ ~ \` # >）、项目符号、表情符号或其他特殊字符；禁止出现乱码。需要强调时用中文书写，不要加符号。`,
+            `【文本格式硬性要求】所有字符串字段（point/comment/overall_comment/suggestions）只能包含中文、英文、数字与常见中英文标点，可少量使用 emoji（如 ✅ ❌ 💡 📌）；禁止任何 Markdown 符号（* _ ~ \` # >）、代码围栏或项目符号；禁止出现乱码。\n` +
+            `【排版要求】overall_comment 与 suggestions 使用自然的中英文混排段落：每段聚焦一个要点，段落之间用一个空行（\\n\\n）分隔，段内换行用 \\n。禁止使用星号或"-"作为项目符号；如需列举可用"1) 2) 3)"或"首先/其次/最后"。`,
         );
         const userText = userTextParts.join("\n\n");
 
