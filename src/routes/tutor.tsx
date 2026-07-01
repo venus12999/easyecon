@@ -71,14 +71,17 @@ const TEACHERS = [
     title: "十一年级在读学长 · 沉稳内敛",
     desc: "他不会直接告诉你\"应该背什么\"，而是陪你把每一个难点真正弄懂。",
     motto: "逸一时，误一世。",
+    avatar: null,
   },
   {
     name: "Venus",
     title: "十一年级在读学姐 · 激情鲜活",
     desc: "喜欢把经济学讲\"活\"，擅长用商业案例和生活中的真实场景讲清楚复杂的 AP Micro 概念。",
     motto: "希望每一节课结束，你都会觉得：\"原来 AP Micro 可以这么简单。\"",
+    avatar: venusAvatar.url,
   },
 ];
+
 
 function TutorPage() {
   const { user } = useAuth();
