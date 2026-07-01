@@ -197,7 +197,8 @@ function PaperRunner() {
   }, [selectedFrqId, selectedFrqUnit, slug]);
 
   useEffect(() => {
-    if (!loading && slug === "frq-pdf-practice" && phase === "idle" && frqs.length > 0) {
+    const isFrqOnly = slug === "frq-pdf-practice" || slug.startsWith("frq-pack-");
+    if (!loading && isFrqOnly && phase === "idle" && frqs.length > 0) {
       start();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -366,11 +367,12 @@ function PaperRunner() {
   }
 
   async function start() {
-    if (!user && slug !== "frq-pdf-practice") {
+    const isFrqOnly = slug === "frq-pdf-practice" || slug.startsWith("frq-pack-");
+    if (!user && !isFrqOnly) {
       toast.error("请先登录后参加完整模考");
       return;
     }
-    if (user && slug !== "frq-pdf-practice") {
+    if (user && !isFrqOnly) {
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
       if (token) {
