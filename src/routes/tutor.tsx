@@ -199,20 +199,25 @@ function TutorPage() {
         <h2 className="text-xl font-semibold">教师团队</h2>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           {TEACHERS.map((t) => (
-            <Card key={t.name}>
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-lg font-bold text-primary">
-                    {t.name[0]}
-                  </div>
-                  <div>
-                    <CardTitle className="text-lg">{t.name}</CardTitle>
-                    <div className="mt-0.5 text-xs text-muted-foreground">{t.title}</div>
-                  </div>
+            <Card key={t.name} className="overflow-hidden">
+              <CardHeader className="flex flex-col items-center pb-3 pt-6 text-center">
+                <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 text-2xl font-bold text-primary">
+                  {t.name[0]}
+                </div>
+                <div className="mt-4 space-y-1">
+                  <CardTitle className="text-xl">{t.name}</CardTitle>
+                  <div className="text-sm text-muted-foreground">{t.title}</div>
                 </div>
               </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">{t.desc}</p>
+              <CardContent className="space-y-4 pb-6 text-center">
+                <div className="rounded-xl bg-primary/5 px-4 py-3">
+                  <p className="text-sm font-medium leading-relaxed text-primary/90">
+                    “{t.motto}”
+                  </p>
+                </div>
+                <p className="text-sm leading-relaxed text-muted-foreground sm:text-base">
+                  {t.desc}
+                </p>
               </CardContent>
             </Card>
           ))}
