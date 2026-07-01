@@ -17,6 +17,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import venusAvatar from "@/assets/venus-avatar.jpeg.asset.json";
+
 
 const TIME_SLOTS = ["10:00", "14:00", "16:00", "19:00", "20:00", "21:00"];
 
