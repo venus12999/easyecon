@@ -17,6 +17,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import venusAvatar from "@/assets/venus-avatar.jpeg.asset.json";
+
 
 const TIME_SLOTS = ["10:00", "14:00", "16:00", "19:00", "20:00", "21:00"];
 
@@ -69,14 +71,17 @@ const TEACHERS = [
     title: "十一年级在读学长 · 沉稳内敛",
     desc: "他不会直接告诉你\"应该背什么\"，而是陪你把每一个难点真正弄懂。",
     motto: "逸一时，误一世。",
+    avatar: null,
   },
   {
     name: "Venus",
     title: "十一年级在读学姐 · 激情鲜活",
     desc: "喜欢把经济学讲\"活\"，擅长用商业案例和生活中的真实场景讲清楚复杂的 AP Micro 概念。",
     motto: "希望每一节课结束，你都会觉得：\"原来 AP Micro 可以这么简单。\"",
+    avatar: venusAvatar.url,
   },
 ];
+
 
 function TutorPage() {
   const { user } = useAuth();
@@ -219,9 +224,17 @@ function TutorPage() {
           {TEACHERS.map((t) => (
             <Card key={t.name} className="overflow-hidden">
               <CardHeader className="flex flex-col items-center pb-3 pt-6 text-center">
-                <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 text-2xl font-bold text-primary">
-                  {t.name[0]}
-                </div>
+                {t.avatar ? (
+                  <img
+                    src={t.avatar}
+                    alt={`${t.name} 头像`}
+                    className="h-20 w-20 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary/10 text-2xl font-bold text-primary">
+                    {t.name[0]}
+                  </div>
+                )}
                 <div className="mt-4 space-y-1">
                   <CardTitle className="text-xl">{t.name}</CardTitle>
                   <div className="text-sm text-muted-foreground">{t.title}</div>
