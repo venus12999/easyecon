@@ -11,8 +11,6 @@ import {
   BarChart3,
   Library,
   ArrowRight,
-  Flame,
-  Check,
   SquarePen,
   GraduationCap,
 } from "lucide-react";
@@ -100,7 +98,6 @@ function Index() {
     rate: null,
     totalAttempts: 0,
   });
-  const [weekCheckins, setWeekCheckins] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     setCurrentDate(new Date());
@@ -122,18 +119,13 @@ function Index() {
   useEffect(() => {
     if (!user) {
       setStats({ today: 0, rate: null, totalAttempts: 0 });
-      setWeekCheckins(new Set());
       return;
     }
     (async () => {
       const now = new Date();
       const startOfDay = new Date(now);
       startOfDay.setHours(0, 0, 0, 0);
-      const startOfWeek = new Date(startOfDay);
-      startOfWeek.setDate(startOfDay.getDate() - ((startOfDay.getDay() + 6) % 7));
-      const endOfWeek = new Date(startOfWeek);
-      endOfWeek.setDate(startOfWeek.getDate() + 7);
-      const [todayRes, totalRes, correctRes, weekRes] = await Promise.all([
+      const [todayRes, totalRes, correctRes] = await Promise.all([
         supabase
           .from("answer_attempts")
           .select("id", { count: "exact", head: true })
@@ -148,22 +140,11 @@ function Index() {
           .select("id", { count: "exact", head: true })
           .eq("user_id", user.id)
           .eq("is_correct", true),
-        supabase
-          .from("answer_attempts")
-          .select("created_at")
-          .eq("user_id", user.id)
-          .gte("created_at", startOfWeek.toISOString())
-          .lt("created_at", endOfWeek.toISOString()),
       ]);
       const today = todayRes.count ?? 0;
       const total = totalRes.count ?? 0;
       const correct = correctRes.count ?? 0;
       setStats({ today, totalAttempts: total, rate: total ? Math.round((correct / total) * 100) : null });
-      setWeekCheckins(
-        new Set(
-          (weekRes.data ?? []).map((attempt) => (new Date(attempt.created_at).getDay() + 6) % 7),
-        ),
-      );
     })();
   }, [user]);
 
@@ -245,10 +226,6 @@ function Index() {
   const hour = currentDate?.getHours();
   const greeting = hour == null ? "你好" : hour < 6 ? "凌晨好" : hour < 12 ? "早上好" : hour < 14 ? "中午好" : hour < 18 ? "下午好" : "晚上好";
   const userLabel = displayName ?? (user?.email ? user.email.split("@")[0] : "同学");
-
-  // 本周打卡：按用户本周真实答题记录计算
-  const weekDays = ["一", "二", "三", "四", "五", "六", "日"];
-  const todayIdx = currentDate ? (currentDate.getDay() + 6) % 7 : -1; // 周一=0
 
   // 选一个有题目的 KP，用于 Practice 大卡的副标题与跳转
   const firstKpWithQuestions = kps.find((k) => (counts[k.id]?.total ?? 0) > 0) ?? kps[0];
