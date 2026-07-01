@@ -426,6 +426,23 @@ function Mock() {
                     </UiButton>
                   )}
                   {grade && <FrqGradeCard grade={grade} />}
+                  {grade && (
+                    <UiButton
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setFrqGrades((g) => {
+                          const n = { ...g };
+                          delete n[f.id];
+                          return n;
+                        });
+                        setFrqAnswers((s) => ({ ...s, [f.id]: EMPTY_ANSWER }));
+                        toast.success("已清空作答，可重新答题");
+                      }}
+                    >
+                      重新作答本题
+                    </UiButton>
+                  )}
                 </CardContent>
               </Card>
             );
