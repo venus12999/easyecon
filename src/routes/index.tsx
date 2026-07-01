@@ -14,6 +14,7 @@ import {
   Flame,
   Check,
   SquarePen,
+  GraduationCap,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -350,6 +351,29 @@ function Index() {
                 开始考试
               </div>
             </div>
+          </Link>
+        </section>
+
+        {/* 五分大神带你飞 */}
+        <section className="mb-5">
+          <Link
+            to="/tutor"
+            className="group relative overflow-hidden rounded-2xl p-6 flex items-center justify-between gap-4 text-white shadow-sm hover:shadow-md transition-shadow"
+            style={{ background: "linear-gradient(135deg,#b8541f 0%,#e07a2c 55%,#f6b452 100%)" }}
+          >
+            <div className="flex items-center gap-4">
+              <div className="h-12 w-12 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center shrink-0">
+                <GraduationCap className="h-6 w-6" />
+              </div>
+              <div>
+                <div className="text-xl font-bold">五分大神带你飞</div>
+                <div className="text-sm opacity-90 mt-0.5">订阅 5 分学长学姐的一对一线上辅导课</div>
+              </div>
+            </div>
+            <div className="hidden sm:inline-flex items-center gap-2 rounded-full bg-white/20 backdrop-blur px-4 py-2 text-sm font-medium shrink-0">
+              查看课程 <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+            </div>
+            <ArrowRight className="sm:hidden h-5 w-5 opacity-90 group-hover:translate-x-1 transition-transform" />
           </Link>
         </section>
 
