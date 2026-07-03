@@ -40,6 +40,8 @@ export type MascotMemory = {
   longestStreak: number;
   unlocked: MilestoneId[];
   lastMilestoneAt: number | null;
+  currentCompanion: CompanionId | null;
+  companionHistory: CompanionId[];
 };
 
 const EMPTY: MascotMemory = {
@@ -55,6 +57,8 @@ const EMPTY: MascotMemory = {
   longestStreak: 0,
   unlocked: [],
   lastMilestoneAt: null,
+  currentCompanion: null,
+  companionHistory: [],
 };
 
 function safeRead(): MascotMemory {
@@ -78,6 +82,20 @@ export function getMascotMemory(): MascotMemory {
 
 export function resetMascotMemory() {
   try { localStorage.removeItem(MEM_KEY); } catch {}
+}
+
+/** Persist the active companion into memory and broadcast a switch event. */
+export function setActiveCompanion(id: CompanionId) {
+  try { localStorage.setItem(COMPANION_KEY, id); } catch {}
+  const mem = safeRead();
+  if (mem.currentCompanion !== id) {
+    mem.currentCompanion = id;
+    if (!mem.companionHistory.includes(id)) mem.companionHistory.push(id);
+    safeWrite(mem);
+  }
+  try {
+    window.dispatchEvent(new CustomEvent("companion:change", { detail: { id } }));
+  } catch {}
 }
 
 function todayStr() {
