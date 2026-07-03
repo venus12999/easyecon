@@ -63,7 +63,17 @@ export function FloatingMascot() {
       try { localStorage.removeItem(TIP_HIDDEN_KEY); } catch {}
     }
     window.addEventListener("companion:change", onCompanionChange as EventListener);
-    return () => window.removeEventListener("companion:change", onCompanionChange as EventListener);
+    function onStorage(e: StorageEvent) {
+      if (e.key === COMPANION_KEY && e.newValue) {
+        const next = getCompanion(e.newValue);
+        setCompanionId(next.id);
+      }
+    }
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("companion:change", onCompanionChange as EventListener);
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
 
   // Listen for milestone unlocks and pop the corresponding congrats line.

@@ -10,6 +10,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { usePaddleCheckout } from "@/hooks/use-paddle-checkout";
 import { COMPANIONS, COMPANION_KEY, getCompanion, type CompanionId } from "@/lib/mascot-lines";
+import { setActiveCompanion } from "@/lib/mascot-memory";
 import { pingComeback, summarizeMemory } from "@/lib/mascot-memory";
 
 const MILESTONE_LABEL: Record<string, string> = {
@@ -73,8 +74,7 @@ function ProfilePage() {
 
   function pickCompanion(id: CompanionId) {
     setCompanionId(id);
-    try { localStorage.setItem(COMPANION_KEY, id); } catch {}
-    window.dispatchEvent(new CustomEvent("companion:change", { detail: { id } }));
+    setActiveCompanion(id);
     toast.success(`已选择 ${getCompanion(id).name} 作为你的学习伙伴`);
   }
 
