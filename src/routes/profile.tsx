@@ -10,6 +10,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { usePaddleCheckout } from "@/hooks/use-paddle-checkout";
 import { COMPANIONS, COMPANION_KEY, getCompanion, type CompanionId } from "@/lib/mascot-lines";
+import { pingComeback, summarizeMemory } from "@/lib/mascot-memory";
 
 type Membership = {
   isPro: boolean;
