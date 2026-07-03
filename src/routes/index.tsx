@@ -15,6 +15,9 @@ import {
   GraduationCap,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { computeCoachSuggestion, type CoachSuggestion } from "@/lib/mascot-coach";
+import { getCompanion, COMPANION_KEY, type CompanionId } from "@/lib/mascot-lines";
+import { useNavigate } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -91,7 +94,10 @@ function Index() {
   const [loading, setLoading] = useState(true);
   const [unit, setUnit] = useState<number | null>(null);
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [displayName, setDisplayName] = useState<string | null>(null);
+  const [coach, setCoach] = useState<CoachSuggestion | null>(null);
+  const [coachCompanion, setCoachCompanion] = useState<CompanionId>("sarah");
   const [kpProgress, setKpProgress] = useState<Record<string, KpProgressInfo>>({});
   const [stats, setStats] = useState<{ today: number; rate: number | null; totalAttempts: number }>({
     today: 0,
@@ -102,6 +108,15 @@ function Index() {
   useEffect(() => {
     setCurrentDate(new Date());
   }, []);
+
+  useEffect(() => {
+    if (!user) { setCoach(null); return; }
+    try {
+      const stored = (localStorage.getItem(COMPANION_KEY) as CompanionId | null) ?? "sarah";
+      setCoachCompanion(stored);
+    } catch {}
+    void computeCoachSuggestion(user.id).then(setCoach);
+  }, [user]);
 
   useEffect(() => {
     if (!user) {
