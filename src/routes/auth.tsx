@@ -10,6 +10,9 @@ import { Loader2, Sparkles, ShieldCheck, BookOpen } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import logoAsset from "@/assets/logo.png.asset.json";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { getRememberPreference, setRememberPreference } from "@/lib/remember-session";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({ meta: [{ title: "登录 / 注册 · AP 微观经济" }, { name: "robots", content: "noindex" }] }),
@@ -29,10 +32,15 @@ function AuthPage() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [forgot, setForgot] = useState(false);
+  const [remember, setRemember] = useState(true);
 
   useEffect(() => {
     if (user) nav({ to: "/" });
   }, [user, nav]);
+
+  useEffect(() => {
+    setRemember(getRememberPreference());
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
