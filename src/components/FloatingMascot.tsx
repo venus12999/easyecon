@@ -191,6 +191,7 @@ export function FloatingMascot() {
           src={companion.image}
           alt={companion.name}
           onDragStart={(e) => e.preventDefault()}
+          onAnimationEnd={() => setAction(0)}
           className={`h-20 w-20 select-none drop-shadow-lg ${
             isDragging ? "animate-mascot-drag" : action > 0 ? "animate-mascot-wave" : "animate-mascot-float"
           }`}
