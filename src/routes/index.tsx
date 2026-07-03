@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -15,6 +15,9 @@ import {
   GraduationCap,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { computeCoachSuggestion, type CoachSuggestion } from "@/lib/mascot-coach";
+import { getCompanion, COMPANION_KEY, type CompanionId } from "@/lib/mascot-lines";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -91,7 +94,10 @@ function Index() {
   const [loading, setLoading] = useState(true);
   const [unit, setUnit] = useState<number | null>(null);
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [displayName, setDisplayName] = useState<string | null>(null);
+  const [coach, setCoach] = useState<CoachSuggestion | null>(null);
+  const [coachCompanion, setCoachCompanion] = useState<CompanionId>("sarah");
   const [kpProgress, setKpProgress] = useState<Record<string, KpProgressInfo>>({});
   const [stats, setStats] = useState<{ today: number; rate: number | null; totalAttempts: number }>({
     today: 0,
@@ -102,6 +108,15 @@ function Index() {
   useEffect(() => {
     setCurrentDate(new Date());
   }, []);
+
+  useEffect(() => {
+    if (!user) { setCoach(null); return; }
+    try {
+      const stored = (localStorage.getItem(COMPANION_KEY) as CompanionId | null) ?? "sarah";
+      setCoachCompanion(stored);
+    } catch {}
+    void computeCoachSuggestion(user.id).then(setCoach);
+  }, [user]);
 
   useEffect(() => {
     if (!user) {
@@ -261,6 +276,33 @@ function Index() {
             </div>
           )}
         </section>
+
+        {user && coach && (
+          <section className="mb-5">
+            <div className="flex items-start gap-3 rounded-2xl border border-primary/25 bg-primary/5 p-4">
+              <img src={getCompanion(coachCompanion).image} alt="" className="h-10 w-10 shrink-0" style={{ imageRendering: "pixelated" }} />
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-semibold text-primary">{getCompanion(coachCompanion).name} 的提醒</div>
+                <div className="mt-0.5 text-sm text-foreground">{coach.message}</div>
+              </div>
+              {coach.actionTo && coach.actionLabel && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (coach.actionParams) {
+                      navigate({ to: coach.actionTo!, params: coach.actionParams as never });
+                    } else {
+                      navigate({ to: coach.actionTo! });
+                    }
+                  }}
+                  className="shrink-0 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+                >
+                  {coach.actionLabel}
+                </button>
+              )}
+            </div>
+          </section>
+        )}
 
         {/* 题型选择 */}
         <section className="mb-3 flex items-center gap-2 text-xs text-primary font-medium">

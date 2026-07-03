@@ -10,6 +10,7 @@ import { renderStemWithTerms, highlightTermsInNodes, type TermInfo } from "@/lib
 import { optionStyles, colorizeExplanation, type OptKey } from "@/lib/option-colors";
 import { recordAnswer, addWrong, getWrong } from "@/lib/storage";
 import { recordAnswer as recordMascotAnswer } from "@/lib/mascot-memory";
+import { reportAnswerEvent } from "@/lib/mascot-coach";
 import { Check, X, ChevronLeft, ChevronRight, Bookmark, Loader2, Sparkles, Home } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
@@ -65,6 +66,7 @@ function Practice() {
   const [termDict, setTermDict] = useState<Record<string, TermInfo>>({});
   const [loading, setLoading] = useState(true);
   const [wrongSet, setWrongSet] = useState<Set<string>>(new Set());
+  const [session, setSession] = useState({ total: 0, correct: 0, streak: 0 });
 
   useEffect(() => {
     (async () => {
@@ -122,6 +124,18 @@ function Practice() {
     if (ok) playCorrect(); else playWrong();
     recordAnswer(cur.knowledge_point_id, ok);
     recordMascotAnswer({ knowledgePointId: cur.knowledge_point_id, isCorrect: ok });
+    const next = {
+      total: session.total + 1,
+      correct: session.correct + (ok ? 1 : 0),
+      streak: ok ? session.streak + 1 : 0,
+    };
+    setSession(next);
+    reportAnswerEvent({
+      isCorrect: ok,
+      currentStreakCorrect: next.streak,
+      sessionTotal: next.total,
+      sessionCorrect: next.correct,
+    });
     if (!ok && !wrongSet.has(cur.id)) addWrong(cur.id);
     if (user) {
       await supabase.from("answer_attempts").insert({
