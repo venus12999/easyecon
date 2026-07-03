@@ -13,8 +13,6 @@ import { setActiveCompanion } from "@/lib/mascot-memory";
 const SIZE = 80;
 const STORAGE_KEY = "mascot-pos-v1";
 const TIP_HIDDEN_KEY = "mascot-tip-hidden-date-v1";
-const DOUBLE_CLICK_MS = 300;
-const DOUBLE_CLICK_DIST = 12;
 
 function localDateKey() {
   const now = new Date();
@@ -28,8 +26,6 @@ export function FloatingMascot() {
   const [isDragging, setIsDragging] = useState(false);
   const [action, setAction] = useState(0);
   const dragRef = useRef<{ dx: number; dy: number; moved: boolean } | null>(null);
-  const lastClickRef = useRef<{ time: number; x: number; y: number } | null>(null);
-  const lastSwitchRef = useRef<number>(0);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -99,18 +95,6 @@ export function FloatingMascot() {
     };
   }
 
-  function switchCompanion() {
-    const now = performance.now();
-    if (now - lastSwitchRef.current < 400) return;
-    lastSwitchRef.current = now;
-    const idx = COMPANIONS.findIndex((c) => c.id === companionId);
-    const next = COMPANIONS[(idx + 1) % COMPANIONS.length];
-    setCompanionId(next.id);
-    setTip(next.intro);
-    try { localStorage.removeItem(TIP_HIDDEN_KEY); } catch {}
-    setActiveCompanion(next.id);
-  }
-
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     if (!pos) return;
     const el = containerRef.current;
@@ -141,18 +125,6 @@ export function FloatingMascot() {
     setIsDragging(false);
 
     if (!moved) {
-      const now = performance.now();
-      if (lastClickRef.current) {
-        const dt = now - lastClickRef.current.time;
-        const dx = e.clientX - lastClickRef.current.x;
-        const dy = e.clientY - lastClickRef.current.y;
-        if (dt < DOUBLE_CLICK_MS && Math.hypot(dx, dy) < DOUBLE_CLICK_DIST) {
-          switchCompanion();
-          lastClickRef.current = null;
-          return;
-        }
-      }
-      lastClickRef.current = { time: now, x: e.clientX, y: e.clientY };
       setAction((current) => current + 1);
     }
   }
@@ -196,7 +168,6 @@ export function FloatingMascot() {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
-        onDoubleClick={switchCompanion}
         className="fixed z-50 h-20 w-20 touch-none cursor-grab active:cursor-grabbing"
         style={{ left: pos.x, top: pos.y }}
       >
