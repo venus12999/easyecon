@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Loader2, GraduationCap } from "lucide-react";
+import { Loader2, Sparkles, ShieldCheck, BookOpen } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
+import logoAsset from "@/assets/logo.png.asset.json";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({ meta: [{ title: "登录 / 注册 · AP 微观经济" }, { name: "robots", content: "noindex" }] }),
@@ -89,16 +90,35 @@ function AuthPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        <Link to="/" className="flex items-center gap-2 justify-center mb-6">
-          <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center">
-            <GraduationCap className="h-5 w-5 text-primary" />
+    <div className="relative min-h-screen overflow-hidden bg-background flex items-center justify-center px-4 py-10">
+      {/* 背景装饰 */}
+      <div className="pointer-events-none absolute inset-0 -z-10">
+        <div className="absolute -top-32 -left-24 h-80 w-80 rounded-full bg-primary/20 blur-3xl" />
+        <div className="absolute top-1/2 -right-24 h-96 w-96 rounded-full bg-accent/30 blur-3xl" />
+        <div className="absolute bottom-0 left-1/3 h-72 w-72 rounded-full bg-primary/10 blur-3xl" />
+      </div>
+
+      <div className="w-full max-w-md">
+        <Link to="/" className="mb-8 flex flex-col items-center gap-3">
+          <div className="rounded-2xl bg-card/60 p-2 shadow-lg ring-1 ring-border/60 backdrop-blur">
+            <img src={logoAsset.url} alt="EasyEcon" className="h-12 w-12 rounded-xl" />
           </div>
-          <div className="font-bold">APMicro 练习平台</div>
+          <div className="text-center">
+            <div className="text-xl font-bold tracking-tight">EasyEcon</div>
+            <div className="mt-1 text-xs text-muted-foreground">AP 微观经济 · 智能练习平台</div>
+          </div>
         </Link>
-        <Card>
+
+        <Card className="border-border/60 shadow-xl backdrop-blur-sm bg-card/95">
           <CardContent className="p-6">
+            <div className="mb-4 text-center">
+              <h1 className="text-lg font-semibold">
+                {forgot ? "找回密码" : tab === "register" ? "创建账号" : "欢迎回来"}
+              </h1>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {forgot ? "输入注册邮箱，我们会发送重设链接" : tab === "register" ? "注册后即可开始 AP 微观经济练习" : "继续你的学习进度"}
+              </p>
+            </div>
               <Tabs value={tab} onValueChange={(v) => { setTab(v as "login" | "register"); setForgot(false); }}>
               <TabsList className="grid grid-cols-2 w-full">
                 <TabsTrigger value="login">登录</TabsTrigger>
@@ -113,6 +133,7 @@ function AuthPage() {
                     onChange={(e) => setEmail(e.target.value)}
                     autoComplete="email"
                     required
+                    className="h-11"
                   />
                   {!forgot && <Input
                     type="password"
@@ -121,8 +142,9 @@ function AuthPage() {
                     onChange={(e) => setPassword(e.target.value)}
                     autoComplete={tab === "register" ? "new-password" : "current-password"}
                     required
+                    className="h-11"
                   />}
-                  {forgot ? <Button type="button" className="w-full" disabled={busy} onClick={() => void sendReset()}>{busy && <Loader2 className="h-4 w-4 animate-spin" />}发送重设邮件</Button> : <Button type="submit" className="w-full" disabled={busy}>
+                  {forgot ? <Button type="button" className="w-full h-11" disabled={busy} onClick={() => void sendReset()}>{busy && <Loader2 className="h-4 w-4 animate-spin" />}发送重设邮件</Button> : <Button type="submit" className="w-full h-11" disabled={busy}>
                     {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : tab === "register" ? "注册并登录" : "登录"}
                   </Button>}
                   {tab === "login" && <Button type="button" variant="link" className="h-auto w-full p-0 text-xs" onClick={() => setForgot((value) => !value)}>{forgot ? "返回密码登录" : "忘记密码？"}</Button>}
@@ -131,6 +153,21 @@ function AuthPage() {
             </Tabs>
           </CardContent>
         </Card>
+
+        <div className="mt-6 grid grid-cols-3 gap-2 text-center text-[11px] text-muted-foreground">
+          <div className="rounded-lg border border-border/50 bg-card/40 px-2 py-3 backdrop-blur">
+            <BookOpen className="mx-auto mb-1 h-4 w-4 text-primary" />
+            题库精选
+          </div>
+          <div className="rounded-lg border border-border/50 bg-card/40 px-2 py-3 backdrop-blur">
+            <Sparkles className="mx-auto mb-1 h-4 w-4 text-primary" />
+            AI 讲解
+          </div>
+          <div className="rounded-lg border border-border/50 bg-card/40 px-2 py-3 backdrop-blur">
+            <ShieldCheck className="mx-auto mb-1 h-4 w-4 text-primary" />
+            进度同步
+          </div>
+        </div>
       </div>
     </div>
   );
