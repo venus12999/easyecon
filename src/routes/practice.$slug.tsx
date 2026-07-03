@@ -83,6 +83,7 @@ function Practice() {
         .select("*")
         .eq("knowledge_point_id", kpData.id)
         .eq("status", "published")
+        .eq("exclude_from_pool", false)
         .order("difficulty");
       if (type) q = q.eq("type", type);
       const { data: qData } = await q;

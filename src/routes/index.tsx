@@ -157,7 +157,8 @@ function Index() {
         .order("sort_order");
       const { data: qData } = await supabase
         .from("questions")
-        .select("knowledge_point_id,type,status");
+        .select("knowledge_point_id,type,status")
+        .eq("exclude_from_pool", false);
       const c: Counts = {};
       (qData ?? []).forEach((q) => {
         const k = q.knowledge_point_id as string;
