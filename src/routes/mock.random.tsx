@@ -132,7 +132,8 @@ function Mock() {
     const { data } = await supabase
       .from("questions")
       .select("id,knowledge_point_id,stem,option_a,option_b,option_c,option_d,option_e,correct_answer,explanation,image_url,term_tags,knowledge_points!inner(name_zh,unit)")
-      .eq("status", "published");
+      .eq("status", "published")
+      .eq("exclude_from_pool", false);
     const all = ((data ?? []) as unknown as Q[]).map((q) => ({
       ...q,
       unit: q.knowledge_points?.unit ?? 0,
@@ -178,7 +179,8 @@ function Mock() {
       const { data: allFrqs } = await supabase
         .from("paper_frqs")
         .select("id,title,content,image_url,image_text,max_score,sort_order")
-        .eq("paper_id", poolPaper.id);
+        .eq("paper_id", poolPaper.id)
+        .eq("exclude_from_pool", false);
       const list = ((allFrqs ?? []) as Omit<FrqItem, "paper_id">[]).map((f) => ({
         ...f,
         paper_id: poolPaper.id,

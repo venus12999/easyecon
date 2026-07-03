@@ -8,6 +8,7 @@ import {
   pickContextualLine,
   type CompanionId,
 } from "@/lib/mascot-lines";
+import { setActiveCompanion } from "@/lib/mascot-memory";
 
 const SIZE = 80;
 const STORAGE_KEY = "mascot-pos-v1";
@@ -63,7 +64,17 @@ export function FloatingMascot() {
       try { localStorage.removeItem(TIP_HIDDEN_KEY); } catch {}
     }
     window.addEventListener("companion:change", onCompanionChange as EventListener);
-    return () => window.removeEventListener("companion:change", onCompanionChange as EventListener);
+    function onStorage(e: StorageEvent) {
+      if (e.key === COMPANION_KEY && e.newValue) {
+        const next = getCompanion(e.newValue);
+        setCompanionId(next.id);
+      }
+    }
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("companion:change", onCompanionChange as EventListener);
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
 
   // Listen for milestone unlocks and pop the corresponding congrats line.
@@ -95,10 +106,9 @@ export function FloatingMascot() {
     const idx = COMPANIONS.findIndex((c) => c.id === companionId);
     const next = COMPANIONS[(idx + 1) % COMPANIONS.length];
     setCompanionId(next.id);
-    try { localStorage.setItem(COMPANION_KEY, next.id); } catch {}
     setTip(next.intro);
     try { localStorage.removeItem(TIP_HIDDEN_KEY); } catch {}
-    window.dispatchEvent(new CustomEvent("companion:change", { detail: { id: next.id } }));
+    setActiveCompanion(next.id);
   }
 
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
