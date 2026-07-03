@@ -1504,8 +1504,8 @@ function DataSourcePanel({ token }: { token: string }) {
       ] as const;
       const counts: Record<string, number> = {};
       for (const t of tables) {
-        const { count, error } = await supabase
-          .from(t as string)
+        const { count, error } = await (supabase as any)
+          .from(t)
           .select("*", { count: "exact", head: true });
         counts[t] = error ? -1 : count ?? 0;
       }
