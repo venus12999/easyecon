@@ -28,6 +28,7 @@ export function FloatingMascot() {
   const [action, setAction] = useState(0);
   const dragRef = useRef<{ dx: number; dy: number; moved: boolean } | null>(null);
   const lastClickRef = useRef<{ time: number; x: number; y: number } | null>(null);
+  const lastSwitchRef = useRef<number>(0);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
