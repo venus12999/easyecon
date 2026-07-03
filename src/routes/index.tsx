@@ -277,6 +277,33 @@ function Index() {
           )}
         </section>
 
+        {user && coach && (
+          <section className="mb-5">
+            <div className="flex items-start gap-3 rounded-2xl border border-primary/25 bg-primary/5 p-4">
+              <img src={getCompanion(coachCompanion).image} alt="" className="h-10 w-10 shrink-0" style={{ imageRendering: "pixelated" }} />
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-semibold text-primary">{getCompanion(coachCompanion).name} 的提醒</div>
+                <div className="mt-0.5 text-sm text-foreground">{coach.message}</div>
+              </div>
+              {coach.actionTo && coach.actionLabel && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (coach.actionParams) {
+                      navigate({ to: coach.actionTo!, params: coach.actionParams as never });
+                    } else {
+                      navigate({ to: coach.actionTo! });
+                    }
+                  }}
+                  className="shrink-0 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+                >
+                  {coach.actionLabel}
+                </button>
+              )}
+            </div>
+          </section>
+        )}
+
         {/* 题型选择 */}
         <section className="mb-3 flex items-center gap-2 text-xs text-primary font-medium">
           <Sparkles className="h-3.5 w-3.5" /> 选择刷题类型
