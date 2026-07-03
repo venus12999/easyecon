@@ -16,14 +16,14 @@ export const COMPANIONS: Companion[] = [
   {
     id: "sarah",
     name: "Sarah",
-    image: mascot1Url,
+    image: mascot2Url,
     tagline: "去年 AP Micro 5 分学姐，笑点低但很靠谱。",
     intro: "接下来由我来陪伴你一起学习呀！我去年也是这样一路刷过来的。",
   },
   {
     id: "venus",
     name: "Venus",
-    image: mascot2Url,
+    image: mascot1Url,
     tagline: "去年 AP Micro 5 分学姐，安静温柔的那一款。",
     intro: "接下来由我来陪伴你一起学习呀！我们慢慢来，不急。",
   },
