@@ -12,6 +12,23 @@ import { usePaddleCheckout } from "@/hooks/use-paddle-checkout";
 import { COMPANIONS, COMPANION_KEY, getCompanion, type CompanionId } from "@/lib/mascot-lines";
 import { pingComeback, summarizeMemory } from "@/lib/mascot-memory";
 
+const MILESTONE_LABEL: Record<string, string> = {
+  first_answer: "第一题",
+  answers_10: "10 题",
+  answers_50: "50 题",
+  answers_100: "破百",
+  answers_500: "500 题",
+  streak_3: "连击 3 天",
+  streak_7: "连击 7 天",
+  streak_30: "连击 30 天",
+  first_frq: "首道大题",
+  first_mock: "首次模考",
+  accuracy_80: "正确率 80%",
+  night_owl: "夜猫子",
+  early_bird: "早起党",
+  comeback: "回归",
+};
+
 type Membership = {
   isPro: boolean;
   plan: string | null;
