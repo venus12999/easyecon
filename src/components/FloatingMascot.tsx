@@ -88,6 +88,9 @@ export function FloatingMascot() {
   }
 
   function switchCompanion() {
+    const now = performance.now();
+    if (now - lastSwitchRef.current < 400) return;
+    lastSwitchRef.current = now;
     const idx = COMPANIONS.findIndex((c) => c.id === companionId);
     const next = COMPANIONS[(idx + 1) % COMPANIONS.length];
     setCompanionId(next.id);
