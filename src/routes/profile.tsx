@@ -228,6 +228,57 @@ function ProfilePage() {
         </CardContent>
       </Card>
       <Card className="mb-5">
+        <CardHeader>
+          <CardTitle className="text-base">伙伴记忆</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-4">
+            <div className="rounded-lg border p-3">
+              <div className="text-xs text-muted-foreground">累计答题</div>
+              <div className="mt-1 text-lg font-bold">{memory.totalAnswers}</div>
+            </div>
+            <div className="rounded-lg border p-3">
+              <div className="text-xs text-muted-foreground">正确率</div>
+              <div className="mt-1 text-lg font-bold">{memory.accuracy}%</div>
+            </div>
+            <div className="rounded-lg border p-3">
+              <div className="text-xs text-muted-foreground">当前连击</div>
+              <div className="mt-1 text-lg font-bold">{memory.streak} 天</div>
+            </div>
+            <div className="rounded-lg border p-3">
+              <div className="text-xs text-muted-foreground">最长连击</div>
+              <div className="mt-1 text-lg font-bold">{memory.longestStreak} 天</div>
+            </div>
+          </div>
+          <div className="grid gap-3 text-sm sm:grid-cols-3">
+            <div className="rounded-lg border p-3">
+              <div className="text-xs text-muted-foreground">偏好单元</div>
+              <div className="mt-1 font-semibold">{memory.favoriteUnit ? `Unit ${memory.favoriteUnit}` : "—"}</div>
+            </div>
+            <div className="rounded-lg border p-3">
+              <div className="text-xs text-muted-foreground">常在时段</div>
+              <div className="mt-1 font-semibold">{memory.activeHour ? `${memory.activeHour}:00 前后` : "—"}</div>
+            </div>
+            <div className="rounded-lg border p-3">
+              <div className="text-xs text-muted-foreground">薄弱知识点</div>
+              <div className="mt-1 font-semibold">{memory.weakCount} 个待巩固</div>
+            </div>
+          </div>
+          <div>
+            <div className="mb-2 text-xs text-muted-foreground">已解锁成就 · {memory.milestones.length}</div>
+            {memory.milestones.length === 0 ? (
+              <p className="text-sm text-muted-foreground">先做一题，让伙伴记住你的第一步～</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {memory.milestones.map((m) => (
+                  <span key={m} className="rounded-full border bg-primary/5 px-3 py-1 text-xs text-primary">{MILESTONE_LABEL[m] ?? m}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+      <Card className="mb-5">
         <CardHeader><CardTitle className="text-base">账号安全</CardTitle></CardHeader>
         <CardContent className="grid gap-5 sm:grid-cols-2">
           <div className="space-y-2"><Label htmlFor="new-email">修改邮箱</Label><Input id="new-email" type="email" value={newEmail} onChange={(event) => setNewEmail(event.target.value)} placeholder="新邮箱地址" /><Button variant="outline" onClick={() => void updateEmail()} disabled={!newEmail.trim()}>发送确认邮件</Button></div>
