@@ -7,6 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { renderStemWithTerms, type TermInfo } from "@/lib/term-render";
 import { optionStyles, type OptKey } from "@/lib/option-colors";
 import { recordAnswer } from "@/lib/storage";
+import { recordAnswer as recordMascotAnswer, recordFrqSubmission, recordMockAttempt } from "@/lib/mascot-memory";
 import { Clock, Loader2, SquarePen } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
@@ -212,7 +213,9 @@ function Mock() {
       const a = answers[q.id];
       const ok = a === q.correct_answer;
       recordAnswer(q.knowledge_point_id, ok);
+      recordMascotAnswer({ knowledgePointId: q.knowledge_point_id, isCorrect: ok });
     });
+    recordMockAttempt();
     if (user) {
       const total = questions.length;
       const correct = questions.filter((q) => answers[q.id] === q.correct_answer).length;
@@ -313,6 +316,11 @@ function Mock() {
       toast.error("部分作答尚未评分，请重试后再查看结果");
       return;
     }
+    const submittedCount = frqs.filter((f) => {
+      const a = frqAnswers[f.id];
+      return a && (a.text.trim() || a.fileUrl);
+    }).length;
+    for (let i = 0; i < submittedCount; i++) recordFrqSubmission();
     setPhase("done");
   }
 

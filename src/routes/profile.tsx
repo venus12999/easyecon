@@ -10,6 +10,24 @@ import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { usePaddleCheckout } from "@/hooks/use-paddle-checkout";
 import { COMPANIONS, COMPANION_KEY, getCompanion, type CompanionId } from "@/lib/mascot-lines";
+import { pingComeback, summarizeMemory } from "@/lib/mascot-memory";
+
+const MILESTONE_LABEL: Record<string, string> = {
+  first_answer: "第一题",
+  answers_10: "10 题",
+  answers_50: "50 题",
+  answers_100: "破百",
+  answers_500: "500 题",
+  streak_3: "连击 3 天",
+  streak_7: "连击 7 天",
+  streak_30: "连击 30 天",
+  first_frq: "首道大题",
+  first_mock: "首次模考",
+  accuracy_80: "正确率 80%",
+  night_owl: "夜猫子",
+  early_bird: "早起党",
+  comeback: "回归",
+};
 
 type Membership = {
   isPro: boolean;
@@ -38,6 +56,15 @@ function ProfilePage() {
   const [newPassword, setNewPassword] = useState("");
   const [syncingPayment, setSyncingPayment] = useState(false);
   const [companionId, setCompanionId] = useState<CompanionId>("sarah");
+  const [memory, setMemory] = useState(() => summarizeMemory());
+
+  useEffect(() => {
+    pingComeback();
+    setMemory(summarizeMemory());
+    function refresh() { setMemory(summarizeMemory()); }
+    window.addEventListener("companion:milestone", refresh);
+    return () => window.removeEventListener("companion:milestone", refresh);
+  }, []);
   const { openCheckout, loading: checkoutLoading } = usePaddleCheckout();
 
   useEffect(() => {
@@ -214,6 +241,57 @@ function ProfilePage() {
                 </button>
               );
             })}
+          </div>
+        </CardContent>
+      </Card>
+      <Card className="mb-5">
+        <CardHeader>
+          <CardTitle className="text-base">伙伴记忆</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-4">
+            <div className="rounded-lg border p-3">
+              <div className="text-xs text-muted-foreground">累计答题</div>
+              <div className="mt-1 text-lg font-bold">{memory.totalAnswers}</div>
+            </div>
+            <div className="rounded-lg border p-3">
+              <div className="text-xs text-muted-foreground">正确率</div>
+              <div className="mt-1 text-lg font-bold">{memory.accuracy}%</div>
+            </div>
+            <div className="rounded-lg border p-3">
+              <div className="text-xs text-muted-foreground">当前连击</div>
+              <div className="mt-1 text-lg font-bold">{memory.streak} 天</div>
+            </div>
+            <div className="rounded-lg border p-3">
+              <div className="text-xs text-muted-foreground">最长连击</div>
+              <div className="mt-1 text-lg font-bold">{memory.longestStreak} 天</div>
+            </div>
+          </div>
+          <div className="grid gap-3 text-sm sm:grid-cols-3">
+            <div className="rounded-lg border p-3">
+              <div className="text-xs text-muted-foreground">偏好单元</div>
+              <div className="mt-1 font-semibold">{memory.favoriteUnit ? `Unit ${memory.favoriteUnit}` : "—"}</div>
+            </div>
+            <div className="rounded-lg border p-3">
+              <div className="text-xs text-muted-foreground">常在时段</div>
+              <div className="mt-1 font-semibold">{memory.activeHour ? `${memory.activeHour}:00 前后` : "—"}</div>
+            </div>
+            <div className="rounded-lg border p-3">
+              <div className="text-xs text-muted-foreground">薄弱知识点</div>
+              <div className="mt-1 font-semibold">{memory.weakCount} 个待巩固</div>
+            </div>
+          </div>
+          <div>
+            <div className="mb-2 text-xs text-muted-foreground">已解锁成就 · {memory.milestones.length}</div>
+            {memory.milestones.length === 0 ? (
+              <p className="text-sm text-muted-foreground">先做一题，让伙伴记住你的第一步～</p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {memory.milestones.map((m) => (
+                  <span key={m} className="rounded-full border bg-primary/5 px-3 py-1 text-xs text-primary">{MILESTONE_LABEL[m] ?? m}</span>
+                ))}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

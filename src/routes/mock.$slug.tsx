@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { renderStemWithTerms, type TermInfo } from "@/lib/term-render";
 import { optionStyles, type OptKey } from "@/lib/option-colors";
 import { recordAnswer } from "@/lib/storage";
+import { recordAnswer as recordMascotAnswer, recordFrqSubmission, recordMockAttempt } from "@/lib/mascot-memory";
 import { Loader2, ArrowLeft, Bookmark, ChevronDown, ChevronUp, X, MoreVertical, Highlighter, Calculator as CalcIcon, MapPin, Move, Delete } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
@@ -422,6 +423,10 @@ function PaperRunner() {
           mode: "mock",
         }));
       if (rows.length > 0) void supabase.from("answer_attempts").insert(rows);
+      questions.forEach((q) => {
+        if (answers[q.id]) recordMascotAnswer({ knowledgePointId: q.knowledge_point_id, isCorrect: answers[q.id] === q.correct_answer });
+      });
+      recordMockAttempt();
       const wrongRows = questions
         .filter((q) => !!answers[q.id] && answers[q.id] !== q.correct_answer)
         .map((q) => ({ user_id: user.id, question_id: q.id, source: "mock" }));
@@ -558,6 +563,11 @@ function PaperRunner() {
       toast.error("部分作答尚未评分，请重试后再查看结果");
       return;
     }
+    const submittedCount = frqs.filter((f) => {
+      const a = frqAnswers[f.id];
+      return a && (a.text.trim() || a.fileUrl);
+    }).length;
+    for (let i = 0; i < submittedCount; i++) recordFrqSubmission();
     setFrqSubmitted(true);
     setPhase("done");
   }
