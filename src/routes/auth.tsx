@@ -56,6 +56,7 @@ function AuthPage() {
         }
         if (data.session) {
           toast.success("注册成功，已自动登录");
+          setRememberPreference(remember);
           nav({ to: "/" });
         } else {
           toast.success("注册成功，请前往邮箱确认后登录");
@@ -70,6 +71,7 @@ function AuthPage() {
           toast.error("邮箱或密码错误");
           return;
         }
+        setRememberPreference(remember);
         toast.success("登录成功");
         nav({ to: "/" });
       }
