@@ -10,6 +10,9 @@ import { Loader2, Sparkles, ShieldCheck, BookOpen } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import logoAsset from "@/assets/logo.png.asset.json";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { getRememberPreference, setRememberPreference } from "@/lib/remember-session";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({ meta: [{ title: "登录 / 注册 · AP 微观经济" }, { name: "robots", content: "noindex" }] }),
@@ -29,10 +32,15 @@ function AuthPage() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [forgot, setForgot] = useState(false);
+  const [remember, setRemember] = useState(true);
 
   useEffect(() => {
     if (user) nav({ to: "/" });
   }, [user, nav]);
+
+  useEffect(() => {
+    setRemember(getRememberPreference());
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -56,6 +64,7 @@ function AuthPage() {
         }
         if (data.session) {
           toast.success("注册成功，已自动登录");
+          setRememberPreference(remember);
           nav({ to: "/" });
         } else {
           toast.success("注册成功，请前往邮箱确认后登录");
@@ -70,6 +79,7 @@ function AuthPage() {
           toast.error("邮箱或密码错误");
           return;
         }
+        setRememberPreference(remember);
         toast.success("登录成功");
         nav({ to: "/" });
       }
@@ -144,6 +154,18 @@ function AuthPage() {
                     required
                     className="h-11"
                   />}
+                  {!forgot && (
+                    <div className="flex items-center justify-between pt-1">
+                      <Label htmlFor="remember" className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                        <Checkbox
+                          id="remember"
+                          checked={remember}
+                          onCheckedChange={(v) => setRemember(v === true)}
+                        />
+                        记住我（30 天内免登录）
+                      </Label>
+                    </div>
+                  )}
                   {forgot ? <Button type="button" className="w-full h-11" disabled={busy} onClick={() => void sendReset()}>{busy && <Loader2 className="h-4 w-4 animate-spin" />}发送重设邮件</Button> : <Button type="submit" className="w-full h-11" disabled={busy}>
                     {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : tab === "register" ? "注册并登录" : "登录"}
                   </Button>}
