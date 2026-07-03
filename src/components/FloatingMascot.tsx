@@ -12,6 +12,8 @@ import {
 const SIZE = 80;
 const STORAGE_KEY = "mascot-pos-v1";
 const TIP_HIDDEN_KEY = "mascot-tip-hidden-date-v1";
+const DOUBLE_CLICK_MS = 300;
+const DOUBLE_CLICK_DIST = 12;
 
 function localDateKey() {
   const now = new Date();
@@ -25,6 +27,9 @@ export function FloatingMascot() {
   const [isDragging, setIsDragging] = useState(false);
   const [action, setAction] = useState(0);
   const dragRef = useRef<{ dx: number; dy: number; moved: boolean } | null>(null);
+  const lastClickRef = useRef<{ time: number; x: number; y: number } | null>(null);
+  const lastSwitchRef = useRef<number>(0);
+  const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem(COMPANION_KEY);
@@ -83,39 +88,63 @@ export function FloatingMascot() {
     };
   }
 
-  function onPointerDown(e: React.PointerEvent<HTMLImageElement>) {
-    if (!pos) return;
-    (e.target as HTMLImageElement).setPointerCapture(e.pointerId);
-    setIsDragging(true);
-    dragRef.current = { dx: e.clientX - pos.x, dy: e.clientY - pos.y, moved: false };
-  }
-
-  function onPointerMove(e: React.PointerEvent<HTMLImageElement>) {
-    if (!dragRef.current) return;
-    dragRef.current.moved = true;
-    const next = clamp(e.clientX - dragRef.current.dx, e.clientY - dragRef.current.dy);
-    setPos(next);
-  }
-
-  function onPointerUp(e: React.PointerEvent<HTMLImageElement>) {
-    if (!dragRef.current) return;
-    const moved = dragRef.current.moved;
-    try { (e.target as HTMLImageElement).releasePointerCapture(e.pointerId); } catch {}
-    if (moved && pos) {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(pos)); } catch {}
-    }
-    dragRef.current = null;
-    setIsDragging(false);
-    if (!moved) setAction((current) => current + 1);
-  }
-
-  function onDoubleClick() {
+  function switchCompanion() {
+    const now = performance.now();
+    if (now - lastSwitchRef.current < 400) return;
+    lastSwitchRef.current = now;
     const idx = COMPANIONS.findIndex((c) => c.id === companionId);
     const next = COMPANIONS[(idx + 1) % COMPANIONS.length];
     setCompanionId(next.id);
     try { localStorage.setItem(COMPANION_KEY, next.id); } catch {}
     setTip(next.intro);
     try { localStorage.removeItem(TIP_HIDDEN_KEY); } catch {}
+    window.dispatchEvent(new CustomEvent("companion:change", { detail: { id: next.id } }));
+  }
+
+  function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (!pos) return;
+    const el = containerRef.current;
+    if (!el) return;
+    el.setPointerCapture(e.pointerId);
+    setIsDragging(true);
+    dragRef.current = { dx: e.clientX - pos.x, dy: e.clientY - pos.y, moved: false };
+  }
+
+  function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!dragRef.current) return;
+    dragRef.current.moved = true;
+    const next = clamp(e.clientX - dragRef.current.dx, e.clientY - dragRef.current.dy);
+    setPos(next);
+  }
+
+  function onPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    if (!dragRef.current) return;
+    const moved = dragRef.current.moved;
+    const el = containerRef.current;
+    if (el) {
+      try { el.releasePointerCapture(e.pointerId); } catch {}
+    }
+    if (moved && pos) {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(pos)); } catch {}
+    }
+    dragRef.current = null;
+    setIsDragging(false);
+
+    if (!moved) {
+      const now = performance.now();
+      if (lastClickRef.current) {
+        const dt = now - lastClickRef.current.time;
+        const dx = e.clientX - lastClickRef.current.x;
+        const dy = e.clientY - lastClickRef.current.y;
+        if (dt < DOUBLE_CLICK_MS && Math.hypot(dx, dy) < DOUBLE_CLICK_DIST) {
+          switchCompanion();
+          lastClickRef.current = null;
+          return;
+        }
+      }
+      lastClickRef.current = { time: now, x: e.clientX, y: e.clientY };
+      setAction((current) => current + 1);
+    }
   }
 
   function hideTip() {
@@ -151,21 +180,27 @@ export function FloatingMascot() {
           </Button>
         </aside>
       )}
-      <img
-        src={companion.image}
-        alt={companion.name}
+      <div
+        ref={containerRef}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
-        onDoubleClick={onDoubleClick}
-        onAnimationEnd={() => setAction(0)}
-        onDragStart={(e) => e.preventDefault()}
-        className={`fixed z-50 h-20 w-20 select-none drop-shadow-lg touch-none cursor-grab active:cursor-grabbing ${
-          isDragging ? "animate-mascot-drag" : action > 0 ? "animate-mascot-wave" : "animate-mascot-float"
-        }`}
-        style={{ left: pos.x, top: pos.y, imageRendering: "pixelated" }}
-      />
+        onDoubleClick={switchCompanion}
+        className="fixed z-50 h-20 w-20 touch-none cursor-grab active:cursor-grabbing"
+        style={{ left: pos.x, top: pos.y }}
+      >
+        <img
+          src={companion.image}
+          alt={companion.name}
+          onDragStart={(e) => e.preventDefault()}
+          onAnimationEnd={() => setAction(0)}
+          className={`h-20 w-20 select-none drop-shadow-lg ${
+            isDragging ? "animate-mascot-drag" : action > 0 ? "animate-mascot-wave" : "animate-mascot-float"
+          }`}
+          style={{ imageRendering: "pixelated" }}
+        />
+      </div>
     </>
   );
 }
