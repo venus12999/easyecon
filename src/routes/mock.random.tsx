@@ -35,6 +35,7 @@ type Q = {
   explanation: string;
   term_tags: string[] | null;
   image_url: string | null;
+  type: "basic" | "application" | "pitfall" | null;
   knowledge_points: { name_zh: string; unit: number } | null;
 };
 
@@ -81,6 +82,12 @@ function Mock() {
   // 每个 Unit 的目标题数（均落在官方比例区间内，合计 60）
   // U1 13.3% / U2 23.3% / U3 20% / U4 18.3% / U5 11.7% / U6 13.3%
   const UNIT_TARGETS: Record<number, number> = { 1: 8, 2: 14, 3: 12, 4: 11, 5: 7, 6: 8 };
+  // 题型目标占比（基础 / 应用 / 易错），单元题数按此拆分，向下取整并把余量补给 application
+  const TYPE_RATIO: Record<"basic" | "application" | "pitfall", number> = {
+    basic: 0.4,
+    application: 0.5,
+    pitfall: 0.1,
+  };
   const remainingSeconds = Math.max(0, TIME_LIMIT_SECONDS - seconds);
   const timeUp = phase === "running" && remainingSeconds === 0;
 
@@ -131,7 +138,7 @@ function Mock() {
     }
     const { data } = await supabase
       .from("questions")
-      .select("id,knowledge_point_id,stem,option_a,option_b,option_c,option_d,option_e,correct_answer,explanation,image_url,term_tags,knowledge_points!inner(name_zh,unit)")
+      .select("id,knowledge_point_id,stem,option_a,option_b,option_c,option_d,option_e,correct_answer,explanation,image_url,term_tags,type,knowledge_points!inner(name_zh,unit)")
       .eq("status", "published")
       .eq("exclude_from_pool", false);
     const all = ((data ?? []) as unknown as Q[]).map((q) => ({
@@ -139,28 +146,68 @@ function Mock() {
       unit: q.knowledge_points?.unit ?? 0,
     }));
 
-    // 按 unit 分组并按目标抽取
+    // 按 unit + 题型分组抽取：先按 (unit, type) 满足题型比例，
+    // 若某题型题库不足，从同 unit 其他题型补齐；仍不足再从全局补，
+    // 全程排除真题卷（exclude_from_pool=false 已在查询中保证）。
     const picked: Q[] = [];
     const usedIds = new Set<string>();
     const shortages: string[] = [];
-    for (const [unitStr, target] of Object.entries(UNIT_TARGETS)) {
-      const unit = Number(unitStr);
-      const bucket = all.filter((q) => q.unit === unit);
-      const take = shuffle(bucket).slice(0, target);
+    const typeShortages: string[] = [];
+
+    function takeFrom(bucket: Q[], n: number): Q[] {
+      const pool = bucket.filter((q) => !usedIds.has(q.id));
+      const take = shuffle(pool).slice(0, n);
       take.forEach((q) => usedIds.add(q.id));
       picked.push(...take);
-      if (take.length < target) shortages.push(`Unit ${unit} 缺 ${target - take.length} 题`);
+      return take;
+    }
+
+    for (const [unitStr, target] of Object.entries(UNIT_TARGETS)) {
+      const unit = Number(unitStr);
+      const unitPool = all.filter((q) => q.unit === unit);
+      // 拆分题型子目标
+      const rawBasic = Math.floor(target * TYPE_RATIO.basic);
+      const rawPitfall = Math.floor(target * TYPE_RATIO.pitfall);
+      const rawApp = target - rawBasic - rawPitfall;
+      const typeTargets: Record<string, number> = {
+        basic: rawBasic,
+        application: rawApp,
+        pitfall: rawPitfall,
+      };
+      // 先按题型抽
+      let unitTaken = 0;
+      for (const t of ["basic", "application", "pitfall"] as const) {
+        const want = typeTargets[t];
+        if (want <= 0) continue;
+        const got = takeFrom(unitPool.filter((q) => q.type === t), want);
+        unitTaken += got.length;
+        if (got.length < want) {
+          typeShortages.push(`Unit ${unit} ${t} 缺 ${want - got.length} 题`);
+        }
+      }
+      // 同单元其他题型补齐
+      if (unitTaken < target) {
+        const filled = takeFrom(unitPool, target - unitTaken);
+        unitTaken += filled.length;
+      }
+      if (unitTaken < target) shortages.push(`Unit ${unit} 缺 ${target - unitTaken} 题`);
     }
     // 题库不足时，从剩余题中随机补到 60 题
     if (picked.length < TOTAL_QUESTIONS) {
-      const remain = shuffle(all.filter((q) => !usedIds.has(q.id))).slice(
-        0,
-        TOTAL_QUESTIONS - picked.length,
-      );
-      picked.push(...remain);
+      takeFrom(all, TOTAL_QUESTIONS - picked.length);
     }
-    if (shortages.length > 0) {
-      setShortageNote(`题库不足，已用其他单元补齐：${shortages.join("、")}`);
+    const notes: string[] = [];
+    if (typeShortages.length > 0) notes.push(`题型不足，已用同单元其他题型补齐：${typeShortages.join("、")}`);
+    if (shortages.length > 0) notes.push(`单元题库不足，已用其他单元补齐：${shortages.join("、")}`);
+    if (picked.length < TOTAL_QUESTIONS) {
+      notes.push(`题库总量不足，仅抽到 ${picked.length}/${TOTAL_QUESTIONS} 题`);
+    }
+    if (notes.length > 0) setShortageNote(notes.join("；"));
+
+    if (picked.length === 0) {
+      setLoading(false);
+      toast.error("题库为空，无法开始模考");
+      return;
     }
     // 整体打乱顺序
     const finalQuestions = shuffle(picked);
@@ -169,41 +216,25 @@ function Mock() {
     setIdx(0);
     setSeconds(0);
 
-    // 抽取 3 道 FRQ（1 长 + 2 短，按 max_score 分组）
-    const { data: poolPaper } = await supabase
-      .from("mock_papers")
-      .select("id")
-      .eq("slug", "frq-pdf-practice")
-      .maybeSingle();
-    if (poolPaper) {
-      const { data: allFrqs } = await supabase
-        .from("paper_frqs")
-        .select("id,title,content,image_url,image_text,max_score,sort_order")
-        .eq("paper_id", poolPaper.id)
-        .eq("exclude_from_pool", false);
-      const list = ((allFrqs ?? []) as Omit<FrqItem, "paper_id">[]).map((f) => ({
-        ...f,
-        paper_id: poolPaper.id,
-      }));
-      const longs = shuffle(list.filter((f) => f.max_score >= 8));
-      const shorts = shuffle(list.filter((f) => f.max_score < 8));
-      const pickedFrqs: FrqItem[] = [];
-      if (longs[0]) pickedFrqs.push(longs[0]);
-      pickedFrqs.push(...shorts.slice(0, FRQ_COUNT - pickedFrqs.length));
-      // 兜底：题型不足时再从剩余里补齐
-      if (pickedFrqs.length < FRQ_COUNT) {
-        const usedIds = new Set(pickedFrqs.map((f) => f.id));
-        pickedFrqs.push(
-          ...shuffle(list.filter((f) => !usedIds.has(f.id))).slice(
-            0,
-            FRQ_COUNT - pickedFrqs.length,
-          ),
-        );
-      }
-      setFrqs(pickedFrqs);
-    } else {
-      setFrqs([]);
+    // 抽取 3 道 FRQ（1 长 + 2 短），排除真题卷（exclude_from_pool=false）
+    // 直接跨 paper 拉取所有可用 FRQ，避免单一 paper 缺题时抽不到
+    const { data: allFrqs } = await supabase
+      .from("paper_frqs")
+      .select("id,title,content,image_url,image_text,max_score,sort_order,paper_id")
+      .eq("exclude_from_pool", false);
+    const list = (allFrqs ?? []) as FrqItem[];
+    const longs = shuffle(list.filter((f) => f.max_score >= 8));
+    const shorts = shuffle(list.filter((f) => f.max_score < 8));
+    const pickedFrqs: FrqItem[] = [];
+    if (longs[0]) pickedFrqs.push(longs[0]);
+    pickedFrqs.push(...shorts.slice(0, FRQ_COUNT - pickedFrqs.length));
+    if (pickedFrqs.length < FRQ_COUNT) {
+      const used = new Set(pickedFrqs.map((f) => f.id));
+      pickedFrqs.push(
+        ...shuffle(list.filter((f) => !used.has(f.id))).slice(0, FRQ_COUNT - pickedFrqs.length),
+      );
     }
+    setFrqs(pickedFrqs);
     setFrqAnswers({});
     setFrqGrades({});
     setPhase("running");
