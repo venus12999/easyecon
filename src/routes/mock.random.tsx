@@ -7,6 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { renderStemWithTerms, type TermInfo } from "@/lib/term-render";
 import { optionStyles, type OptKey } from "@/lib/option-colors";
 import { recordAnswer } from "@/lib/storage";
+import { recordAnswer as recordMascotAnswer, recordFrqSubmission, recordMockAttempt } from "@/lib/mascot-memory";
 import { Clock, Loader2, SquarePen } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
