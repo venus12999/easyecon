@@ -104,7 +104,6 @@ export function FloatingMascot() {
     el.setPointerCapture(e.pointerId);
     setIsDragging(true);
     dragRef.current = { dx: e.clientX - pos.x, dy: e.clientY - pos.y, moved: false };
-    lastClickRef.current = null;
   }
 
   function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
