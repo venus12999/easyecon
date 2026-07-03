@@ -54,15 +54,6 @@ function StatsPage() {
   const [frqs, setFrqs] = useState<Frq[]>([]);
   const [mocks, setMocks] = useState<Mock[]>([]);
   const [wrongCount, setWrongCount] = useState(0);
-  const [verifying, setVerifying] = useState(false);
-  const [verifyResult, setVerifyResult] = useState<
-    | null
-    | {
-        at: string;
-        ok: boolean;
-        rows: { name: string; ui: string; db: string; pass: boolean; note?: string }[];
-      }
-  >(null);
 
   useEffect(() => {
     if (!user) {
