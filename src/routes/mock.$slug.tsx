@@ -563,6 +563,11 @@ function PaperRunner() {
       toast.error("部分作答尚未评分，请重试后再查看结果");
       return;
     }
+    const submittedCount = frqs.filter((f) => {
+      const a = frqAnswers[f.id];
+      return a && (a.text.trim() || a.fileUrl);
+    }).length;
+    for (let i = 0; i < submittedCount; i++) recordFrqSubmission();
     setFrqSubmitted(true);
     setPhase("done");
   }
