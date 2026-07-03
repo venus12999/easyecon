@@ -61,6 +61,19 @@ export function FloatingMascot() {
     return () => window.removeEventListener("companion:change", onCompanionChange as EventListener);
   }, []);
 
+  // Listen for milestone unlocks and pop the corresponding congrats line.
+  useEffect(() => {
+    function onMilestone(event: Event) {
+      const detail = (event as CustomEvent<{ line?: string }>).detail;
+      if (!detail?.line) return;
+      setTip(detail.line);
+      try { localStorage.removeItem(TIP_HIDDEN_KEY); } catch {}
+      setAction((c) => c + 1);
+    }
+    window.addEventListener("companion:milestone", onMilestone as EventListener);
+    return () => window.removeEventListener("companion:milestone", onMilestone as EventListener);
+  }, []);
+
   function clamp(x: number, y: number) {
     const maxX = window.innerWidth - SIZE;
     const maxY = window.innerHeight - SIZE;
