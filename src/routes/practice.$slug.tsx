@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { renderStemWithTerms, highlightTermsInNodes, type TermInfo } from "@/lib/term-render";
 import { optionStyles, colorizeExplanation, type OptKey } from "@/lib/option-colors";
 import { recordAnswer, addWrong, getWrong } from "@/lib/storage";
+import { recordAnswer as recordMascotAnswer } from "@/lib/mascot-memory";
 import { Check, X, ChevronLeft, ChevronRight, Bookmark, Loader2, Sparkles, Home } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
@@ -119,6 +120,7 @@ function Practice() {
     const ok = picked === cur.correct_answer;
     if (ok) playCorrect(); else playWrong();
     recordAnswer(cur.knowledge_point_id, ok);
+    recordMascotAnswer({ knowledgePointId: cur.knowledge_point_id, isCorrect: ok });
     if (!ok && !wrongSet.has(cur.id)) addWrong(cur.id);
     if (user) {
       await supabase.from("answer_attempts").insert({
