@@ -8,6 +8,7 @@ import {
   pickContextualLine,
   type CompanionId,
 } from "@/lib/mascot-lines";
+import { setActiveCompanion } from "@/lib/mascot-memory";
 
 const SIZE = 80;
 const STORAGE_KEY = "mascot-pos-v1";
@@ -105,10 +106,9 @@ export function FloatingMascot() {
     const idx = COMPANIONS.findIndex((c) => c.id === companionId);
     const next = COMPANIONS[(idx + 1) % COMPANIONS.length];
     setCompanionId(next.id);
-    try { localStorage.setItem(COMPANION_KEY, next.id); } catch {}
     setTip(next.intro);
     try { localStorage.removeItem(TIP_HIDDEN_KEY); } catch {}
-    window.dispatchEvent(new CustomEvent("companion:change", { detail: { id: next.id } }));
+    setActiveCompanion(next.id);
   }
 
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
