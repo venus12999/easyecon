@@ -50,6 +50,7 @@ function ProfilePage() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [name, setName] = useState("");
+  const [examDate, setExamDate] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [membership, setMembership] = useState<Membership | null>(null);
@@ -93,10 +94,11 @@ function ProfilePage() {
       return;
     }
     void Promise.all([
-      supabase.from("profiles").select("display_name").eq("user_id", user.id).maybeSingle(),
+      supabase.from("profiles").select("display_name,exam_date").eq("user_id", user.id).maybeSingle(),
       loadMembership(),
     ]).then(([profile, member]) => {
       setName(profile.data?.display_name ?? "");
+      setExamDate((profile.data as { exam_date?: string | null } | null)?.exam_date ?? "");
       setMembership(member);
       setLoading(false);
     });
@@ -132,7 +134,7 @@ function ProfilePage() {
     setSaving(true);
     const { error } = await supabase
       .from("profiles")
-      .update({ display_name: displayName })
+      .update({ display_name: displayName, exam_date: examDate || null })
       .eq("user_id", user.id);
     setSaving(false);
     if (error) {
