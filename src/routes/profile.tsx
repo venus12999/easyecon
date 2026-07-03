@@ -213,6 +213,11 @@ function ProfilePage() {
             <Label>登录邮箱</Label>
             <Input value={user.email ?? ""} disabled />
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="exam-date">考试日期</Label>
+            <Input id="exam-date" type="date" value={examDate} onChange={(e) => setExamDate(e.target.value)} />
+            <p className="text-xs text-muted-foreground">填了之后，学习伙伴会在考前主动提醒你节奏。</p>
+          </div>
           <Button onClick={() => void saveProfile()} disabled={saving || !name.trim()}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             保存资料
