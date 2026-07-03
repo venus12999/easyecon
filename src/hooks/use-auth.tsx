@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { hydrateSessionOnlyToken, installSessionOnlyPersistence } from "@/lib/remember-session";
 
 type AuthCtx = {
   user: User | null;
@@ -16,6 +17,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    hydrateSessionOnlyToken();
+    installSessionOnlyPersistence();
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
       setSession(s);
       setLoading(false);
