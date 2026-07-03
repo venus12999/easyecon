@@ -33,6 +33,7 @@ import { Route as ApiMembershipRouteImport } from './routes/api/membership'
 import { Route as ApiFeedbackRouteImport } from './routes/api/feedback'
 import { Route as ApiAiExplainRouteImport } from './routes/api/ai-explain'
 import { Route as FrqReviewSlugRouteImport } from './routes/frq.review.$slug'
+import { Route as ApiTutorTakenSlotsRouteImport } from './routes/api/tutor/taken-slots'
 import { Route as ApiMembershipMockAccessRouteImport } from './routes/api/membership/mock-access'
 import { Route as ApiFrqUploadRouteImport } from './routes/api/frq/upload'
 import { Route as ApiFrqGradeRouteImport } from './routes/api/frq/grade'
@@ -167,6 +168,11 @@ const FrqReviewSlugRoute = FrqReviewSlugRouteImport.update({
   path: '/review/$slug',
   getParentRoute: () => FrqRoute,
 } as any)
+const ApiTutorTakenSlotsRoute = ApiTutorTakenSlotsRouteImport.update({
+  id: '/api/tutor/taken-slots',
+  path: '/api/tutor/taken-slots',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiMembershipMockAccessRoute = ApiMembershipMockAccessRouteImport.update({
   id: '/mock-access',
   path: '/mock-access',
@@ -270,6 +276,7 @@ export interface FileRoutesByFullPath {
   '/api/frq/grade': typeof ApiFrqGradeRoute
   '/api/frq/upload': typeof ApiFrqUploadRoute
   '/api/membership/mock-access': typeof ApiMembershipMockAccessRoute
+  '/api/tutor/taken-slots': typeof ApiTutorTakenSlotsRoute
   '/frq/review/$slug': typeof FrqReviewSlugRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
 }
@@ -309,6 +316,7 @@ export interface FileRoutesByTo {
   '/api/frq/grade': typeof ApiFrqGradeRoute
   '/api/frq/upload': typeof ApiFrqUploadRoute
   '/api/membership/mock-access': typeof ApiMembershipMockAccessRoute
+  '/api/tutor/taken-slots': typeof ApiTutorTakenSlotsRoute
   '/frq/review/$slug': typeof FrqReviewSlugRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
 }
@@ -349,6 +357,7 @@ export interface FileRoutesById {
   '/api/frq/grade': typeof ApiFrqGradeRoute
   '/api/frq/upload': typeof ApiFrqUploadRoute
   '/api/membership/mock-access': typeof ApiMembershipMockAccessRoute
+  '/api/tutor/taken-slots': typeof ApiTutorTakenSlotsRoute
   '/frq/review/$slug': typeof FrqReviewSlugRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
 }
@@ -390,6 +399,7 @@ export interface FileRouteTypes {
     | '/api/frq/grade'
     | '/api/frq/upload'
     | '/api/membership/mock-access'
+    | '/api/tutor/taken-slots'
     | '/frq/review/$slug'
     | '/api/public/payments/webhook'
   fileRoutesByTo: FileRoutesByTo
@@ -429,6 +439,7 @@ export interface FileRouteTypes {
     | '/api/frq/grade'
     | '/api/frq/upload'
     | '/api/membership/mock-access'
+    | '/api/tutor/taken-slots'
     | '/frq/review/$slug'
     | '/api/public/payments/webhook'
   id:
@@ -468,6 +479,7 @@ export interface FileRouteTypes {
     | '/api/frq/grade'
     | '/api/frq/upload'
     | '/api/membership/mock-access'
+    | '/api/tutor/taken-slots'
     | '/frq/review/$slug'
     | '/api/public/payments/webhook'
   fileRoutesById: FileRoutesById
@@ -507,6 +519,7 @@ export interface RootRouteChildren {
   ApiAdminUsersRoute: typeof ApiAdminUsersRoute
   ApiFrqGradeRoute: typeof ApiFrqGradeRoute
   ApiFrqUploadRoute: typeof ApiFrqUploadRoute
+  ApiTutorTakenSlotsRoute: typeof ApiTutorTakenSlotsRoute
   ApiPublicPaymentsWebhookRoute: typeof ApiPublicPaymentsWebhookRoute
 }
 
@@ -680,6 +693,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FrqReviewSlugRouteImport
       parentRoute: typeof FrqRoute
     }
+    '/api/tutor/taken-slots': {
+      id: '/api/tutor/taken-slots'
+      path: '/api/tutor/taken-slots'
+      fullPath: '/api/tutor/taken-slots'
+      preLoaderRoute: typeof ApiTutorTakenSlotsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/membership/mock-access': {
       id: '/api/membership/mock-access'
       path: '/mock-access'
@@ -831,6 +851,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAdminUsersRoute: ApiAdminUsersRoute,
   ApiFrqGradeRoute: ApiFrqGradeRoute,
   ApiFrqUploadRoute: ApiFrqUploadRoute,
+  ApiTutorTakenSlotsRoute: ApiTutorTakenSlotsRoute,
   ApiPublicPaymentsWebhookRoute: ApiPublicPaymentsWebhookRoute,
 }
 export const routeTree = rootRouteImport

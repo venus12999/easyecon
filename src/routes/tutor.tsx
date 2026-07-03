@@ -120,19 +120,26 @@ function TutorPage() {
     setLoadingSlots(true);
     (async () => {
       const dayStr = format(form.date as Date, "yyyy-MM-dd");
-      const { data, error } = await supabase.rpc("get_taken_tutor_slots", {
-        p_teacher: form.teacher, p_day: dayStr,
-      });
-      if (cancelled) return;
-      if (error) { setTakenSlots([]); }
-      else {
-        const taken = (data ?? []).map((r: { scheduled_at: string }) => {
-          const d = new Date(r.scheduled_at);
-          return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-        });
-        setTakenSlots(taken);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch(
+          `/api/tutor/taken-slots?teacher=${encodeURIComponent(form.teacher)}&day=${dayStr}`,
+          { headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {} },
+        );
+        if (cancelled) return;
+        if (!res.ok) { setTakenSlots([]); }
+        else {
+          const json = await res.json() as { slots?: string[] };
+          const taken = (json.slots ?? []).map((s) => {
+            const d = new Date(s);
+            return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+          });
+          setTakenSlots(taken);
+        }
+      } catch {
+        if (!cancelled) setTakenSlots([]);
       }
-      setLoadingSlots(false);
+      if (!cancelled) setLoadingSlots(false);
     })();
     return () => { cancelled = true; };
   }, [form.teacher, form.date, dialogOpen]);
