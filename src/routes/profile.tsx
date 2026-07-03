@@ -39,6 +39,15 @@ function ProfilePage() {
   const [newPassword, setNewPassword] = useState("");
   const [syncingPayment, setSyncingPayment] = useState(false);
   const [companionId, setCompanionId] = useState<CompanionId>("sarah");
+  const [memory, setMemory] = useState(() => summarizeMemory());
+
+  useEffect(() => {
+    pingComeback();
+    setMemory(summarizeMemory());
+    function refresh() { setMemory(summarizeMemory()); }
+    window.addEventListener("companion:milestone", refresh);
+    return () => window.removeEventListener("companion:milestone", refresh);
+  }, []);
   const { openCheckout, loading: checkoutLoading } = usePaddleCheckout();
 
   useEffect(() => {
