@@ -226,6 +226,7 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
             <TabsTrigger value="feedback">用户反馈</TabsTrigger>
             <TabsTrigger value="users">用户数据</TabsTrigger>
             <TabsTrigger value="frq">FRQ 评分</TabsTrigger>
+            <TabsTrigger value="data">数据口径</TabsTrigger>
           </TabsList>
 
           <TabsContent value="list" className="mt-4">
@@ -387,6 +388,10 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
 
           <TabsContent value="frq" className="mt-4">
             <FrqPanel token={token} />
+          </TabsContent>
+
+          <TabsContent value="data" className="mt-4">
+            <DataSourcePanel token={token} />
           </TabsContent>
         </Tabs>
 
