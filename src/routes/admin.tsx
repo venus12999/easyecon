@@ -1485,3 +1485,81 @@ function FrqPanel({ token }: { token: string }) {
     </div>
   );
 }
+
+function DataSourcePanel({ token }: { token: string }) {
+  const [verifying, setVerifying] = useState(false);
+  const [result, setResult] = useState<Record<string, number> | null>(null);
+
+  async function runVerify() {
+    setVerifying(true);
+    setResult(null);
+    try {
+      const tables = [
+        "answer_attempts",
+        "frq_submissions",
+        "mock_attempts",
+        "wrong_questions",
+        "questions",
+        "paper_frqs",
+      ] as const;
+      const counts: Record<string, number> = {};
+      for (const t of tables) {
+        const { count, error } = await supabase
+          .from(t as string)
+          .select("*", { count: "exact", head: true });
+        counts[t] = error ? -1 : count ?? 0;
+      }
+      setResult(counts);
+      toast.success("校验完成");
+    } catch {
+      toast.error("校验失败");
+    } finally {
+      setVerifying(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardContent className="p-5 space-y-3 text-sm">
+          <h2 className="text-base font-semibold">数据口径 / 来源说明</h2>
+          <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
+            <li>累计答题 / 正确率：来自 <code>answer_attempts</code>，每次作答记录一次。</li>
+            <li>连续打卡：按 <code>answer_attempts.created_at</code> 的自然日聚合。</li>
+            <li>错题本：<code>wrong_questions</code> 当前行数。</li>
+            <li>大题得分率：<code>frq_submissions.ai_score / ai_max_score</code>。</li>
+            <li>模拟卷正确率：<code>mock_attempts.correct / total</code>。</li>
+            <li>题库统计已过滤 <code>exclude_from_pool</code>（真题卷题目）。</li>
+          </ul>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="p-5 space-y-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <h2 className="text-base font-semibold">一键校验</h2>
+              <p className="text-xs text-muted-foreground">读取各表当前行数，用于快速核对数据是否入库。</p>
+            </div>
+            <Button size="sm" onClick={runVerify} disabled={verifying}>
+              {verifying ? <Loader2 className="h-4 w-4 animate-spin" /> : "运行校验"}
+            </Button>
+          </div>
+          {result && (
+            <div className="grid gap-2 sm:grid-cols-2 text-sm">
+              {Object.entries(result).map(([k, v]) => (
+                <div key={k} className="flex items-center justify-between rounded border px-3 py-2 font-mono text-xs">
+                  <span>{k}</span>
+                  <span className={v < 0 ? "text-destructive" : "text-foreground"}>
+                    {v < 0 ? "读取失败" : v.toLocaleString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      <p className="text-[11px] text-muted-foreground">token: {token ? "已注入" : "缺失"}</p>
+    </div>
+  );
+}
