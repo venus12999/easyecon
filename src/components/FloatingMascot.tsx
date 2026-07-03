@@ -137,7 +137,7 @@ export function FloatingMascot() {
           className="fixed z-50 w-56 rounded-2xl border bg-popover p-3 pr-9 text-sm text-popover-foreground shadow-lg"
           style={{ left: bubbleLeft, top: bubbleTop }}
         >
-          <p className="mb-1 text-xs font-semibold text-primary">{companion.name} 学姐/学长</p>
+          <p className="mb-1 text-xs font-semibold text-primary">{companion.name}</p>
           <p className="leading-relaxed">{tip}</p>
           <Button
             type="button"
