@@ -154,6 +154,18 @@ function AuthPage() {
                     required
                     className="h-11"
                   />}
+                  {!forgot && (
+                    <div className="flex items-center justify-between pt-1">
+                      <Label htmlFor="remember" className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                        <Checkbox
+                          id="remember"
+                          checked={remember}
+                          onCheckedChange={(v) => setRemember(v === true)}
+                        />
+                        记住我（30 天内免登录）
+                      </Label>
+                    </div>
+                  )}
                   {forgot ? <Button type="button" className="w-full h-11" disabled={busy} onClick={() => void sendReset()}>{busy && <Loader2 className="h-4 w-4 animate-spin" />}发送重设邮件</Button> : <Button type="submit" className="w-full h-11" disabled={busy}>
                     {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : tab === "register" ? "注册并登录" : "登录"}
                   </Button>}
