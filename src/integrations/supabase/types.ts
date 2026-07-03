@@ -431,6 +431,7 @@ export type Database = {
         Row: {
           content: string
           created_at: string
+          exclude_from_pool: boolean
           id: string
           image_text: string | null
           image_url: string | null
@@ -442,6 +443,7 @@ export type Database = {
         Insert: {
           content: string
           created_at?: string
+          exclude_from_pool?: boolean
           id?: string
           image_text?: string | null
           image_url?: string | null
@@ -453,6 +455,7 @@ export type Database = {
         Update: {
           content?: string
           created_at?: string
+          exclude_from_pool?: boolean
           id?: string
           image_text?: string | null
           image_url?: string | null
@@ -536,6 +539,7 @@ export type Database = {
           correct_answer: string
           created_at: string
           difficulty: number
+          exclude_from_pool: boolean
           explanation: string
           id: string
           image_url: string | null
@@ -556,6 +560,7 @@ export type Database = {
           correct_answer: string
           created_at?: string
           difficulty?: number
+          exclude_from_pool?: boolean
           explanation: string
           id?: string
           image_url?: string | null
@@ -576,6 +581,7 @@ export type Database = {
           correct_answer?: string
           created_at?: string
           difficulty?: number
+          exclude_from_pool?: boolean
           explanation?: string
           id?: string
           image_url?: string | null
