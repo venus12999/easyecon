@@ -423,6 +423,10 @@ function PaperRunner() {
           mode: "mock",
         }));
       if (rows.length > 0) void supabase.from("answer_attempts").insert(rows);
+      questions.forEach((q) => {
+        if (answers[q.id]) recordMascotAnswer({ knowledgePointId: q.knowledge_point_id, isCorrect: answers[q.id] === q.correct_answer });
+      });
+      recordMockAttempt();
       const wrongRows = questions
         .filter((q) => !!answers[q.id] && answers[q.id] !== q.correct_answer)
         .map((q) => ({ user_id: user.id, question_id: q.id, source: "mock" }));
