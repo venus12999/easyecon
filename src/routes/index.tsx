@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -17,7 +17,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { computeCoachSuggestion, type CoachSuggestion } from "@/lib/mascot-coach";
 import { getCompanion, COMPANION_KEY, type CompanionId } from "@/lib/mascot-lines";
-import { useNavigate } from "@tanstack/react-router";
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
