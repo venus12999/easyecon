@@ -5,13 +5,13 @@ import { toast } from "sonner";
 export function usePaddleCheckout() {
   const [loading, setLoading] = useState(false);
 
-  async function openCheckout(options: { priceId: string; userId: string; email?: string }) {
+  async function openCheckout(options: { priceId: string; userId: string; email?: string; quantity?: number }) {
     setLoading(true);
     try {
       await initializePaddle();
       const priceId = await getPaddlePriceId(options.priceId);
       window.Paddle.Checkout.open({
-        items: [{ priceId, quantity: 1 }],
+        items: [{ priceId, quantity: options.quantity ?? 1 }],
         customer: options.email ? { email: options.email } : undefined,
         customData: { userId: options.userId },
         settings: {
