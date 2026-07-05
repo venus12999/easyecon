@@ -10,6 +10,7 @@ export const resolvePaddlePrice = createServerFn({ method: "GET" })
         "ap_micro_pro_yearly",
         "tutor_single_lesson",
         "tutor_pack_10",
+        "tutor_pack_30",
       ]),
       environment: z.enum(["sandbox", "live"]),
     }).parse(data),
