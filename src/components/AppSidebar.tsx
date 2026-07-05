@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { BookOpen, ListChecks, Library, LogOut, Bookmark, Shield, MessageSquarePlus, UserRound, Sparkles, CalendarCheck } from "lucide-react";
+import { BookOpen, ListChecks, Library, LogOut, Bookmark, Shield, MessageSquarePlus, UserRound, Sparkles, CalendarCheck, Receipt } from "lucide-react";
 import { useState } from "react";
 import logoAsset from "@/assets/logo.png.asset.json";
 import {
@@ -117,6 +117,16 @@ export function AppSidebar() {
                     <Link to="/tutor-bookings" className="flex items-center gap-2">
                       <CalendarCheck className="h-4 w-4" />
                       {!collapsed && <span>我的试课预约</span>}
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+              {user && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={isActive("/orders")}>
+                    <Link to="/orders" className="flex items-center gap-2">
+                      <Receipt className="h-4 w-4" />
+                      {!collapsed && <span>我的订单</span>}
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

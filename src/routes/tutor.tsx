@@ -59,7 +59,7 @@ const PLANS: Plan[] = [
     price: "¥800",
     unit: "/ 10 节 · 60 分钟/节",
     desc: "聚焦高频考点、易错点与典型 FRQ，配合 1 套整卷模考讲评，精准提升。",
-    perks: ["1v1 视频直播 10 节", "重点单元 & 典型真题精讲", "1 套模考全卷讲评"],
+    perks: ["1v1 视频直播 10 节", "重点单元 & 典型真题精讲", "1 套模考全卷讲评", "赠送 Pro 会员 1 个月"],
     highlight: true,
     badge: "推荐",
   },
@@ -68,8 +68,8 @@ const PLANS: Plan[] = [
     name: "单节续费课",
     price: "¥120",
     unit: "/ 1 节 · 60 分钟",
-    desc: "已上过课的同学专属续费价，按节加购，随需随约。",
-    perks: ["1v1 视频直播 1 节", "老师延续你的学习进度", "灵活加课，按需补强"],
+    desc: "已上过课的同学专属续费价，按节加购，随需随约；一次买 5 节及以上额外赠送 Pro 会员 2 周。",
+    perks: ["1v1 视频直播 · 自定义节数", "老师延续你的学习进度", "灵活加课，按需补强", "购满 5 节送 Pro 会员 2 周"],
     badge: "老学员续费",
   },
   {
@@ -78,7 +78,7 @@ const PLANS: Plan[] = [
     price: "¥3200",
     unit: "/ 30 节 · 60 分钟/节",
     desc: "系统覆盖全部 6 个 Unit 精讲 + 多套整卷模考讲评，冲刺 5 分。",
-    perks: ["1v1 视频直播 30 节", "6 个 Unit 全套精讲", "多套模考全卷讲评 + FRQ 精讲"],
+    perks: ["1v1 视频直播 30 节", "6 个 Unit 全套精讲", "多套模考全卷讲评 + FRQ 精讲", "赠送 Pro 会员 3 个月"],
     badge: "满分包",
   },
 ];
@@ -108,6 +108,8 @@ function TutorPage() {
   const [checking, setChecking] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [qtyOpen, setQtyOpen] = useState(false);
+  const [qty, setQty] = useState<number>(1);
   const [form, setForm] = useState<{ teacher: string; date: Date | undefined; slot: string; contact: string; note: string }>({
     teacher: "Steve", date: undefined, slot: "", contact: "", note: "",
   });
@@ -205,7 +207,19 @@ function TutorPage() {
       toast.error("请先登录再订阅课程");
       return;
     }
+    if (planId === "tutor_single_lesson") {
+      setQty(1);
+      setQtyOpen(true);
+      return;
+    }
     void openCheckout({ priceId: planId, userId: user.id, email: user.email });
+  }
+
+  function confirmSingleLesson() {
+    if (!user) return;
+    const n = Math.max(1, Math.min(20, Math.floor(qty || 1)));
+    setQtyOpen(false);
+    void openCheckout({ priceId: "tutor_single_lesson", userId: user.id, email: user.email, quantity: n });
   }
 
   return (
@@ -378,6 +392,39 @@ function TutorPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>取消</Button>
             <Button onClick={submitTrial} disabled={submitting}>{submitting ? "提交中…" : "确认预约"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Quantity picker for single-lesson renewal */}
+      <Dialog open={qtyOpen} onOpenChange={setQtyOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>单节续费 · 选择节数</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Label htmlFor="qty">节数（1 – 20）</Label>
+            <Input
+              id="qty"
+              type="number"
+              min={1}
+              max={20}
+              value={qty}
+              onChange={(e) => setQty(Number(e.target.value))}
+            />
+            <div className="rounded-md bg-muted/40 px-3 py-2 text-sm">
+              <div className="flex items-center justify-between">
+                <span>合计</span>
+                <span className="font-semibold">¥{Math.max(1, Math.min(20, Math.floor(qty || 1))) * 120}</span>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {qty >= 5 ? "🎁 本单额外赠送 Pro 会员 2 周" : "购满 5 节自动赠送 Pro 会员 2 周"}
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setQtyOpen(false)}>取消</Button>
+            <Button onClick={confirmSingleLesson} disabled={loading}>去支付</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
