@@ -42,7 +42,7 @@ export const Route = createFileRoute("/tutor")({
 });
 
 type Plan = {
-  id: "tutor_pack_10";
+  id: "tutor_pack_10" | "tutor_pack_30" | "tutor_single_lesson";
   name: string;
   price: string;
   unit: string;
@@ -62,6 +62,24 @@ const PLANS: Plan[] = [
     perks: ["1v1 视频直播 10 节", "重点单元 & 典型真题精讲", "1 套模考全卷讲评"],
     highlight: true,
     badge: "推荐",
+  },
+  {
+    id: "tutor_single_lesson",
+    name: "单节续费课",
+    price: "¥120",
+    unit: "/ 1 节 · 60 分钟",
+    desc: "已上过课的同学专属续费价，按节加购，随需随约。",
+    perks: ["1v1 视频直播 1 节", "老师延续你的学习进度", "灵活加课，按需补强"],
+    badge: "老学员续费",
+  },
+  {
+    id: "tutor_pack_30",
+    name: "30 节满分包",
+    price: "¥3200",
+    unit: "/ 30 节 · 60 分钟/节",
+    desc: "系统覆盖全部 6 个 Unit 精讲 + 多套整卷模考讲评，冲刺 5 分。",
+    perks: ["1v1 视频直播 30 节", "6 个 Unit 全套精讲", "多套模考全卷讲评 + FRQ 精讲"],
+    badge: "满分包",
   },
 ];
 
