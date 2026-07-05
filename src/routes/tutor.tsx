@@ -382,7 +382,7 @@ function TutorPage() {
         </DialogContent>
       </Dialog>
 
-      <section className="mx-auto mt-10 grid max-w-md gap-4">
+      <section className="mx-auto mt-10 grid max-w-5xl gap-4 sm:grid-cols-3">
         {PLANS.map((plan) => (
           <Card key={plan.id} className={plan.highlight ? "border-primary/50 shadow-md" : undefined}>
             <CardHeader>
