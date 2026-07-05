@@ -692,6 +692,60 @@ export type Database = {
         }
         Relationships: []
       }
+      tutor_orders: {
+        Row: {
+          amount_total: number | null
+          created_at: string
+          currency_code: string | null
+          environment: string
+          id: string
+          membership_days_granted: number
+          membership_ends_at: string | null
+          paddle_subscription_id: string | null
+          paddle_transaction_id: string
+          price_external_id: string
+          product_external_id: string | null
+          quantity: number
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount_total?: number | null
+          created_at?: string
+          currency_code?: string | null
+          environment?: string
+          id?: string
+          membership_days_granted?: number
+          membership_ends_at?: string | null
+          paddle_subscription_id?: string | null
+          paddle_transaction_id: string
+          price_external_id: string
+          product_external_id?: string | null
+          quantity?: number
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount_total?: number | null
+          created_at?: string
+          currency_code?: string | null
+          environment?: string
+          id?: string
+          membership_days_granted?: number
+          membership_ends_at?: string | null
+          paddle_subscription_id?: string | null
+          paddle_transaction_id?: string
+          price_external_id?: string
+          product_external_id?: string | null
+          quantity?: number
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       tutor_trial_bookings: {
         Row: {
           contact: string | null
