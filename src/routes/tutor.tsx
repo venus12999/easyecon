@@ -396,6 +396,39 @@ function TutorPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Quantity picker for single-lesson renewal */}
+      <Dialog open={qtyOpen} onOpenChange={setQtyOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>单节续费 · 选择节数</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Label htmlFor="qty">节数（1 – 20）</Label>
+            <Input
+              id="qty"
+              type="number"
+              min={1}
+              max={20}
+              value={qty}
+              onChange={(e) => setQty(Number(e.target.value))}
+            />
+            <div className="rounded-md bg-muted/40 px-3 py-2 text-sm">
+              <div className="flex items-center justify-between">
+                <span>合计</span>
+                <span className="font-semibold">¥{Math.max(1, Math.min(20, Math.floor(qty || 1))) * 120}</span>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {qty >= 5 ? "🎁 本单额外赠送 Pro 会员 2 周" : "购满 5 节自动赠送 Pro 会员 2 周"}
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setQtyOpen(false)}>取消</Button>
+            <Button onClick={confirmSingleLesson} disabled={loading}>去支付</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <section className="mx-auto mt-10 grid max-w-5xl gap-4 sm:grid-cols-3">
         {PLANS.map((plan) => (
           <Card key={plan.id} className={plan.highlight ? "border-primary/50 shadow-md" : undefined}>
