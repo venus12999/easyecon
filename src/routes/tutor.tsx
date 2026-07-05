@@ -108,6 +108,8 @@ function TutorPage() {
   const [checking, setChecking] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [qtyOpen, setQtyOpen] = useState(false);
+  const [qty, setQty] = useState<number>(1);
   const [form, setForm] = useState<{ teacher: string; date: Date | undefined; slot: string; contact: string; note: string }>({
     teacher: "Steve", date: undefined, slot: "", contact: "", note: "",
   });
@@ -205,7 +207,19 @@ function TutorPage() {
       toast.error("请先登录再订阅课程");
       return;
     }
+    if (planId === "tutor_single_lesson") {
+      setQty(1);
+      setQtyOpen(true);
+      return;
+    }
     void openCheckout({ priceId: planId, userId: user.id, email: user.email });
+  }
+
+  function confirmSingleLesson() {
+    if (!user) return;
+    const n = Math.max(1, Math.min(20, Math.floor(qty || 1)));
+    setQtyOpen(false);
+    void openCheckout({ priceId: "tutor_single_lesson", userId: user.id, email: user.email, quantity: n });
   }
 
   return (
