@@ -55,11 +55,11 @@ type Plan = {
 const PLANS: Plan[] = [
   {
     id: "tutor_pack_10",
-    name: "10 节满分包",
+    name: "10 节核心突破课",
     price: "¥800",
     unit: "/ 10 节 · 60 分钟/节",
-    desc: "系统覆盖全部 6 个 Unit + 3 套整卷模考。",
-    perks: ["1v1 视频直播 10 节", "全套 Unit 精讲", "3 套模考全卷讲评"],
+    desc: "聚焦高频考点、易错点与典型 FRQ，配合 1 套整卷模考讲评，精准提升。",
+    perks: ["1v1 视频直播 10 节", "重点单元 & 典型真题精讲", "1 套模考全卷讲评"],
     highlight: true,
     badge: "推荐",
   },
