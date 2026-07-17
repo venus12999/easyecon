@@ -1,90 +1,55 @@
-# 学习伙伴学姐化 · 分期落地方案
 
-工程量确实不小，但 80% 的"真人感"来自**文案 + 情境触发**，不是新系统。建议按下面 4 期推进，每期都可独立上线体验。
+# 支付完善计划
 
----
+四个方向都覆盖。按"用户可感知优先 + 上线阻塞项优先"排序。
 
-## 期 1：人设 + 情境化文案（1 次迭代，最高性价比）
+## 阶段 1：上线真实支付（阻塞后续所有真金收入）
 
-只改 `FloatingMascot.tsx`，把小人从"贴士机器人"变成"学长/学姐"。不动数据库、不加装扮。
+1. **Readiness / Go Live 状态自检**：调用 `payments--get_go_live_status`，把当前卡在哪一步告诉你，并列出需要你手动完成的 Paddle 侧动作（例如身份验证）。
+2. **法律页最后一遍核对**：确保 `/legal/terms`、`/legal/refunds`、`/legal/privacy` 都写清 seller 名称"陈籽言 (Ziyan Chen)"、Paddle MoR 披露、30 天退款窗口、GenAI 相关条款、隐私处理者角色。缺项补齐。
+3. **未满 18 岁的替代路径提示**：在 pricing / tutor 页加一个"如无法完成账号验证，仅测试模式可用"的说明（可选，避免用户误以为已经可以真收款）。
 
-- **身份定位**：用户在注册时可以选择一个角色（金发小人叫 Sarah、棕发小人叫 Venus、戴帽子的小人叫 Jason） 来陪伴成长，后续可以在个人界面更改学习伙伴，选择后小人会弹出：“接下来由我来陪伴你一起学习呀！”
-- **文案库重写**：现有 `TIPS[]` 拆成 6 类，每类 8–15 条，全部改成第一人称、口语、带 1 个 emoji：
-  - `daily`（日常问候）
-  - `concept`（吐槽某个知识点，如"今天又碰到弹性了😂"）
-  - `encourage`（鼓励）
-  - `exam_tip`（考前技巧）
-  - `comeback`（久违回归）
-  - `night`（22:00 后的关心）
-- **触发规则**（纯前端 + 已有查询）：
-  - 打开 App → 根据"距离上次登录天数"选 `daily` 或 `comeback`
-  - 时间 > 22:00 → `night`
-  - 其余按当前"每日一贴"位置轮播 `concept`
-- **拒绝清单**：禁用"主人～/呀～/好棒呀"等二次元词；禁用第三人称官方口吻。
+## 阶段 2：结账体验优化
 
-**交付**：一个 `src/lib/mascot-lines.ts` 文件 + `FloatingMascot` 里一段情境选择函数。零后端改动。
+1. **结账事件回执**：`usePaddleCheckout` 里挂 `eventCallback`，捕获 `checkout.completed` / `checkout.closed`，成功时立刻 toast "支付成功，正在同步会员权益…"，避免用户以为卡住。
+2. **成功回跳后自动刷新会员状态**：`/profile?checkout=success` 与 `/orders?checkout=success` 打开时，轮询 `/api/membership` / `tutor_orders` 3~5 次（每 2s），直到 webhook 落库；期间显示"权益开通中"占位，避免"付了钱看不到会员"的空白窗口。
+3. **失败/关闭反馈**：checkout.closed 但未 completed 时提示"未完成支付，可重试"。
+4. **未登录点付费按钮**：统一改为跳 `/auth?redirect=<当前路径>`，登录后返回原页面继续付款。
+5. **测试模式提示**：确认 `PaymentTestModeBanner` 在 pricing / tutor / profile 顶部出现；文案改为"当前为测试支付环境，不会产生真实扣款"。
 
----
+## 阶段 3：订单与会员管理
 
-## 期 2：情绪反馈 + 主动 Coach（复用已有数据）
+1. **`/orders` 页增强**：
+   - 每条订单显示状态徽章（已完成 / 待处理 / 已退款）、金额、币种、时间。
+   - 单节续费显示"累计已购 X 节，距离赠送 14 天会员还差 Y 节"。
+   - 会员订阅订单区分"付费" / "赠送"来源，展示到期日、是否自动续费。
+   - 加"管理订阅 / 更改支付方式 / 取消续费"按钮，走已存在的 `POST /api/membership` → Paddle Customer Portal（新标签打开）。
+   - 加"申请退款"按钮，跳 `https://paddle.net`（由 Paddle 官方托管处理）。
+2. **管理后台**：在 `/admin` 里新增"订单"Tab，管理员可看到全站 `tutor_orders` + `subscriptions` + `membership_adjustments`，按用户搜索。
 
-不新建表，只**读**已有的 `answer_attempts` / `frq_submissions` / `wrong_questions` / `knowledge_points`。
+## 阶段 4：促销与折扣
 
-- **答题后反馈**：在 MCQ / FRQ 提交流程收尾处派发一个前端事件 `mascot:event`，小人气泡响应：
-  - 连对 ≥ 10 题 → 夸奖
-  - 首次做 FRQ → 安慰
-  - 单次正确率 < 40% → "今天先搞懂一个知识点"
-  - FRQ 拿满分 → 庆祝
-- **主动 Coach 提示**（打开首页时算一次）：
-  - 某个 knowledge_point 近 7 天错 ≥ 4 → "我发现你卡在 XX，今天专练 5 题？" + 跳转按钮
-  - FRQ 平均分连续 3 次 ≤ 2 → "FRQ 不是不会，只是表达没练。"
-  - 模考正确率稳定 65–75% → "已经有 5 分实力了，只是不稳。"
-- **考试倒计时**：Profile 里加"考试日期"字段（沿用 profiles 表新增一列），学姐按 D-7 / D-1 / D-Day 说不同的话。
-
-**交付**：`src/lib/mascot-coach.ts`（规则引擎，纯读）+ Profile 增加考试日期输入 + 一条 profiles 迁移。
+1. **优惠码基础设施**：结账时支持传 `discountCode`。
+2. **在 pricing / tutor 页加"我有优惠码"输入框**，点付款时把 code 传给 `Paddle.Checkout.open`。
+3. **创建首批测试优惠码**（Paddle sandbox）：
+   - `WELCOME20`：全场 20% off，单次使用。
+   - `TUTOR100`：¥100 off 10 节课包，限 `tutor_pack_10`。
+   - 均只在 sandbox 创建；上线后你确认再在 live 复制。
+4. **首月/首季度促销位**：pricing 页顶部一条 banner，展示当前生效的优惠码，可一键复制。
 
 ---
 
-## 期 3：轻量成长系统（只加 1 张表）
+## 技术细节
 
-不做全套装扮系统，先做"里程碑徽章"，视觉上让小人**有变化**。
-
-- 新表 `mascot_state`：`user_id / level / xp / unlocked_items(jsonb) / current_outfit(text)`
-- `达成固定成就解锁徽章，例如：连续五十天学习、模拟考试五分`
-- 里程碑解锁（不用画大量素材，先用叠加图标）：
-  - 五十天学习：戴学士帽（贴一个 emoji/PNG 层）
-  - 模拟考试四分：手里书本
-  - 三十天学习：披风
-  - 模拟考试五分：5 分证书
-- 展示：`FloatingMascot` 在小人右下角叠加当前解锁的最高饰品图层。
-
-**交付**：1 张迁移表 + 1 个 RPC (`add_mascot_xp`) + 5–6 张透明 PNG（可后期替换）。
+- Checkout event callback：`Paddle.Checkout.open({ ..., eventCallback: (e) => { ... } })`，对 `checkout.completed`、`checkout.payment.selected`、`checkout.closed` 分别处理。
+- 会员轮询：`useEffect` 检查 URL `?checkout=success`，用 `setInterval` 每 2s 调 `/api/membership`，直到 `isPro=true` 或超时 15s，然后清 URL 参数。
+- Customer Portal 打开：现有 `POST /api/membership` 已返回 `url`，前端 `window.open(url, '_blank', 'noopener')`。
+- 折扣码状态：本地 `useState`，checkout 时透传；不落库。
+- 管理端订单查询：新增 `GET /api/admin/orders`（用 `admin-auth.server` + `supabaseAdmin`），前端在 admin.tsx 新增 tab。
+- Paddle 折扣通过 `payments--api_write POST /discounts` 创建，`environment: sandbox`。
 
 ---
 
-## 期 4（可选，工程量最大）：完整装扮商店 + 记忆系统
+## 交付顺序
 
-到期 3 已经能覆盖你 80% 的诉求。期 4 只有在用户真的爱上她之后再做：
-
-- 装扮商店（帽子/衣服/书包）：`mascot_items` + `mascot_owned` + 商店 UI
-- 长期记忆："最怕的知识点 / 最喜欢的单元"字段，用 AI 生成一句个性化开场
-- 节日文案（春节/生日/考试季）：读 profiles 生日字段触发
-
----
-
-## 需要你先确认的 2 件事
-
-1. **期 1 上线后**先看效果，再决定要不要立刻上期 2/3，还是等一批用户反馈？
-2. **考试日期字段**要不要现在就加到 Profile 里？（期 2 会用）
-
-我建议先只做期 1，本次实施只碰前端 + 一个文案文件。等你满意她的"说话方式"后，再逐期推进。
-
----
-
-## 技术要点（给你参考，不影响体验）
-
-- 文案库单独文件，方便你之后自己改口吻
-- 情境选择放前端，零 AI 成本
-- 期 2 的规则引擎用已有 Supabase 查询，不新增表
-- 期 3 的成长饰品用"图层叠加"而非重画整只小人，素材成本低
-- 全程复用现有 `FloatingMascot` 的拖拽/位置/切换逻辑，不重写组件
+我会一次实现阶段 2 + 3 + 4 的代码（这些是纯软件改动），并在结束时给出阶段 1 的 Go Live 状态清单让你按提示操作。如果你想先只做其中一个阶段，告诉我。
