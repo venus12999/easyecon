@@ -18,6 +18,7 @@ import { CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import venusAvatar from "@/assets/venus-avatar.jpeg.asset.json";
+import steveAvatar from "@/assets/steve-avatar.jpg.asset.json";
 
 
 const TIME_SLOTS = ["10:00", "14:00", "16:00", "19:00", "20:00", "21:00"];
@@ -89,7 +90,7 @@ const TEACHERS = [
     title: "十一年级在读学长 · 沉稳内敛",
     desc: "他不会直接告诉你\"应该背什么\"，而是陪你把每一个难点真正弄懂。",
     motto: "逸一时，误一世。",
-    avatar: null,
+    avatar: steveAvatar.url,
   },
   {
     name: "Venus",
