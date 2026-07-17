@@ -20,6 +20,13 @@ export function usePaddleCheckout() {
           allowLogout: false,
           variant: "one-page",
         },
+        eventCallback: (event: { name?: string }) => {
+          if (event?.name === "checkout.completed") toast.success("付款已提交，正在同步权益…");
+          if (event?.name === "checkout.closed") toast.info("你已关闭结账窗口");
+          if (event?.name === "checkout.error" || event?.name === "checkout.payment.failed") {
+            toast.error("付款未完成，请重试或更换支付方式");
+          }
+        },
       });
     } catch (error) {
       console.error("Unable to open checkout", error);
