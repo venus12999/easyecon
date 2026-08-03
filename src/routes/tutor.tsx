@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Check, GraduationCap, Sparkles, Users, Video, Gift } from "lucide-react";
-import { usePaddleCheckout } from "@/hooks/use-paddle-checkout";
+import { ManualPayDialog } from "@/components/ManualPayDialog";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
@@ -104,13 +104,10 @@ const TEACHERS = [
 
 function TutorPage() {
   const { user } = useAuth();
-  const { openCheckout, loading } = usePaddleCheckout();
   const [existingBooking, setExistingBooking] = useState<{ teacher: string; created_at: string; scheduled_at: string | null } | null>(null);
   const [checking, setChecking] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [qtyOpen, setQtyOpen] = useState(false);
-  const [qty, setQty] = useState<number>(1);
   const [form, setForm] = useState<{ teacher: string; date: Date | undefined; slot: string; contact: string; note: string }>({
     teacher: "Steve", date: undefined, slot: "", contact: "", note: "",
   });
@@ -201,26 +198,6 @@ function TutorPage() {
     setExistingBooking(data ?? { teacher: form.teacher, created_at: new Date().toISOString(), scheduled_at: scheduledISO });
     setDialogOpen(false);
     toast.success("已预约成功！老师将在 24 小时内与你联系");
-  }
-
-  function onSubscribe(planId: Plan["id"]) {
-    if (!user) {
-      toast.error("请先登录再订阅课程");
-      return;
-    }
-    if (planId === "tutor_single_lesson") {
-      setQty(1);
-      setQtyOpen(true);
-      return;
-    }
-    void openCheckout({ priceId: planId, userId: user.id, email: user.email });
-  }
-
-  function confirmSingleLesson() {
-    if (!user) return;
-    const n = Math.max(1, Math.min(20, Math.floor(qty || 1)));
-    setQtyOpen(false);
-    void openCheckout({ priceId: "tutor_single_lesson", userId: user.id, email: user.email, quantity: n });
   }
 
   return (
@@ -397,39 +374,6 @@ function TutorPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Quantity picker for single-lesson renewal */}
-      <Dialog open={qtyOpen} onOpenChange={setQtyOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>单节续费 · 选择节数</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <Label htmlFor="qty">节数（1 – 20）</Label>
-            <Input
-              id="qty"
-              type="number"
-              min={1}
-              max={20}
-              value={qty}
-              onChange={(e) => setQty(Number(e.target.value))}
-            />
-            <div className="rounded-md bg-muted/40 px-3 py-2 text-sm">
-              <div className="flex items-center justify-between">
-                <span>合计</span>
-                <span className="font-semibold">¥{Math.max(1, Math.min(20, Math.floor(qty || 1))) * 120}</span>
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {qty >= 5 ? "🎁 本单额外赠送 Pro 会员 2 周" : "购满 5 节自动赠送 Pro 会员 2 周"}
-              </p>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setQtyOpen(false)}>取消</Button>
-            <Button onClick={confirmSingleLesson} disabled={loading}>去支付</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <section className="mx-auto mt-10 grid max-w-5xl gap-4 sm:grid-cols-3">
         {PLANS.map((plan) => (
           <Card key={plan.id} className={plan.highlight ? "border-primary/50 shadow-md" : undefined}>
@@ -457,14 +401,20 @@ function TutorPage() {
                   </li>
                 ))}
               </ul>
-              <Button
-                className="w-full"
-                disabled={loading}
-                variant={plan.highlight ? "default" : "outline"}
-                onClick={() => onSubscribe(plan.id)}
-              >
-                立即订阅
-              </Button>
+              {user ? (
+                <ManualPayDialog
+                  planKey={plan.id}
+                  trigger={
+                    <Button className="w-full" variant={plan.highlight ? "default" : "outline"}>
+                      扫码购买
+                    </Button>
+                  }
+                />
+              ) : (
+                <Button className="w-full" variant={plan.highlight ? "default" : "outline"} onClick={() => toast.error("请先登录再购买课程")}>
+                  扫码购买
+                </Button>
+              )}
             </CardContent>
           </Card>
         ))}
@@ -489,9 +439,9 @@ function TutorPage() {
       </section>
 
       <p className="mx-auto mt-8 max-w-3xl text-center text-xs leading-5 text-muted-foreground">
-        订阅成功后我们会在 24 小时内通过邮件联系你安排排课。付款由 Paddle 安全处理，购买即表示同意
+        支持微信 / 支付宝扫码付款，付款后上传截图，我们人工核对并在 24 小时内联系你安排排课。购买即表示同意
         <Link to="/legal/terms" className="text-primary underline">服务条款</Link>、
-        <Link to="/legal/refunds" className="text-primary underline">14 天退款政策</Link>与
+        <Link to="/legal/refunds" className="text-primary underline">退款政策</Link>与
         <Link to="/legal/privacy" className="text-primary underline">隐私声明</Link>。
       </p>
     </main>

@@ -7,7 +7,6 @@ import { AuthProvider } from "@/hooks/use-auth";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { FloatingMascot } from "@/components/FloatingMascot";
-import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 
 function NotFoundComponent() {
   return (
@@ -97,7 +96,6 @@ function RootComponent() {
         <div className="min-h-screen flex w-full bg-background">
           <AppSidebar />
           <div className="flex-1 flex flex-col min-w-0">
-             <PaymentTestModeBanner />
             <header className="h-12 flex items-center border-b bg-card/40 backdrop-blur sticky top-0 z-30">
               <SidebarTrigger className="ml-2" />
             </header>

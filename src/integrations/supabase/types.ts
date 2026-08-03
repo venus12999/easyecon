@@ -269,6 +269,63 @@ export type Database = {
         }
         Relationships: []
       }
+      manual_payments: {
+        Row: {
+          amount_cny: number
+          channel: string
+          created_at: string
+          id: string
+          kind: string
+          order_no: string
+          payer_note: string | null
+          plan_key: string
+          proof_path: string | null
+          quantity: number
+          review_note: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount_cny: number
+          channel: string
+          created_at?: string
+          id?: string
+          kind: string
+          order_no: string
+          payer_note?: string | null
+          plan_key: string
+          proof_path?: string | null
+          quantity?: number
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount_cny?: number
+          channel?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          order_no?: string
+          payer_note?: string | null
+          plan_key?: string
+          proof_path?: string | null
+          quantity?: number
+          review_note?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       membership_adjustments: {
         Row: {
           admin_user_id: string

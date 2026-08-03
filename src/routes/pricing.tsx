@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Check, Crown, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ManualPayDialog } from "@/components/ManualPayDialog";
 
 export const Route = createFileRoute("/pricing")({
   head: () => ({
@@ -37,7 +38,8 @@ function PricingPage() {
           <CardHeader><CardTitle className="text-lg">Pro 月度会员</CardTitle></CardHeader>
           <CardContent>
             <p><span className="text-4xl font-bold">¥19</span><span className="text-muted-foreground"> / 月</span></p>
-            <p className="mt-3 text-sm text-muted-foreground">按月续费，灵活开始或取消。</p>
+            <p className="mt-3 text-sm text-muted-foreground">按月开通，到期后自行续费，无自动扣款。</p>
+            <ManualPayDialog planKey="pro_monthly" trigger={<Button className="mt-4 w-full">扫码购买</Button>} />
           </CardContent>
         </Card>
         <Card className="border-primary/40">
@@ -50,6 +52,7 @@ function PricingPage() {
           <CardContent>
             <p><span className="text-4xl font-bold">¥55</span><span className="text-muted-foreground"> / 季</span></p>
             <p className="mt-3 text-sm text-muted-foreground">相比月付每季节省 ¥2，考试冲刺首选。</p>
+            <ManualPayDialog planKey="pro_quarterly" trigger={<Button className="mt-4 w-full">扫码购买</Button>} />
           </CardContent>
         </Card>
         <Card>
@@ -62,6 +65,7 @@ function PricingPage() {
           <CardContent>
             <p><span className="text-4xl font-bold">¥199</span><span className="text-muted-foreground"> / 年</span></p>
             <p className="mt-3 flex items-center gap-1 text-sm text-muted-foreground"><Sparkles className="h-4 w-4 text-primary" aria-hidden="true" />相比月付每年节省 ¥29。</p>
+            <ManualPayDialog planKey="pro_yearly" trigger={<Button className="mt-4 w-full" variant="outline">扫码购买</Button>} />
           </CardContent>
         </Card>
       </section>
@@ -81,8 +85,8 @@ function PricingPage() {
       </section>
 
       <section className="mx-auto mt-10 max-w-3xl text-center">
-        <Button asChild size="lg"><Link to="/auth">登录或注册后升级 Pro</Link></Button>
-        <p className="mt-4 text-xs leading-5 text-muted-foreground">付款由 Paddle 安全处理。购买即表示同意 <Link to="/legal/terms" className="text-primary underline">服务条款</Link>、<Link to="/legal/refunds" className="text-primary underline">14 天退款政策</Link>和 <Link to="/legal/privacy" className="text-primary underline">隐私声明</Link>。</p>
+        <Button asChild size="lg" variant="outline"><Link to="/auth">还没有账号？先登录或注册</Link></Button>
+        <p className="mt-4 text-xs leading-5 text-muted-foreground">支持微信 / 支付宝扫码付款，付款后上传截图，我们人工核对后为你开通（通常 24 小时内）。购买即表示同意 <Link to="/legal/terms" className="text-primary underline">服务条款</Link>、<Link to="/legal/refunds" className="text-primary underline">退款政策</Link>和 <Link to="/legal/privacy" className="text-primary underline">隐私声明</Link>。</p>
       </section>
     </main>
   );
