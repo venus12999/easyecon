@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
-import { usePaddleCheckout } from "@/hooks/use-paddle-checkout";
+import { ManualPayDialog } from "@/components/ManualPayDialog";
 import { COMPANIONS, COMPANION_KEY, getCompanion, type CompanionId } from "@/lib/mascot-lines";
 import { setActiveCompanion } from "@/lib/mascot-memory";
 import { pingComeback, summarizeMemory } from "@/lib/mascot-memory";
@@ -56,7 +56,6 @@ function ProfilePage() {
   const [membership, setMembership] = useState<Membership | null>(null);
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [syncingPayment, setSyncingPayment] = useState(false);
   const [companionId, setCompanionId] = useState<CompanionId>("sarah");
   const [memory, setMemory] = useState(() => summarizeMemory());
 
@@ -67,8 +66,6 @@ function ProfilePage() {
     window.addEventListener("companion:milestone", refresh);
     return () => window.removeEventListener("companion:milestone", refresh);
   }, []);
-  const { openCheckout, loading: checkoutLoading } = usePaddleCheckout();
-
   useEffect(() => {
     setCompanionId(getCompanion(localStorage.getItem(COMPANION_KEY)).id);
   }, []);
@@ -104,26 +101,6 @@ function ProfilePage() {
     });
   }, [authLoading, user]);
 
-  useEffect(() => {
-    if (!user || new URLSearchParams(window.location.search).get("checkout") !== "success") return;
-    setSyncingPayment(true);
-    let attempts = 0;
-    const timer = window.setInterval(() => {
-      attempts += 1;
-      void loadMembership().then((next) => {
-        if (next) setMembership(next);
-        if (next?.isPro || attempts >= 10) {
-          window.clearInterval(timer);
-          setSyncingPayment(false);
-          navigate({ to: "/profile", replace: true });
-          if (next?.isPro) toast.success("付款已确认，Pro 权益已生效");
-          else toast.info("付款仍在同步，请稍后刷新查看");
-        }
-      });
-    }, 2000);
-    return () => window.clearInterval(timer);
-  }, [user, navigate]);
-
   async function saveProfile() {
     if (!user) return;
     const displayName = name.trim();
@@ -143,16 +120,6 @@ function ProfilePage() {
     }
     setName(displayName);
     toast.success("昵称已保存");
-  }
-
-  async function manageMembership() {
-    const { data } = await supabase.auth.getSession();
-    const token = data.session?.access_token;
-    if (!token) return;
-    const response = await fetch("/api/membership", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
-    const result = await response.json();
-    if (!response.ok || !result.url) return toast.error("暂时无法打开订阅管理");
-    window.open(result.url, "_blank", "noopener,noreferrer");
   }
 
   async function updateEmail() {
