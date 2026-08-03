@@ -284,18 +284,14 @@ function ProfilePage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-5 pt-5">
-          {syncingPayment && <div className="flex items-center gap-2 rounded-md border border-primary/25 bg-primary/5 px-3 py-2 text-sm"><Loader2 className="h-4 w-4 animate-spin" />付款成功，正在确认会员权益…</div>}
-          {membership?.status === "past_due" && <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">续费付款失败，Pro 权益已暂停。请打开订阅管理更新付款方式。</div>}
-          {membership?.status === "paused" && <div className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning-foreground">订阅已暂停，当前不享受 Pro 权益。</div>}
           {membership?.isPro ? (
             <>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-lg border p-4"><div className="text-xs text-muted-foreground">AI 答疑</div><div className="mt-1 text-xl font-bold">{membership.usage.aiExplain}/{membership.usage.aiExplainLimit}</div></div>
                 <div className="rounded-lg border p-4"><div className="text-xs text-muted-foreground">FRQ 评分</div><div className="mt-1 text-xl font-bold">{membership.usage.frqGrade}/{membership.usage.frqGradeLimit}</div></div>
               </div>
-              <div className="text-sm text-muted-foreground">权益来源：{membership.source === "gift" ? "管理员赠送" : membership.plan === "ap_micro_pro_yearly" ? "年度会员" : membership.plan === "ap_micro_pro_quarterly" ? "季度会员" : "月度会员"}</div>
-              {membership.currentPeriodEnd && <div className="text-sm">{membership.source === "gift" || membership.cancelAtPeriodEnd ? "有效期至" : "下次续费"}：{new Date(membership.currentPeriodEnd).toLocaleDateString()}</div>}
-              {membership.canManage && <Button variant="outline" onClick={() => void manageMembership()}>管理订阅</Button>}
+              {membership.currentPeriodEnd && <div className="text-sm">有效期至：{new Date(membership.currentPeriodEnd).toLocaleDateString()}</div>}
+              <p className="text-xs text-muted-foreground">到期后可在 <Link to="/pricing" className="text-primary underline">定价页</Link> 再次扫码续费。</p>
             </>
           ) : (
             <>
@@ -305,11 +301,11 @@ function ProfilePage() {
                 <div className="flex items-center gap-2"><Check className="h-4 w-4 text-primary" />刷题和模考不限次</div>
               </div>
               <div className="grid gap-3 sm:grid-cols-3">
-                <Button className="h-auto justify-between px-4 py-3" disabled={checkoutLoading} onClick={() => void openCheckout({ priceId: "ap_micro_pro_monthly", userId: user.id, email: user.email })}><span>月度会员</span><span>¥19/月</span></Button>
-                <Button className="h-auto justify-between px-4 py-3" variant="secondary" disabled={checkoutLoading} onClick={() => void openCheckout({ priceId: "ap_micro_pro_quarterly", userId: user.id, email: user.email })}><span>季度会员</span><span>¥55/季</span></Button>
-                <Button className="h-auto justify-between px-4 py-3" variant="outline" disabled={checkoutLoading} onClick={() => void openCheckout({ priceId: "ap_micro_pro_yearly", userId: user.id, email: user.email })}><span>年度会员</span><span className="flex items-center gap-1"><Sparkles className="h-4 w-4" />¥199/年</span></Button>
+                <ManualPayDialog planKey="pro_monthly" trigger={<Button className="h-auto justify-between px-4 py-3"><span>月度会员</span><span>¥19/月</span></Button>} />
+                <ManualPayDialog planKey="pro_quarterly" trigger={<Button className="h-auto justify-between px-4 py-3" variant="secondary"><span>季度会员</span><span>¥55/季</span></Button>} />
+                <ManualPayDialog planKey="pro_yearly" trigger={<Button className="h-auto justify-between px-4 py-3" variant="outline"><span>年度会员</span><span className="flex items-center gap-1"><Sparkles className="h-4 w-4" />¥199/年</span></Button>} />
               </div>
-              <p className="text-xs text-muted-foreground">购买即表示同意 <Link to="/legal/terms" className="text-primary underline">服务条款</Link>、<Link to="/legal/refunds" className="text-primary underline">14 天退款政策</Link>与 <Link to="/legal/privacy" className="text-primary underline">隐私声明</Link>。付款由 Paddle 安全处理。</p>
+              <p className="text-xs text-muted-foreground">支持微信 / 支付宝扫码付款，人工核对后开通。购买即表示同意 <Link to="/legal/terms" className="text-primary underline">服务条款</Link>、<Link to="/legal/refunds" className="text-primary underline">退款政策</Link>与 <Link to="/legal/privacy" className="text-primary underline">隐私声明</Link>。</p>
             </>
           )}
         </CardContent>
