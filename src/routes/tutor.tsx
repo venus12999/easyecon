@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Check, GraduationCap, Sparkles, Users, Video, Gift } from "lucide-react";
-import { usePaddleCheckout } from "@/hooks/use-paddle-checkout";
+import { ManualPayDialog } from "@/components/ManualPayDialog";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
@@ -104,13 +104,10 @@ const TEACHERS = [
 
 function TutorPage() {
   const { user } = useAuth();
-  const { openCheckout, loading } = usePaddleCheckout();
   const [existingBooking, setExistingBooking] = useState<{ teacher: string; created_at: string; scheduled_at: string | null } | null>(null);
   const [checking, setChecking] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [qtyOpen, setQtyOpen] = useState(false);
-  const [qty, setQty] = useState<number>(1);
   const [form, setForm] = useState<{ teacher: string; date: Date | undefined; slot: string; contact: string; note: string }>({
     teacher: "Steve", date: undefined, slot: "", contact: "", note: "",
   });
@@ -201,26 +198,6 @@ function TutorPage() {
     setExistingBooking(data ?? { teacher: form.teacher, created_at: new Date().toISOString(), scheduled_at: scheduledISO });
     setDialogOpen(false);
     toast.success("已预约成功！老师将在 24 小时内与你联系");
-  }
-
-  function onSubscribe(planId: Plan["id"]) {
-    if (!user) {
-      toast.error("请先登录再订阅课程");
-      return;
-    }
-    if (planId === "tutor_single_lesson") {
-      setQty(1);
-      setQtyOpen(true);
-      return;
-    }
-    void openCheckout({ priceId: planId, userId: user.id, email: user.email });
-  }
-
-  function confirmSingleLesson() {
-    if (!user) return;
-    const n = Math.max(1, Math.min(20, Math.floor(qty || 1)));
-    setQtyOpen(false);
-    void openCheckout({ priceId: "tutor_single_lesson", userId: user.id, email: user.email, quantity: n });
   }
 
   return (

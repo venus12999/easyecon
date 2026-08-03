@@ -33,20 +33,8 @@ export const Route = createFileRoute("/api/membership")({
             aiExplainLimit: isPro ? 30 : 3,
             frqGradeLimit: isPro ? 10 : 1,
           },
-          canManage: Boolean(subscription?.paddle_customer_id && subscription?.paddle_subscription_id),
+          canManage: false,
         });
-      },
-      POST: async ({ request }) => {
-        const user = await verifyUserRequest(request);
-        if (!user) return Response.json({ error: "unauthorized" }, { status: 401 });
-        const environment = membershipEnvironment(request);
-        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-        const { data: subscriptions } = await supabaseAdmin.from("subscriptions").select("paddle_subscription_id,paddle_customer_id,status,current_period_end,created_at").eq("user_id", user.userId).eq("environment", environment).order("created_at", { ascending: false });
-        const subscription = subscriptions?.find((item) => isPaidSubscriptionActive(item)) ?? subscriptions?.find((item) => item.paddle_customer_id) ?? null;
-        if (!subscription) return Response.json({ error: "subscription not found" }, { status: 404 });
-        const { getPaddleClient } = await import("@/lib/paddle.server");
-        const session = await getPaddleClient(environment).customerPortalSessions.create(subscription.paddle_customer_id, [subscription.paddle_subscription_id]);
-        return Response.json({ url: session.urls.general.overview });
       },
     },
   },
