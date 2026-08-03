@@ -40,10 +40,26 @@ type MembershipAdj = {
   note: string | null;
 };
 
+type ManualPayment = {
+  id: string;
+  order_no: string;
+  kind: string;
+  plan_key: string;
+  quantity: number;
+  amount_cny: number;
+  channel: string;
+  status: string;
+  review_note: string | null;
+  created_at: string;
+};
+
 const PLAN_LABEL: Record<string, string> = {
   tutor_pack_10: "10 节核心突破课",
   tutor_pack_30: "30 节满分包",
   tutor_single_lesson: "单节续费课",
+  pro_monthly: "Pro 月度会员",
+  pro_quarterly: "Pro 季度会员",
+  pro_yearly: "Pro 年度会员",
 };
 
 function statusLabel(s: string) {
@@ -58,6 +74,7 @@ function OrdersPage() {
   const { user, loading: authLoading } = useAuth();
   const [orders, setOrders] = useState<TutorOrder[]>([]);
   const [adjustments, setAdjustments] = useState<MembershipAdj[]>([]);
+  const [manual, setManual] = useState<ManualPayment[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -65,13 +82,21 @@ function OrdersPage() {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const [o, a] = await Promise.all([
+      const [o, a, m] = await Promise.all([
         supabase.from("tutor_orders").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(50),
         supabase.from("membership_adjustments").select("id, days_granted, starts_at, ends_at, note").eq("user_id", user.id).order("starts_at", { ascending: false }).limit(20),
+        supabase.auth.getSession().then(({ data }) =>
+          fetch("/api/manual-payments", {
+            headers: data.session?.access_token ? { Authorization: `Bearer ${data.session.access_token}` } : {},
+          })
+            .then((res) => (res.ok ? res.json() : { items: [] }))
+            .catch(() => ({ items: [] })),
+        ),
       ]);
       if (cancelled) return;
       setOrders((o.data as TutorOrder[] | null) ?? []);
       setAdjustments((a.data as MembershipAdj[] | null) ?? []);
+      setManual(((m as { items?: ManualPayment[] }).items ?? []));
       setLoading(false);
     })();
     return () => { cancelled = true; };
@@ -124,6 +149,35 @@ function OrdersPage() {
       </Card>
 
       {/* Orders list */}
+      {manual.length > 0 && (
+        <section className="mb-6">
+          <h2 className="mb-3 text-lg font-semibold">扫码付款记录</h2>
+          <div className="space-y-3">
+            {manual.map((m) => (
+              <Card key={m.id}>
+                <CardContent className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold">{PLAN_LABEL[m.plan_key] ?? m.plan_key}</span>
+                      {m.quantity > 1 && <Badge variant="outline">{m.quantity} 节</Badge>}
+                      <Badge variant={m.status === "approved" ? "default" : m.status === "rejected" ? "destructive" : "secondary"}>
+                        {m.status === "approved" ? "已开通" : m.status === "rejected" ? "未通过" : "待审核"}
+                      </Badge>
+                    </div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {format(new Date(m.created_at), "yyyy-MM-dd HH:mm")} · 订单号 {m.order_no} · {m.channel === "wechat" ? "微信支付" : "支付宝"}
+                    </div>
+                    {m.status === "pending" && <div className="mt-1 text-xs text-muted-foreground">我们正在核对付款，通常 24 小时内完成。</div>}
+                    {m.review_note && <div className="mt-1 text-xs text-destructive">备注：{m.review_note}</div>}
+                  </div>
+                  <div className="text-right text-lg font-semibold">¥{Number(m.amount_cny).toFixed(2)}</div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </section>
+      )}
+
       {loading ? (
         <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
       ) : orders.length === 0 ? (
@@ -177,7 +231,7 @@ function OrdersPage() {
       )}
 
       <p className="mt-6 text-center text-xs text-muted-foreground">
-        订单由 Paddle 处理。如需退款或查看发票，请前往你的注册邮箱查看 Paddle 邮件，或
+        如需退款或开票，请通过应用内反馈联系我们，或
         <Link to="/legal/refunds" className="mx-1 text-primary underline">查看退款政策</Link>。
       </p>
     </main>
