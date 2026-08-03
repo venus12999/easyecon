@@ -31,6 +31,7 @@ import { Route as LegalTermsRouteImport } from './routes/legal.terms'
 import { Route as LegalRefundsRouteImport } from './routes/legal.refunds'
 import { Route as LegalPrivacyRouteImport } from './routes/legal.privacy'
 import { Route as ApiMembershipRouteImport } from './routes/api/membership'
+import { Route as ApiManualPaymentsRouteImport } from './routes/api/manual-payments'
 import { Route as ApiFeedbackRouteImport } from './routes/api/feedback'
 import { Route as ApiAiExplainRouteImport } from './routes/api/ai-explain'
 import { Route as FrqReviewSlugRouteImport } from './routes/frq.review.$slug'
@@ -42,6 +43,7 @@ import { Route as ApiAdminUsersRouteImport } from './routes/api/admin/users'
 import { Route as ApiAdminUploadImageRouteImport } from './routes/api/admin/upload-image'
 import { Route as ApiAdminReanalyzeRouteImport } from './routes/api/admin/reanalyze'
 import { Route as ApiAdminQuestionsRouteImport } from './routes/api/admin/questions'
+import { Route as ApiAdminManualPaymentsRouteImport } from './routes/api/admin/manual-payments'
 import { Route as ApiAdminLoginRouteImport } from './routes/api/admin/login'
 import { Route as ApiAdminImportRouteImport } from './routes/api/admin/import'
 import { Route as ApiAdminFrqsRouteImport } from './routes/api/admin/frqs'
@@ -159,6 +161,11 @@ const ApiMembershipRoute = ApiMembershipRouteImport.update({
   path: '/api/membership',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiManualPaymentsRoute = ApiManualPaymentsRouteImport.update({
+  id: '/api/manual-payments',
+  path: '/api/manual-payments',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiFeedbackRoute = ApiFeedbackRouteImport.update({
   id: '/api/feedback',
   path: '/api/feedback',
@@ -214,6 +221,11 @@ const ApiAdminQuestionsRoute = ApiAdminQuestionsRouteImport.update({
   path: '/api/admin/questions',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAdminManualPaymentsRoute = ApiAdminManualPaymentsRouteImport.update({
+  id: '/api/admin/manual-payments',
+  path: '/api/admin/manual-payments',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAdminLoginRoute = ApiAdminLoginRouteImport.update({
   id: '/api/admin/login',
   path: '/api/admin/login',
@@ -263,6 +275,7 @@ export interface FileRoutesByFullPath {
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/api/feedback': typeof ApiFeedbackRoute
+  '/api/manual-payments': typeof ApiManualPaymentsRoute
   '/api/membership': typeof ApiMembershipRouteWithChildren
   '/legal/privacy': typeof LegalPrivacyRoute
   '/legal/refunds': typeof LegalRefundsRoute
@@ -276,6 +289,7 @@ export interface FileRoutesByFullPath {
   '/api/admin/frqs': typeof ApiAdminFrqsRoute
   '/api/admin/import': typeof ApiAdminImportRoute
   '/api/admin/login': typeof ApiAdminLoginRoute
+  '/api/admin/manual-payments': typeof ApiAdminManualPaymentsRoute
   '/api/admin/questions': typeof ApiAdminQuestionsRoute
   '/api/admin/reanalyze': typeof ApiAdminReanalyzeRoute
   '/api/admin/upload-image': typeof ApiAdminUploadImageRoute
@@ -304,6 +318,7 @@ export interface FileRoutesByTo {
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/api/feedback': typeof ApiFeedbackRoute
+  '/api/manual-payments': typeof ApiManualPaymentsRoute
   '/api/membership': typeof ApiMembershipRouteWithChildren
   '/legal/privacy': typeof LegalPrivacyRoute
   '/legal/refunds': typeof LegalRefundsRoute
@@ -317,6 +332,7 @@ export interface FileRoutesByTo {
   '/api/admin/frqs': typeof ApiAdminFrqsRoute
   '/api/admin/import': typeof ApiAdminImportRoute
   '/api/admin/login': typeof ApiAdminLoginRoute
+  '/api/admin/manual-payments': typeof ApiAdminManualPaymentsRoute
   '/api/admin/questions': typeof ApiAdminQuestionsRoute
   '/api/admin/reanalyze': typeof ApiAdminReanalyzeRoute
   '/api/admin/upload-image': typeof ApiAdminUploadImageRoute
@@ -346,6 +362,7 @@ export interface FileRoutesById {
   '/wrong': typeof WrongRoute
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/api/feedback': typeof ApiFeedbackRoute
+  '/api/manual-payments': typeof ApiManualPaymentsRoute
   '/api/membership': typeof ApiMembershipRouteWithChildren
   '/legal/privacy': typeof LegalPrivacyRoute
   '/legal/refunds': typeof LegalRefundsRoute
@@ -359,6 +376,7 @@ export interface FileRoutesById {
   '/api/admin/frqs': typeof ApiAdminFrqsRoute
   '/api/admin/import': typeof ApiAdminImportRoute
   '/api/admin/login': typeof ApiAdminLoginRoute
+  '/api/admin/manual-payments': typeof ApiAdminManualPaymentsRoute
   '/api/admin/questions': typeof ApiAdminQuestionsRoute
   '/api/admin/reanalyze': typeof ApiAdminReanalyzeRoute
   '/api/admin/upload-image': typeof ApiAdminUploadImageRoute
@@ -389,6 +407,7 @@ export interface FileRouteTypes {
     | '/wrong'
     | '/api/ai-explain'
     | '/api/feedback'
+    | '/api/manual-payments'
     | '/api/membership'
     | '/legal/privacy'
     | '/legal/refunds'
@@ -402,6 +421,7 @@ export interface FileRouteTypes {
     | '/api/admin/frqs'
     | '/api/admin/import'
     | '/api/admin/login'
+    | '/api/admin/manual-payments'
     | '/api/admin/questions'
     | '/api/admin/reanalyze'
     | '/api/admin/upload-image'
@@ -430,6 +450,7 @@ export interface FileRouteTypes {
     | '/wrong'
     | '/api/ai-explain'
     | '/api/feedback'
+    | '/api/manual-payments'
     | '/api/membership'
     | '/legal/privacy'
     | '/legal/refunds'
@@ -443,6 +464,7 @@ export interface FileRouteTypes {
     | '/api/admin/frqs'
     | '/api/admin/import'
     | '/api/admin/login'
+    | '/api/admin/manual-payments'
     | '/api/admin/questions'
     | '/api/admin/reanalyze'
     | '/api/admin/upload-image'
@@ -471,6 +493,7 @@ export interface FileRouteTypes {
     | '/wrong'
     | '/api/ai-explain'
     | '/api/feedback'
+    | '/api/manual-payments'
     | '/api/membership'
     | '/legal/privacy'
     | '/legal/refunds'
@@ -484,6 +507,7 @@ export interface FileRouteTypes {
     | '/api/admin/frqs'
     | '/api/admin/import'
     | '/api/admin/login'
+    | '/api/admin/manual-payments'
     | '/api/admin/questions'
     | '/api/admin/reanalyze'
     | '/api/admin/upload-image'
@@ -513,6 +537,7 @@ export interface RootRouteChildren {
   WrongRoute: typeof WrongRoute
   ApiAiExplainRoute: typeof ApiAiExplainRoute
   ApiFeedbackRoute: typeof ApiFeedbackRoute
+  ApiManualPaymentsRoute: typeof ApiManualPaymentsRoute
   ApiMembershipRoute: typeof ApiMembershipRouteWithChildren
   LegalPrivacyRoute: typeof LegalPrivacyRoute
   LegalRefundsRoute: typeof LegalRefundsRoute
@@ -526,6 +551,7 @@ export interface RootRouteChildren {
   ApiAdminFrqsRoute: typeof ApiAdminFrqsRoute
   ApiAdminImportRoute: typeof ApiAdminImportRoute
   ApiAdminLoginRoute: typeof ApiAdminLoginRoute
+  ApiAdminManualPaymentsRoute: typeof ApiAdminManualPaymentsRoute
   ApiAdminQuestionsRoute: typeof ApiAdminQuestionsRoute
   ApiAdminReanalyzeRoute: typeof ApiAdminReanalyzeRoute
   ApiAdminUploadImageRoute: typeof ApiAdminUploadImageRoute
@@ -692,6 +718,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMembershipRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/manual-payments': {
+      id: '/api/manual-payments'
+      path: '/api/manual-payments'
+      fullPath: '/api/manual-payments'
+      preLoaderRoute: typeof ApiManualPaymentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/feedback': {
       id: '/api/feedback'
       path: '/api/feedback'
@@ -767,6 +800,13 @@ declare module '@tanstack/react-router' {
       path: '/api/admin/questions'
       fullPath: '/api/admin/questions'
       preLoaderRoute: typeof ApiAdminQuestionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/manual-payments': {
+      id: '/api/admin/manual-payments'
+      path: '/api/admin/manual-payments'
+      fullPath: '/api/admin/manual-payments'
+      preLoaderRoute: typeof ApiAdminManualPaymentsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/admin/login': {
@@ -853,6 +893,7 @@ const rootRouteChildren: RootRouteChildren = {
   WrongRoute: WrongRoute,
   ApiAiExplainRoute: ApiAiExplainRoute,
   ApiFeedbackRoute: ApiFeedbackRoute,
+  ApiManualPaymentsRoute: ApiManualPaymentsRoute,
   ApiMembershipRoute: ApiMembershipRouteWithChildren,
   LegalPrivacyRoute: LegalPrivacyRoute,
   LegalRefundsRoute: LegalRefundsRoute,
@@ -866,6 +907,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAdminFrqsRoute: ApiAdminFrqsRoute,
   ApiAdminImportRoute: ApiAdminImportRoute,
   ApiAdminLoginRoute: ApiAdminLoginRoute,
+  ApiAdminManualPaymentsRoute: ApiAdminManualPaymentsRoute,
   ApiAdminQuestionsRoute: ApiAdminQuestionsRoute,
   ApiAdminReanalyzeRoute: ApiAdminReanalyzeRoute,
   ApiAdminUploadImageRoute: ApiAdminUploadImageRoute,
