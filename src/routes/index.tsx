@@ -247,7 +247,7 @@ function Index() {
   const firstKpWithQuestions = kps.find((k) => (counts[k.id]?.total ?? 0) > 0) ?? kps[0];
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen">
       
       <main className="mx-auto max-w-6xl px-3 py-6 sm:px-4 sm:py-8">
         {/* 顶部问候 */}

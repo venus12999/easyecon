@@ -375,7 +375,7 @@ function Mock() {
 
   if (phase === "idle") {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen">
         
         <main className="mx-auto max-w-2xl px-4 py-12">
           <h1 className="text-2xl font-bold mb-2">完整模考（AP 官方比例）</h1>
@@ -423,7 +423,7 @@ function Mock() {
   if (phase === "frq") {
     const allGrading = Object.values(grading).some(Boolean);
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen">
         <main className="mx-auto max-w-3xl px-4 py-8 space-y-6">
           <div>
             <div className="flex items-center gap-2 text-sm font-medium text-primary">
@@ -511,7 +511,7 @@ function Mock() {
     const ss = String(remainingSeconds % 60).padStart(2, "0");
     const lowTime = remainingSeconds <= 5 * 60;
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen">
         
         <main className="mx-auto max-w-3xl px-4 py-6 pb-24">
           {shortageNote && (
@@ -607,7 +607,7 @@ function Mock() {
   if (!stats) return null;
   const pct = Math.round((stats.correct / stats.total) * 100);
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen">
       
       <main className="mx-auto max-w-3xl px-4 py-8">
         <h1 className="text-2xl font-bold mb-2">模考结果</h1>

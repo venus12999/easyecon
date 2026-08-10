@@ -184,6 +184,48 @@
   }
 }
 
+/* ===== 蓝色渐变背景 + 毛玻璃组件 ===== */
+.app-gradient-bg {
+  background-color: #2b6fc4;
+  --muted-foreground: #3f4c68;
+  background-image:
+    radial-gradient(1100px 700px at 8% -5%, #7fc4ff 0%, transparent 60%),
+    radial-gradient(900px 600px at 95% 5%, #b8e0ff 0%, transparent 62%),
+    radial-gradient(1200px 900px at 50% 110%, #1e4fa8 0%, transparent 65%),
+    linear-gradient(160deg, #2f7fe0 0%, #3f96e8 38%, #7ab8ee 68%, #cfe6fb 100%);
+  background-attachment: fixed;
+  background-size: cover;
+}
+
+@utility glass {
+  background-color: rgba(255, 255, 255, 0.68);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: 0 10px 30px -12px rgba(12, 47, 105, 0.35);
+}
+
+@utility glass-strong {
+  background-color: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(22px) saturate(150%);
+  box-shadow: 0 14px 40px -14px rgba(12, 47, 105, 0.4);
+}
+
+/* 让全站基于 bg-card 的卡片自动变成悬浮毛玻璃 */
+.app-gradient-bg .bg-card {
+  background-color: rgba(255, 255, 255, 0.74);
+  backdrop-filter: blur(18px) saturate(140%);
+  border-color: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 10px 30px -14px rgba(12, 47, 105, 0.35);
+}
+
+.app-gradient-bg .bg-background,
+.app-gradient-bg .bg-muted,
+.app-gradient-bg .bg-secondary {
+  background-color: rgba(255, 255, 255, 0.42);
+  backdrop-filter: blur(12px);
+}
+
 @keyframes float {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-6px); }
