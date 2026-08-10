@@ -55,7 +55,6 @@ function streakLines(n: number, c: CompanionId) {
   const banks: Record<CompanionId, string[]> = {
     sarah: [`连对 ${n} 题！这手感稳的呀 🔥`, `${n} 连对，${name} 服气 ✨`],
     venus: [`连对 ${n} 题啦，你今天状态真好。`, `一路 ${n} 对，慢慢来但一直对～`],
-    jason: [`${n} 连对。可以，这才叫刷题。`],
   };
   return banks[c];
 }
@@ -63,7 +62,6 @@ function lowAccLines(c: CompanionId) {
   const banks: Record<CompanionId, string[]> = {
     sarah: ["今天先不贪多，挑一个知识点搞透就够啦 🌱"],
     venus: ["有点难对不对，我们先歇一下，一个知识点一个知识点来。"],
-    jason: ["错得多说明选到弱项了，回去把这个 KP 复盘一下。"],
   };
   return banks[c];
 }
@@ -71,7 +69,6 @@ function firstFrqLines(c: CompanionId) {
   const banks: Record<CompanionId, string[]> = {
     sarah: ["第一道大题写完啦！FRQ 敢写就赢一半 📝"],
     venus: ["第一次大题，慢慢来，表达比对错重要。"],
-    jason: ["FRQ 开写了。这才是拉分点，别怕丢分。"],
   };
   return banks[c];
 }
@@ -79,7 +76,6 @@ function frqPerfectLines(c: CompanionId) {
   const banks: Record<CompanionId, string[]> = {
     sarah: ["FRQ 满分！这波操作我要截图收藏了 🏆"],
     venus: ["满分的大题…你已经很了不起了。"],
-    jason: ["FRQ 拿满。行，下一份保持。"],
   };
   return banks[c];
 }
@@ -177,37 +173,31 @@ function examLine(c: CompanionId, days: number): string {
   if (days === 0) return {
     sarah: "今天就是考试日！深呼吸，你准备很久了 💪",
     venus: "考试日到啦，相信你，去把它写完。",
-    jason: "今天 D-Day。上考场，别多想。",
   }[c];
   if (days === 1) return {
     sarah: "还有 1 天啦！今天翻错题就好，别做新题 🌿",
     venus: "只剩 1 天了，今晚早点睡好吗？",
-    jason: "D-1。收心，把公式再默一遍。",
   }[c];
   return {
     sarah: `距离考试还有 ${days} 天，每天稳住节奏就行 ⏳`,
     venus: `还有 ${days} 天，我们一天一天来。`,
-    jason: `D-${days}。这周别浪，把弱项刷完。`,
   }[c];
 }
 function weakKpLine(c: CompanionId, kp: string, n: number): string {
   return {
     sarah: `我发现你最近在「${kp}」上错了 ${n} 次，今天专练 5 题？`,
     venus: `「${kp}」这块最近错得多，我们一起再看一下～`,
-    jason: `「${kp}」错了 ${n} 次。去专练，别拖。`,
   }[c];
 }
 function frqStuckLine(c: CompanionId): string {
   return {
     sarah: "FRQ 不是不会，只是表达没练，去写一份看看？",
     venus: "大题最近有点卡，我们回去慢慢练结构。",
-    jason: "FRQ 连续低分。不是脑子的问题，是套路没背。",
   }[c];
 }
 function nearFiveLine(c: CompanionId, pct: number): string {
   return {
     sarah: `模考稳定在 ${pct}%，已经有 5 分实力了，就差稳 ✨`,
     venus: `已经 ${pct}% 啦，你比自己想的更接近 5 分。`,
-    jason: `${pct}%。差最后一口气，多做真题。`,
   }[c];
 }
