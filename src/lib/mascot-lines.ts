@@ -1,8 +1,7 @@
 import mascot1Url from "@/assets/mascot.png";
 import mascot2Url from "@/assets/mascot2.png";
-import mascot3Url from "@/assets/mascot3.png";
 
-export type CompanionId = "sarah" | "venus" | "jason";
+export type CompanionId = "sarah" | "venus";
 
 export type Companion = {
   id: CompanionId;
@@ -26,13 +25,6 @@ export const COMPANIONS: Companion[] = [
     image: mascot1Url,
     tagline: "去年 AP Micro 5 分学姐，安静温柔的那一款。",
     intro: "接下来由我来陪伴你一起学习呀！我们慢慢来，不急。",
-  },
-  {
-    id: "jason",
-    name: "Jason",
-    image: mascot3Url,
-    tagline: "去年 AP Micro 5 分学长，喜欢吐槽经济学。",
-    intro: "接下来由我来陪伴你一起学习呀！有啥不会的直接问我。",
   },
 ];
 
