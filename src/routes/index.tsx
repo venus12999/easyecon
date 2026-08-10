@@ -249,11 +249,11 @@ function Index() {
   return (
     <div className="min-h-screen bg-background">
       
-      <main className="mx-auto max-w-6xl px-4 py-8">
+      <main className="mx-auto max-w-6xl px-3 py-6 sm:px-4 sm:py-8">
         {/* 顶部问候 */}
         <section className="mb-6 flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
               {greeting}，{userLabel} <span className="inline-block">👋</span>
             </h1>
             <p className="mt-2 text-muted-foreground">
@@ -398,7 +398,7 @@ function Index() {
         </section>
 
         {/* 三张小卡 */}
-        <section className="grid gap-3 grid-cols-3 mb-5">
+        <section className="grid gap-3 grid-cols-1 sm:grid-cols-3 mb-5">
           <QuickCard
             to="/wrong"
             icon={<XCircle className="h-5 w-5 text-rose-500" />}
