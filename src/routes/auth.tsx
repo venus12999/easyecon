@@ -77,7 +77,12 @@ function AuthPage() {
           password: parsed.data.password,
         });
         if (error) {
-          toast.error("邮箱或密码错误");
+          if (/confirm/i.test(error.message)) {
+            setPendingEmail(parsed.data.email);
+            toast.error("邮箱尚未验证，请先点击邮件中的验证链接");
+          } else {
+            toast.error("邮箱或密码错误");
+          }
           return;
         }
         setRememberPreference(remember);
@@ -204,7 +209,7 @@ function AuthPage() {
                     </div>
                   )}
                   {forgot ? <Button type="button" className="w-full h-11" disabled={busy} onClick={() => void sendReset()}>{busy && <Loader2 className="h-4 w-4 animate-spin" />}发送重设邮件</Button> : <Button type="submit" className="w-full h-11" disabled={busy}>
-                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : tab === "register" ? "注册并登录" : "登录"}
+                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : tab === "register" ? "注册并发送验证邮件" : "登录"}
                   </Button>}
                   {tab === "login" && <Button type="button" variant="link" className="h-auto w-full p-0 text-xs" onClick={() => setForgot((value) => !value)}>{forgot ? "返回密码登录" : "忘记密码？"}</Button>}
                 </form>
