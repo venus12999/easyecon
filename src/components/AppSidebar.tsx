@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { BookOpen, ListChecks, Library, LogOut, Bookmark, Shield, MessageSquarePlus, UserRound, Sparkles, CalendarCheck, Receipt } from "lucide-react";
+import { LogOut, Shield, MessageSquarePlus, UserRound, CalendarCheck, Receipt } from "lucide-react";
 import { useState } from "react";
 import logoAsset from "@/assets/logo.png.asset.json";
 import {
@@ -30,7 +30,7 @@ export function AppSidebar() {
   const isActive = (url: string, exact?: boolean) => (exact ? path === url : path === url || path.startsWith(url + "/"));
 
   return (
-    <Sidebar collapsible="none" className="border-r">
+    <Sidebar collapsible="offcanvas" className="border-r">
       <SidebarHeader className="px-3 py-4">
         <Link to="/" className="flex items-center gap-2">
           <img
@@ -51,45 +51,9 @@ export function AppSidebar() {
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>练习</SidebarGroupLabel>
+          <SidebarGroupLabel>我的</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {practiceItems.map((it) => (
-                <SidebarMenuItem key={it.url}>
-                  <SidebarMenuButton asChild isActive={isActive(it.url, it.exact)}>
-                    <Link to={it.url} className="flex items-center gap-2">
-                      <it.icon className="h-4 w-4" />
-                      {!collapsed && <span>{it.title}</span>}
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-              {showFeedback && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton onClick={() => setFbOpen(true)} className="flex items-center gap-2">
-                    <MessageSquarePlus className="h-4 w-4" />
-                    {!collapsed && <span>反馈</span>}
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupLabel>参考</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {refItems.map((it) => (
-                <SidebarMenuItem key={it.url}>
-                  <SidebarMenuButton asChild isActive={isActive(it.url)}>
-                    <Link to={it.url} className="flex items-center gap-2">
-                      <it.icon className="h-4 w-4" />
-                      {!collapsed && <span>{it.title}</span>}
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
               {user && (
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild isActive={isActive("/profile")}>
