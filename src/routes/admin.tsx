@@ -211,7 +211,7 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
     : [];
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen">
       
       <main className="mx-auto max-w-6xl px-4 py-8">
         <div className="flex items-center justify-between mb-6">

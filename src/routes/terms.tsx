@@ -56,7 +56,7 @@ function TermsPage() {
   }, [filtered]);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen">
       
       <main className="mx-auto max-w-4xl px-4 py-8">
         <h1 className="text-2xl font-bold tracking-tight mb-1">术语速查</h1>
