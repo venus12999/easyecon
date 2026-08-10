@@ -90,6 +90,7 @@ function AuthPage() {
   }
 
   async function sendReset() {
+    void 0;
     const parsed = z.string().trim().email().safeParse(email);
     if (!parsed.success) return toast.error("请先输入有效邮箱");
     setBusy(true);
