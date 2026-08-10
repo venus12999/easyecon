@@ -198,7 +198,7 @@
 }
 
 @utility glass {
-  background-color: rgba(255, 255, 255, 0.55);
+  background-color: rgba(255, 255, 255, 0.68);
   border: 1px solid rgba(255, 255, 255, 0.55);
   backdrop-filter: blur(18px) saturate(140%);
   box-shadow: 0 10px 30px -12px rgba(12, 47, 105, 0.35);
@@ -213,7 +213,7 @@
 
 /* 让全站基于 bg-card 的卡片自动变成悬浮毛玻璃 */
 .app-gradient-bg .bg-card {
-  background-color: rgba(255, 255, 255, 0.6);
+  background-color: rgba(255, 255, 255, 0.74);
   backdrop-filter: blur(18px) saturate(140%);
   border-color: rgba(255, 255, 255, 0.55);
   box-shadow: 0 10px 30px -14px rgba(12, 47, 105, 0.35);
