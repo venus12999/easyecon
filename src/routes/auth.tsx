@@ -33,6 +33,7 @@ function AuthPage() {
   const [busy, setBusy] = useState(false);
   const [forgot, setForgot] = useState(false);
   const [remember, setRemember] = useState(true);
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) nav({ to: "/" });
@@ -63,12 +64,12 @@ function AuthPage() {
           return;
         }
         if (data.session) {
-          toast.success("注册成功，已自动登录");
           setRememberPreference(remember);
+          toast.success("注册成功");
           nav({ to: "/" });
         } else {
-          toast.success("注册成功，请前往邮箱确认后登录");
-          setTab("login");
+          setPendingEmail(parsed.data.email);
+          toast.success("验证邮件已发送，请前往邮箱点击链接完成注册");
         }
       } else {
         const { error } = await supabase.auth.signInWithPassword({
