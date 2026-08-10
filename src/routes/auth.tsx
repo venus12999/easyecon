@@ -100,6 +100,19 @@ function AuthPage() {
     setForgot(false);
   }
 
+  async function resendVerification() {
+    if (!pendingEmail) return;
+    setBusy(true);
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email: pendingEmail,
+      options: { emailRedirectTo: `${window.location.origin}/` },
+    });
+    setBusy(false);
+    if (error) return toast.error("发送失败，请稍后重试");
+    toast.success("验证邮件已重新发送");
+  }
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-background flex items-center justify-center px-4 py-10">
       {/* 背景装饰 */}
@@ -124,12 +137,35 @@ function AuthPage() {
           <CardContent className="p-6">
             <div className="mb-4 text-center">
               <h1 className="text-lg font-semibold">
-                {forgot ? "找回密码" : tab === "register" ? "创建账号" : "欢迎回来"}
+                {pendingEmail ? "请验证你的邮箱" : forgot ? "找回密码" : tab === "register" ? "创建账号" : "欢迎回来"}
               </h1>
               <p className="mt-1 text-xs text-muted-foreground">
-                {forgot ? "输入注册邮箱，我们会发送重设链接" : tab === "register" ? "注册后即可开始 AP 微观经济练习" : "继续你的学习进度"}
+                {pendingEmail
+                  ? "我们已把验证链接发送到你的邮箱，点击链接后即可登录"
+                  : forgot ? "输入注册邮箱，我们会发送重设链接" : tab === "register" ? "注册后即可开始 AP 微观经济练习" : "继续你的学习进度"}
               </p>
             </div>
+            {pendingEmail ? (
+              <div className="space-y-3">
+                <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-3 text-center text-sm font-medium break-all">
+                  {pendingEmail}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  没收到邮件？请检查垃圾邮件文件夹，或重新发送。
+                </p>
+                <Button type="button" className="h-11 w-full" disabled={busy} onClick={() => void resendVerification()}>
+                  {busy && <Loader2 className="h-4 w-4 animate-spin" />}重新发送验证邮件
+                </Button>
+                <Button
+                  type="button"
+                  variant="link"
+                  className="h-auto w-full p-0 text-xs"
+                  onClick={() => { setPendingEmail(null); setTab("login"); setPassword(""); }}
+                >
+                  已验证，返回登录
+                </Button>
+              </div>
+            ) : (
               <Tabs value={tab} onValueChange={(v) => { setTab(v as "login" | "register"); setForgot(false); }}>
               <TabsList className="grid grid-cols-2 w-full">
                 <TabsTrigger value="login">登录</TabsTrigger>
@@ -173,7 +209,8 @@ function AuthPage() {
                   {tab === "login" && <Button type="button" variant="link" className="h-auto w-full p-0 text-xs" onClick={() => setForgot((value) => !value)}>{forgot ? "返回密码登录" : "忘记密码？"}</Button>}
                 </form>
               </TabsContent>
-            </Tabs>
+              </Tabs>
+            )}
           </CardContent>
         </Card>
 
