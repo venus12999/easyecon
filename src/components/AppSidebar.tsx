@@ -104,6 +104,14 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               )}
+              {showFeedback && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton onClick={() => setFbOpen(true)} className="flex items-center gap-2">
+                    <MessageSquarePlus className="h-4 w-4" />
+                    <span>反馈</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
