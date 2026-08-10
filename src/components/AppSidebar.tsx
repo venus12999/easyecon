@@ -19,15 +19,6 @@ import { Button } from "@/components/ui/button";
 import { isAdminEmail } from "@/lib/admin-emails";
 import { FeedbackWidget } from "@/components/FeedbackWidget";
 
-const practiceItems = [
-  { title: "刷题", url: "/", icon: BookOpen, exact: true },
-  { title: "错题本", url: "/wrong", icon: Bookmark },
-  { title: "模拟考试", url: "/mock", icon: ListChecks },
-  { title: "五分大神带你飞", url: "/tutor", icon: Sparkles },
-];
-
-const refItems = [{ title: "术语表", url: "/terms", icon: Library }];
-
 export function AppSidebar() {
   const collapsed = false;
   const path = useRouterState({ select: (r) => r.location.pathname });
