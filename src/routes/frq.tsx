@@ -14,7 +14,7 @@ export const Route = createFileRoute("/frq")({
       { name: "description", content: "按 AP 微观经济 Unit 分类练习 FRQ 大题，并按得分点获得评分。" },
     ],
   }),
-  validateSearch: (search: Record<string, unknown>) => {
+  validateSearch: (search: Record<string, unknown>): { unit?: number } => {
     const unit = Number(search.unit);
     return { unit: Number.isInteger(unit) && unit >= 1 && unit <= 6 ? unit : undefined };
   },
