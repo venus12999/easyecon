@@ -186,7 +186,8 @@
 
 /* ===== 蓝色渐变背景 + 毛玻璃组件 ===== */
 .app-gradient-bg {
-  background-color: #0b3b8c;
+  background-color: #2b6fc4;
+  --muted-foreground: #3f4c68;
   background-image:
     radial-gradient(1100px 700px at 8% -5%, #7fc4ff 0%, transparent 60%),
     radial-gradient(900px 600px at 95% 5%, #b8e0ff 0%, transparent 62%),
