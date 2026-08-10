@@ -18,7 +18,7 @@ import { FRQ_CATEGORIES, getFrqUnit } from "@/lib/frq-categories";
 
 export const Route = createFileRoute("/mock/$slug")({
   head: () => ({ meta: [{ title: "真题卷 · AP 微观经济" }] }),
-  validateSearch: (search: Record<string, unknown>) => {
+  validateSearch: (search: Record<string, unknown>): { unit?: number; frq?: string } => {
     const unit = Number(search.unit);
     return {
       unit: Number.isInteger(unit) && unit >= 1 && unit <= 6 ? unit : undefined,

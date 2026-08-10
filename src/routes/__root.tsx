@@ -4,7 +4,7 @@ import appCss from "../styles.css?url";
 import logoAsset from "@/assets/logo.png.asset.json";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/hooks/use-auth";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { FloatingMascot } from "@/components/FloatingMascot";
 
@@ -96,9 +96,6 @@ function RootComponent() {
         <div className="min-h-screen flex w-full bg-background">
           <AppSidebar />
           <div className="flex-1 flex flex-col min-w-0">
-            <header className="h-12 flex items-center border-b bg-card/40 backdrop-blur sticky top-0 z-30">
-              <SidebarTrigger className="ml-2" />
-            </header>
             <main className="flex-1 min-w-0">
               <Outlet />
             </main>

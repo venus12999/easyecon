@@ -13,7 +13,6 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  useSidebar,
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -30,8 +29,7 @@ const practiceItems = [
 const refItems = [{ title: "术语表", url: "/terms", icon: Library }];
 
 export function AppSidebar() {
-  const { state } = useSidebar();
-  const collapsed = state === "collapsed";
+  const collapsed = false;
   const path = useRouterState({ select: (r) => r.location.pathname });
   const { user, signOut } = useAuth();
   const showAdmin = isAdminEmail(user?.email);
@@ -41,7 +39,7 @@ export function AppSidebar() {
   const isActive = (url: string, exact?: boolean) => (exact ? path === url : path === url || path.startsWith(url + "/"));
 
   return (
-    <Sidebar collapsible="icon">
+    <Sidebar collapsible="none" className="border-r">
       <SidebarHeader className="px-3 py-4">
         <Link to="/" className="flex items-center gap-2">
           <img
