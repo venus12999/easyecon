@@ -4,8 +4,8 @@ import appCss from "../styles.css?url";
 import logoAsset from "@/assets/logo.png.asset.json";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/hooks/use-auth";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/AppSidebar";
+import { TopNav } from "@/components/TopNav";
+import { FeedbackButton } from "@/components/FeedbackButton";
 import { FloatingMascot } from "@/components/FloatingMascot";
 
 function NotFoundComponent() {
@@ -92,31 +92,21 @@ function RootComponent() {
   }
   return (
     <AuthProvider>
-      <SidebarProvider>
-        <div className="min-h-screen flex w-full bg-background">
-          <AppSidebar />
-          <div className="flex-1 flex flex-col min-w-0">
-            <header className="md:hidden sticky top-0 z-30 flex h-12 items-center gap-2 border-b bg-background/95 px-2 backdrop-blur">
-              <SidebarTrigger />
-              <Link to="/" className="flex min-w-0 items-center gap-2">
-                <img src={logoAsset.url} alt="EasyEcon" className="h-6 w-6 shrink-0 rounded object-cover" />
-                <span className="truncate text-sm font-bold">EasyEcon</span>
-              </Link>
-            </header>
-            <main className="flex-1 min-w-0">
-              <Outlet />
-            </main>
-            <footer className="flex flex-wrap justify-center gap-x-5 gap-y-2 border-t px-4 py-4 text-xs text-muted-foreground">
-              <Link to="/pricing">定价</Link>
-              <Link to="/legal/terms">服务条款</Link>
-              <Link to="/legal/refunds">退款政策</Link>
-              <Link to="/legal/privacy">隐私声明</Link>
-            </footer>
-          </div>
-        </div>
-        <FloatingMascot />
-        <Toaster richColors position="top-center" />
-      </SidebarProvider>
+      <div className="app-gradient-bg flex min-h-screen w-full flex-col">
+        <TopNav />
+        <main className="min-w-0 flex-1">
+          <Outlet />
+        </main>
+        <footer className="flex flex-wrap justify-center gap-x-5 gap-y-2 px-4 py-4 text-xs text-foreground/60">
+          <Link to="/pricing">定价</Link>
+          <Link to="/legal/terms">服务条款</Link>
+          <Link to="/legal/refunds">退款政策</Link>
+          <Link to="/legal/privacy">隐私声明</Link>
+        </footer>
+      </div>
+      {!path.startsWith("/admin") && <FeedbackButton />}
+      <FloatingMascot />
+      <Toaster richColors position="top-center" />
     </AuthProvider>
   );
 }
