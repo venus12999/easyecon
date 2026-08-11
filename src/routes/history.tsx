@@ -3,8 +3,10 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ArrowLeft, History, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, Eye, History, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { HistoryDetailDialog, type DetailTarget } from "@/components/history/HistoryDetailDialog";
 
 export const Route = createFileRoute("/history")({
   head: () => ({
@@ -28,6 +30,8 @@ type McqRound = {
   key: string;
   kpName: string;
   unit: number | null;
+  knowledgePointId: string;
+  archivedAt: string | null;
   attempts: number;
   correct: number;
   finishedAt: string;
@@ -37,6 +41,8 @@ type McqRound = {
 type FrqRound = {
   key: string;
   paperTitle: string;
+  paperId: string;
+  archivedAt: string | null;
   count: number;
   score: number;
   maxScore: number;
@@ -66,6 +72,7 @@ function HistoryPage() {
   const [mcq, setMcq] = useState<McqRound[]>([]);
   const [frq, setFrq] = useState<FrqRound[]>([]);
   const [mocks, setMocks] = useState<MockRow[]>([]);
+  const [detail, setDetail] = useState<DetailTarget | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -111,6 +118,8 @@ function HistoryPage() {
           key,
           kpName: kp?.name_zh ?? "未知知识点",
           unit: kp?.unit ?? null,
+          knowledgePointId: r.knowledge_point_id,
+          archivedAt: r.archived_at,
           attempts: 0,
           correct: 0,
           finishedAt: r.archived_at ?? r.created_at,
@@ -142,6 +151,8 @@ function HistoryPage() {
         const g = frqGroups.get(key) ?? {
           key,
           paperTitle: paperMap.get(r.paper_id) ?? "大题练习",
+          paperId: r.paper_id,
+          archivedAt: r.archived_at,
           count: 0,
           score: 0,
           maxScore: 0,
@@ -206,11 +217,27 @@ function HistoryPage() {
                       </div>
                       <div className="mt-0.5 text-xs text-muted-foreground">{fmt(r.finishedAt)}</div>
                     </div>
-                    <div className="shrink-0 text-right">
-                      <div className="text-sm font-semibold text-primary">
-                        {r.attempts > 0 ? Math.round((r.correct / r.attempts) * 100) : 0}%
+                    <div className="flex shrink-0 items-center gap-3">
+                      <div className="text-right">
+                        <div className="text-sm font-semibold text-primary">
+                          {r.attempts > 0 ? Math.round((r.correct / r.attempts) * 100) : 0}%
+                        </div>
+                        <div className="text-xs text-muted-foreground">{r.correct}/{r.attempts} 题</div>
                       </div>
-                      <div className="text-xs text-muted-foreground">{r.correct}/{r.attempts} 题</div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          setDetail({
+                            kind: "mcq",
+                            title: `${r.unit != null ? `Unit ${r.unit} · ` : ""}${r.kpName}`,
+                            knowledgePointId: r.knowledgePointId,
+                            archivedAt: r.archivedAt,
+                          })
+                        }
+                      >
+                        <Eye className="mr-1 h-3.5 w-3.5" /> 回看详情
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
@@ -232,9 +259,25 @@ function HistoryPage() {
                       </div>
                       <div className="mt-0.5 text-xs text-muted-foreground">{fmt(r.finishedAt)} · {r.count} 道</div>
                     </div>
-                    <div className="shrink-0 text-right">
-                      <div className="text-sm font-semibold text-primary">{r.score}/{r.maxScore || "—"}</div>
-                      <div className="text-xs text-muted-foreground">AI 评分</div>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <div className="text-right">
+                        <div className="text-sm font-semibold text-primary">{r.score}/{r.maxScore || "—"}</div>
+                        <div className="text-xs text-muted-foreground">AI 评分</div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          setDetail({
+                            kind: "frq",
+                            title: r.paperTitle,
+                            paperId: r.paperId,
+                            archivedAt: r.archivedAt,
+                          })
+                        }
+                      >
+                        <Eye className="mr-1 h-3.5 w-3.5" /> 回看详情
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
@@ -257,11 +300,26 @@ function HistoryPage() {
                         {fmt(m.created_at)} · 用时 {Math.round(m.duration_seconds / 60)} 分钟
                       </div>
                     </div>
-                    <div className="shrink-0 text-right">
-                      <div className="text-sm font-semibold text-primary">
-                        {m.total > 0 ? Math.round((m.correct / m.total) * 100) : 0}%
+                    <div className="flex shrink-0 items-center gap-3">
+                      <div className="text-right">
+                        <div className="text-sm font-semibold text-primary">
+                          {m.total > 0 ? Math.round((m.correct / m.total) * 100) : 0}%
+                        </div>
+                        <div className="text-xs text-muted-foreground">{m.correct}/{m.total} 题</div>
                       </div>
-                      <div className="text-xs text-muted-foreground">{m.correct}/{m.total} 题</div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          setDetail({
+                            kind: "mock",
+                            title: m.paper_title ?? (m.mode === "random" ? "随机模考" : "模拟考试"),
+                            attemptId: m.id,
+                          })
+                        }
+                      >
+                        <Eye className="mr-1 h-3.5 w-3.5" /> 回看详情
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
@@ -270,6 +328,7 @@ function HistoryPage() {
           </TabsContent>
         </Tabs>
       )}
+      <HistoryDetailDialog target={detail} onClose={() => setDetail(null)} />
     </main>
   );
 }
