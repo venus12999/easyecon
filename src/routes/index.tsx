@@ -258,22 +258,22 @@ function Index() {
         <section className="grid grid-cols-2 gap-2.5 mb-4 sm:gap-4 md:grid-cols-3 sm:mb-5">
           <Link
             to="/practice"
-            className="group relative overflow-hidden rounded-2xl border bg-gradient-to-br from-[#bcd9f5] via-[#c9e4f5] to-[#e7f1fb] p-3.5 min-h-[128px] sm:p-6 sm:min-h-[230px] flex flex-col justify-between text-[#16335c] shadow-sm hover:shadow-md transition-shadow"
+            className="group glass relative overflow-hidden rounded-2xl p-3.5 min-h-[128px] sm:p-6 sm:min-h-[230px] flex flex-col justify-between text-foreground transition-shadow"
           >
             <div className="flex items-start justify-between">
-              <div className="h-8 w-8 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-white/60 backdrop-blur flex items-center justify-center shadow-sm">
+              <div className="h-8 w-8 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-white/55 backdrop-blur flex items-center justify-center shadow-sm ring-1 ring-white/50">
                 <BookOpen className="h-4 w-4 sm:h-6 sm:w-6" />
               </div>
-              <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5 opacity-70 group-hover:translate-x-1 transition-transform" />
+              <ArrowRight className="h-4 w-4 sm:h-5 sm:h-5 sm:w-5 opacity-70 group-hover:translate-x-1 transition-transform" />
             </div>
             <div>
               <div className="text-base font-bold sm:text-2xl">选择题</div>
-              <div className="text-[11px] leading-snug opacity-80 mt-0.5 sm:text-sm sm:mt-1">
+              <div className="text-[11px] leading-snug text-muted-foreground mt-0.5 sm:text-sm sm:mt-1">
                 {firstKpWithQuestions
                   ? `Unit ${firstKpWithQuestions.unit} · ${firstKpWithQuestions.name_zh}`
                   : "选择知识点开始训练"}
               </div>
-              <div className="mt-2 sm:mt-4 inline-flex items-center gap-2 rounded-full bg-white/60 backdrop-blur px-2.5 py-1 text-[11px] sm:px-4 sm:py-2 sm:text-sm font-medium">
+              <div className="mt-2 sm:mt-4 inline-flex items-center gap-2 rounded-full bg-white/55 backdrop-blur px-2.5 py-1 text-[11px] sm:px-4 sm:py-2 sm:text-sm font-medium ring-1 ring-white/40">
                 开始刷选择题
               </div>
             </div>
@@ -281,10 +281,10 @@ function Index() {
 
           <Link
             to="/frq"
-            className="group relative overflow-hidden rounded-2xl border bg-primary/10 p-3.5 min-h-[128px] sm:p-6 sm:min-h-[230px] flex flex-col justify-between text-foreground shadow-sm hover:shadow-md hover:border-primary/40 transition-all"
+            className="group glass relative overflow-hidden rounded-2xl p-3.5 min-h-[128px] sm:p-6 sm:min-h-[230px] flex flex-col justify-between text-foreground transition-shadow"
           >
             <div className="flex items-start justify-between">
-              <div className="h-8 w-8 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-primary/15 flex items-center justify-center">
+              <div className="h-8 w-8 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-primary/15 backdrop-blur flex items-center justify-center ring-1 ring-white/50">
                 <SquarePen className="h-4 w-4 sm:h-6 sm:w-6 text-primary" />
               </div>
               <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5 text-primary group-hover:translate-x-1 transition-transform" />
@@ -292,7 +292,7 @@ function Index() {
             <div>
               <div className="text-base font-bold sm:text-2xl">大题</div>
               <div className="text-[11px] leading-snug text-muted-foreground mt-0.5 sm:text-sm sm:mt-1">按 Unit 分类 · 按得分点评分</div>
-              <div className="mt-2 sm:mt-4 inline-flex items-center gap-2 rounded-full bg-primary/15 px-2.5 py-1 text-[11px] sm:px-4 sm:py-2 sm:text-sm font-medium text-primary">
+              <div className="mt-2 sm:mt-4 inline-flex items-center gap-2 rounded-full bg-primary/15 backdrop-blur px-2.5 py-1 text-[11px] sm:px-4 sm:py-2 sm:text-sm font-medium text-primary ring-1 ring-white/40">
                 开始刷大题
               </div>
             </div>
