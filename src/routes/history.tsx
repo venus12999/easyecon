@@ -21,7 +21,7 @@ export const Route = createFileRoute("/history")({
     const tab = search.tab;
     return { tab: tab === "frq" || tab === "mock" ? tab : "mcq" };
   },
-  component: HistoryPage;
+  component: HistoryPage,
 });
 
 type McqRound = {
