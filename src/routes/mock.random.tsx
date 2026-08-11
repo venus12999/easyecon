@@ -265,6 +265,9 @@ function Mock() {
         correct,
         duration_seconds: seconds,
         detail,
+        paper_slug: "random",
+        paper_title: "随机模考",
+        mode: "random",
       });
       const rows = questions
         .filter((q) => !!answers[q.id])

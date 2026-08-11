@@ -452,6 +452,9 @@ function PaperRunner() {
         correct,
         duration_seconds: seconds,
         detail,
+        paper_slug: slug,
+        paper_title: paper?.title ?? null,
+        mode: "paper",
       });
       const rows = questions
         .filter((q) => !!answers[q.id])
