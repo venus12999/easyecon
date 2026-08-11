@@ -1,8 +1,19 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { ChevronRight, Sparkles, ArrowLeft, ChevronDown, SlidersHorizontal } from "lucide-react";
+import { ChevronRight, Sparkles, ArrowLeft, ChevronDown, SlidersHorizontal, History, RotateCcw } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
@@ -32,7 +43,7 @@ type Kp = {
 };
 
 type Counts = Record<string, { total: number; draft: number }>;
-type KpProgressInfo = { done: number; total: number; round: number };
+type KpProgressInfo = { done: number; total: number; round: number; attempts: number; correct: number };
 
 function PracticeIndex() {
   const { user } = useAuth();
@@ -43,6 +54,8 @@ function PracticeIndex() {
   const [unit, setUnit] = useState<number | null>(null);
   const [kpProgress, setKpProgress] = useState<Record<string, KpProgressInfo>>({});
   const [filterOpen, setFilterOpen] = useState(false);
+  const [resetTarget, setResetTarget] = useState<Kp | null>(null);
+  const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -70,43 +83,71 @@ function PracticeIndex() {
     })();
   }, []);
 
-  useEffect(() => {
+  const loadProgress = useCallback(async () => {
     if (!user) {
       setKpProgress({});
       return;
     }
     if (Object.keys(counts).length === 0) return;
-    (async () => {
-      const { data } = await supabase
-        .from("answer_attempts")
-        .select("knowledge_point_id,question_id,created_at")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: true });
-      const grouped: Record<string, string[]> = {};
-      (data ?? []).forEach((r) => {
-        const k = r.knowledge_point_id as string;
-        (grouped[k] ??= []).push(r.question_id as string);
-      });
-      const next: Record<string, KpProgressInfo> = {};
-      for (const [kpId, qids] of Object.entries(grouped)) {
-        const total = counts[kpId]?.total ?? 0;
-        if (total === 0) continue;
-        let round = 1;
-        let seen = new Set<string>();
-        for (const qid of qids) {
-          seen.add(qid);
-          if (seen.size >= total) {
-            round += 1;
-            seen = new Set();
-          }
+    const { data } = await supabase
+      .from("answer_attempts")
+      .select("knowledge_point_id,question_id,is_correct,created_at")
+      .eq("user_id", user.id)
+      .is("archived_at", null)
+      .order("created_at", { ascending: true });
+    const grouped: Record<string, { qid: string; ok: boolean }[]> = {};
+    (data ?? []).forEach((r) => {
+      const k = r.knowledge_point_id as string;
+      (grouped[k] ??= []).push({ qid: r.question_id as string, ok: !!r.is_correct });
+    });
+    const next: Record<string, KpProgressInfo> = {};
+    for (const [kpId, rows] of Object.entries(grouped)) {
+      const total = counts[kpId]?.total ?? 0;
+      if (total === 0) continue;
+      let round = 1;
+      let seen = new Set<string>();
+      for (const row of rows) {
+        seen.add(row.qid);
+        if (seen.size >= total) {
+          round += 1;
+          seen = new Set();
         }
-        const done = seen.size === 0 && round > 1 ? total : seen.size;
-        const displayRound = seen.size === 0 && round > 1 ? round - 1 : round;
-        next[kpId] = { done, total, round: displayRound };
       }
-      setKpProgress(next);
-    })();
+      const done = seen.size === 0 && round > 1 ? total : seen.size;
+      const displayRound = seen.size === 0 && round > 1 ? round - 1 : round;
+      next[kpId] = {
+        done,
+        total,
+        round: displayRound,
+        attempts: rows.length,
+        correct: rows.filter((r) => r.ok).length,
+      };
+    }
+    setKpProgress(next);
   }, [user, counts]);
+
+  useEffect(() => {
+    void loadProgress();
+  }, [loadProgress]);
+
+  async function confirmReset() {
+    if (!resetTarget || !user) return;
+    setResetting(true);
+    const { error } = await supabase
+      .from("answer_attempts")
+      .update({ archived_at: new Date().toISOString() })
+      .eq("user_id", user.id)
+      .eq("knowledge_point_id", resetTarget.id)
+      .is("archived_at", null);
+    setResetting(false);
+    if (error) {
+      toast.error("清空失败，请稍后再试");
+      return;
+    }
+    toast.success("成绩已清空，旧记录已存入历史记录");
+    setResetTarget(null);
+    await loadProgress();
+  }
 
   const allUnits = Array.from(new Set(kps.map((k) => k.unit))).sort((a, b) => a - b);
   const visibleKps = unit == null ? kps : kps.filter((k) => k.unit === unit);
@@ -118,6 +159,13 @@ function PracticeIndex() {
           <ArrowLeft className="h-4 w-4" /> 返回首页
         </Link>
         <h1 className="text-lg font-bold tracking-tight sm:text-3xl">选择题</h1>
+        <Link
+          to="/history"
+          search={{ tab: "mcq" }}
+          className="mt-1.5 inline-flex items-center gap-1.5 text-xs text-primary hover:underline sm:text-sm"
+        >
+          <History className="h-3.5 w-3.5" /> 历史记录
+        </Link>
 
         {/* Desktop header — always visible */}
         <section className="hidden sm:flex mt-4 mb-2.5 items-center gap-2 text-xs text-primary font-medium">
@@ -168,8 +216,11 @@ function PracticeIndex() {
               const c = counts[kp.id] ?? { total: 0, draft: 0 };
               const n = c.total;
               const kpInfo = kpProgress[kp.id];
+              const finished = !!kpInfo && n > 0 && kpInfo.done >= kpInfo.total;
+              const accuracy = kpInfo && kpInfo.attempts > 0 ? Math.round((kpInfo.correct / kpInfo.attempts) * 100) : null;
               return (
-                <Link key={kp.id} to="/practice/$slug" params={{ slug: kp.slug }} search={{}} className="group">
+                <div key={kp.id} className="group relative">
+                <Link to="/practice/$slug" params={{ slug: kp.slug }} search={{}} className="block">
                   <Card className="h-full transition-all hover:border-primary/50 hover:shadow-md">
                     <CardHeader className="p-3.5 pb-2 sm:p-6 sm:pb-4">
                       <div className="flex items-start justify-between">
@@ -192,6 +243,7 @@ function PracticeIndex() {
                           <span className="text-primary font-medium">
                             {kpInfo.round > 1 ? `第${kpInfo.round}轮 ` : ""}
                             {kpInfo.done}/{kpInfo.total}
+                            {accuracy != null ? ` · ${accuracy}%` : ""}
                           </span>
                         ) : (
                           <span className="text-muted-foreground">未开始</span>
@@ -200,11 +252,41 @@ function PracticeIndex() {
                     </CardContent>
                   </Card>
                 </Link>
+                {finished && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setResetTarget(kp);
+                    }}
+                    className="absolute bottom-2.5 right-2.5 inline-flex items-center gap-1 rounded-pill border border-primary/40 bg-background/80 px-2 py-0.5 text-[10px] font-medium text-primary hover:bg-primary/10 sm:bottom-4 sm:right-4 sm:text-[11px]"
+                  >
+                    <RotateCcw className="h-3 w-3" /> 清空重做
+                  </button>
+                )}
+                </div>
               );
             })}
           </div>
         )}
       </main>
+
+      <AlertDialog open={!!resetTarget} onOpenChange={(open) => !open && setResetTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>清空「{resetTarget?.name_zh}」的成绩？</AlertDialogTitle>
+            <AlertDialogDescription>
+              当前这一轮的答题与正确率会清零并重新开始；旧成绩会保留在「历史记录」里随时查看。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction disabled={resetting} onClick={(e) => { e.preventDefault(); void confirmReset(); }}>
+              确定清空
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

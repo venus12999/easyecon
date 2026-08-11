@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { UserRound, Receipt, CalendarCheck, Shield, LogOut, ChevronDown } from "lucide-react";
+import { UserRound, Receipt, CalendarCheck, Shield, LogOut, ChevronDown, History } from "lucide-react";
 import logoAsset from "@/assets/logo.png.asset.json";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,6 +38,9 @@ export function TopNav() {
             <DropdownMenuContent align="end" className="w-48">
               <DropdownMenuItem asChild>
                 <Link to="/profile"><UserRound className="mr-2 h-4 w-4" />个人资料</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link to="/history" search={{ tab: "mcq" }}><History className="mr-2 h-4 w-4" />历史记录</Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
                 <Link to="/orders"><Receipt className="mr-2 h-4 w-4" />我的订单</Link>

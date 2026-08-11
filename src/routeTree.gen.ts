@@ -18,6 +18,7 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as OrdersRouteImport } from './routes/orders'
+import { Route as HistoryRouteImport } from './routes/history'
 import { Route as FrqRouteImport } from './routes/frq'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AdminTutorRouteImport } from './routes/admin-tutor'
@@ -94,6 +95,11 @@ const PricingRoute = PricingRouteImport.update({
 const OrdersRoute = OrdersRouteImport.update({
   id: '/orders',
   path: '/orders',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HistoryRoute = HistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FrqRoute = FrqRouteImport.update({
@@ -263,6 +269,7 @@ export interface FileRoutesByFullPath {
   '/admin-tutor': typeof AdminTutorRoute
   '/auth': typeof AuthRoute
   '/frq': typeof FrqRouteWithChildren
+  '/history': typeof HistoryRoute
   '/orders': typeof OrdersRoute
   '/pricing': typeof PricingRoute
   '/profile': typeof ProfileRoute
@@ -306,6 +313,7 @@ export interface FileRoutesByTo {
   '/admin-tutor': typeof AdminTutorRoute
   '/auth': typeof AuthRoute
   '/frq': typeof FrqRouteWithChildren
+  '/history': typeof HistoryRoute
   '/orders': typeof OrdersRoute
   '/pricing': typeof PricingRoute
   '/profile': typeof ProfileRoute
@@ -350,6 +358,7 @@ export interface FileRoutesById {
   '/admin-tutor': typeof AdminTutorRoute
   '/auth': typeof AuthRoute
   '/frq': typeof FrqRouteWithChildren
+  '/history': typeof HistoryRoute
   '/orders': typeof OrdersRoute
   '/pricing': typeof PricingRoute
   '/profile': typeof ProfileRoute
@@ -395,6 +404,7 @@ export interface FileRouteTypes {
     | '/admin-tutor'
     | '/auth'
     | '/frq'
+    | '/history'
     | '/orders'
     | '/pricing'
     | '/profile'
@@ -438,6 +448,7 @@ export interface FileRouteTypes {
     | '/admin-tutor'
     | '/auth'
     | '/frq'
+    | '/history'
     | '/orders'
     | '/pricing'
     | '/profile'
@@ -481,6 +492,7 @@ export interface FileRouteTypes {
     | '/admin-tutor'
     | '/auth'
     | '/frq'
+    | '/history'
     | '/orders'
     | '/pricing'
     | '/profile'
@@ -525,6 +537,7 @@ export interface RootRouteChildren {
   AdminTutorRoute: typeof AdminTutorRoute
   AuthRoute: typeof AuthRoute
   FrqRoute: typeof FrqRouteWithChildren
+  HistoryRoute: typeof HistoryRoute
   OrdersRoute: typeof OrdersRoute
   PricingRoute: typeof PricingRoute
   ProfileRoute: typeof ProfileRoute
@@ -624,6 +637,13 @@ declare module '@tanstack/react-router' {
       path: '/orders'
       fullPath: '/orders'
       preLoaderRoute: typeof OrdersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/history': {
+      id: '/history'
+      path: '/history'
+      fullPath: '/history'
+      preLoaderRoute: typeof HistoryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/frq': {
@@ -881,6 +901,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminTutorRoute: AdminTutorRoute,
   AuthRoute: AuthRoute,
   FrqRoute: FrqRouteWithChildren,
+  HistoryRoute: HistoryRoute,
   OrdersRoute: OrdersRoute,
   PricingRoute: PricingRoute,
   ProfileRoute: ProfileRoute,

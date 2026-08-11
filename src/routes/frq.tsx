@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, CheckCircle2, Clock, FileText, Loader2, PlayCircle, SquarePen, Trophy } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, Clock, FileText, History, Loader2, PlayCircle, SquarePen, Trophy } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -146,6 +146,13 @@ function FrqCategoriesPage() {
         <p className="mt-2 text-muted-foreground">
           {selectedCategory ? "选择一道大题单独作答，完成后按得分点评分。" : "和选择题一样，按 AP Unit 选择专项练习。"}
         </p>
+        <Link
+          to="/history"
+          search={{ tab: "frq" }}
+          className="mt-2 inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+        >
+          <History className="h-3.5 w-3.5" /> 历史记录
+        </Link>
       </div>
 
       {loading ? (
