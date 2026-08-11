@@ -36,11 +36,13 @@ type KpProgressInfo = { done: number; total: number; round: number };
 
 function PracticeIndex() {
   const { user } = useAuth();
+  const isMobile = useIsMobile();
   const [kps, setKps] = useState<Kp[]>([]);
   const [counts, setCounts] = useState<Counts>({});
   const [loading, setLoading] = useState(true);
   const [unit, setUnit] = useState<number | null>(null);
   const [kpProgress, setKpProgress] = useState<Record<string, KpProgressInfo>>({});
+  const [filterOpen, setFilterOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
