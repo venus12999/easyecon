@@ -222,6 +222,7 @@ function PaperRunner() {
         .eq("user_id", user.id)
         .eq("paper_id", paper.id)
         .in("frq_id", frqIds)
+        .is("archived_at", null)
         .order("created_at", { ascending: false }),
       supabase
         .from("frq_drafts")
@@ -283,9 +284,37 @@ function PaperRunner() {
       setDraftHydrated(true);
       const hasDraft = Object.keys(answersFromDrafts).length > 0;
       if (hasDraft) toast.success("已恢复上次未完成的草稿");
+      const allGraded = frqs.length > 0 && frqs.every((f) => grades[f.id]);
+      if (allGraded) setRestartPrompt(true);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, paper?.id, frqs.length]);
+
+  async function restartAllFrqs() {
+    if (!user || !paper) return;
+    setRestarting(true);
+    const frqIds = frqs.map((f) => f.id);
+    await supabase
+      .from("frq_submissions")
+      .update({ archived_at: new Date().toISOString() })
+      .eq("user_id", user.id)
+      .eq("paper_id", paper.id)
+      .in("frq_id", frqIds)
+      .is("archived_at", null);
+    await supabase
+      .from("frq_drafts")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("paper_id", paper.id)
+      .in("frq_id", frqIds);
+    setFrqGrades({});
+    setFrqAnswers({});
+    setDraftSavedAt({});
+    setFrqSubmitted(false);
+    setRestarting(false);
+    setRestartPrompt(false);
+    toast.success("已清空作答与分数，旧记录已存入历史");
+  }
 
   // 自动保存草稿（去抖 800ms）
   useEffect(() => {
