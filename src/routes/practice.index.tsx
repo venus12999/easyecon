@@ -2,8 +2,10 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { ChevronRight, Sparkles, ArrowLeft } from "lucide-react";
+import { ChevronRight, Sparkles, ArrowLeft, ChevronDown, SlidersHorizontal } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/practice/")({
   head: () => ({
@@ -34,11 +36,13 @@ type KpProgressInfo = { done: number; total: number; round: number };
 
 function PracticeIndex() {
   const { user } = useAuth();
+  const isMobile = useIsMobile();
   const [kps, setKps] = useState<Kp[]>([]);
   const [counts, setCounts] = useState<Counts>({});
   const [loading, setLoading] = useState(true);
   const [unit, setUnit] = useState<number | null>(null);
   const [kpProgress, setKpProgress] = useState<Record<string, KpProgressInfo>>({});
+  const [filterOpen, setFilterOpen] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -115,12 +119,29 @@ function PracticeIndex() {
         </Link>
         <h1 className="text-lg font-bold tracking-tight sm:text-3xl">选择题</h1>
 
-        <section className="mt-4 mb-2.5 flex items-center gap-2 text-xs text-primary font-medium">
+        {/* Desktop header — always visible */}
+        <section className="hidden sm:flex mt-4 mb-2.5 items-center gap-2 text-xs text-primary font-medium">
           <Sparkles className="h-3.5 w-3.5" /> 知识点 · 选一个开始
         </section>
 
+        {/* Mobile collapsible filter toggle — hidden on desktop */}
+        {isMobile && allUnits.length > 0 && !loading && (
+          <button
+            type="button"
+            onClick={() => setFilterOpen((v) => !v)}
+            className="mt-4 mb-2 flex w-full items-center justify-between rounded-pill border bg-card px-3 py-2 text-xs font-medium text-primary"
+          >
+            <span className="flex items-center gap-1.5">
+              <SlidersHorizontal className="h-3.5 w-3.5" />
+              {unit != null ? `Unit ${unit} · ${visibleKps.length} 个知识点` : "知识点筛选"}
+            </span>
+            <ChevronDown className={cn("h-4 w-4 transition-transform", filterOpen && "rotate-180")} />
+          </button>
+        )}
+
+        {/* Filter chips — always visible on desktop, collapsible on mobile */}
         {allUnits.length > 0 && (
-          <div className="mb-4 flex flex-wrap gap-2">
+          <div className={cn("mb-4 flex flex-wrap gap-2", isMobile && !filterOpen && "hidden")}>
             {allUnits.map((u) => (
               <button
                 key={u}
