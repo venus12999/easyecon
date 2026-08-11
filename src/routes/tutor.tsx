@@ -104,7 +104,7 @@ const TEACHERS = [
 
 function TutorPage() {
   const { user } = useAuth();
-  const [existingBooking, setExistingBooking] = useState<{ teacher: string; created_at: string; scheduled_at: string | null } | null>(null);
+  const [existingBooking, setExistingBooking] = useState<{ teacher: string; created_at: string; scheduled_at: string | null; status?: string | null } | null>(null);
   const [checking, setChecking] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
