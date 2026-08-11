@@ -66,7 +66,7 @@
 }
 
 :root {
-  --radius: 0.625rem;
+  --radius: 1.25rem;
   /* 全部使用 hex 以兼容旧版 Windows 浏览器（不支持 oklch()） */
   --background: #F5F9FF;
   --foreground: #161d2e;
@@ -184,46 +184,53 @@
   }
 }
 
-/* ===== 蓝色渐变背景 + 毛玻璃组件 ===== */
+/* ===== 柔和蓝色渐变背景 + 奶油毛玻璃组件 ===== */
 .app-gradient-bg {
-  background-color: #2b6fc4;
-  --muted-foreground: #3f4c68;
+  background-color: #eaf3fd;
+  --muted-foreground: #5a6b87;
   background-image:
-    radial-gradient(1100px 700px at 8% -5%, #7fc4ff 0%, transparent 60%),
-    radial-gradient(900px 600px at 95% 5%, #b8e0ff 0%, transparent 62%),
-    radial-gradient(1200px 900px at 50% 110%, #1e4fa8 0%, transparent 65%),
-    linear-gradient(160deg, #2f7fe0 0%, #3f96e8 38%, #7ab8ee 68%, #cfe6fb 100%);
+    radial-gradient(900px 620px at 0% 0%, #cfe4fb 0%, transparent 62%),
+    radial-gradient(820px 560px at 100% 8%, #dceafb 0%, transparent 60%),
+    radial-gradient(1000px 700px at 55% 105%, #bfd9f7 0%, transparent 66%),
+    linear-gradient(155deg, #e7f1fd 0%, #f2f7fe 45%, #eaf2fd 100%);
   background-attachment: fixed;
   background-size: cover;
 }
 
 @utility glass {
-  background-color: rgba(255, 255, 255, 0.68);
-  border: 1px solid rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(18px) saturate(140%);
-  box-shadow: 0 10px 30px -12px rgba(12, 47, 105, 0.35);
+  background-image: linear-gradient(140deg, rgba(255, 255, 255, 0.92) 0%, rgba(232, 242, 255, 0.78) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(20px) saturate(130%);
+  box-shadow: 0 18px 40px -22px rgba(30, 79, 168, 0.28);
 }
 
 @utility glass-strong {
-  background-color: rgba(255, 255, 255, 0.75);
-  border: 1px solid rgba(255, 255, 255, 0.65);
-  backdrop-filter: blur(22px) saturate(150%);
-  box-shadow: 0 14px 40px -14px rgba(12, 47, 105, 0.4);
+  background-image: linear-gradient(140deg, rgba(255, 255, 255, 0.97) 0%, rgba(226, 238, 255, 0.88) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(24px) saturate(140%);
+  box-shadow: 0 22px 50px -24px rgba(30, 79, 168, 0.32);
 }
 
-/* 让全站基于 bg-card 的卡片自动变成悬浮毛玻璃 */
+/* 让全站基于 bg-card 的卡片自动变成柔和悬浮毛玻璃 */
 .app-gradient-bg .bg-card {
-  background-color: rgba(255, 255, 255, 0.74);
-  backdrop-filter: blur(18px) saturate(140%);
-  border-color: rgba(255, 255, 255, 0.55);
-  box-shadow: 0 10px 30px -14px rgba(12, 47, 105, 0.35);
+  background-color: transparent;
+  background-image: linear-gradient(140deg, rgba(255, 255, 255, 0.95) 0%, rgba(231, 241, 254, 0.82) 100%);
+  backdrop-filter: blur(20px) saturate(130%);
+  border-color: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 18px 40px -24px rgba(30, 79, 168, 0.28);
 }
 
 .app-gradient-bg .bg-background,
 .app-gradient-bg .bg-muted,
 .app-gradient-bg .bg-secondary {
-  background-color: rgba(255, 255, 255, 0.42);
+  background-color: rgba(255, 255, 255, 0.6);
   backdrop-filter: blur(12px);
+}
+
+/* 主按钮：柔和蓝色渐变胶囊 */
+.app-gradient-bg .bg-primary {
+  background-image: linear-gradient(135deg, #3b86ea 0%, #2266e0 55%, #1c56c4 100%);
+  box-shadow: 0 12px 26px -14px rgba(30, 79, 168, 0.55);
 }
 
 @keyframes float {
