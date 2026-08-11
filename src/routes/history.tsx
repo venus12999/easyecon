@@ -3,8 +3,10 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ArrowLeft, History, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, Eye, History, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { HistoryDetailDialog, type DetailTarget } from "@/components/history/HistoryDetailDialog";
 
 export const Route = createFileRoute("/history")({
   head: () => ({
@@ -28,6 +30,8 @@ type McqRound = {
   key: string;
   kpName: string;
   unit: number | null;
+  knowledgePointId: string;
+  archivedAt: string | null;
   attempts: number;
   correct: number;
   finishedAt: string;
@@ -37,6 +41,8 @@ type McqRound = {
 type FrqRound = {
   key: string;
   paperTitle: string;
+  paperId: string;
+  archivedAt: string | null;
   count: number;
   score: number;
   maxScore: number;
@@ -66,6 +72,7 @@ function HistoryPage() {
   const [mcq, setMcq] = useState<McqRound[]>([]);
   const [frq, setFrq] = useState<FrqRound[]>([]);
   const [mocks, setMocks] = useState<MockRow[]>([]);
+  const [detail, setDetail] = useState<DetailTarget | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -111,6 +118,8 @@ function HistoryPage() {
           key,
           kpName: kp?.name_zh ?? "未知知识点",
           unit: kp?.unit ?? null,
+          knowledgePointId: r.knowledge_point_id,
+          archivedAt: r.archived_at,
           attempts: 0,
           correct: 0,
           finishedAt: r.archived_at ?? r.created_at,
@@ -142,6 +151,8 @@ function HistoryPage() {
         const g = frqGroups.get(key) ?? {
           key,
           paperTitle: paperMap.get(r.paper_id) ?? "大题练习",
+          paperId: r.paper_id,
+          archivedAt: r.archived_at,
           count: 0,
           score: 0,
           maxScore: 0,
