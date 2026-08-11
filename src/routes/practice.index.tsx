@@ -1,0 +1,189 @@
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { ChevronRight, Sparkles, ArrowLeft } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
+
+export const Route = createFileRoute("/practice/")({
+  head: () => ({
+    meta: [
+      { title: "选择题 · 按知识点刷题 | EasyEcon" },
+      { name: "description", content: "按 Unit 与知识点选择 AP 微观/宏观经济选择题，查看每个知识点的题量与练习进度。" },
+      { property: "og:title", content: "选择题 · 按知识点刷题" },
+      { property: "og:description", content: "按 Unit 与知识点选择 AP 经济选择题，追踪每轮练习进度。" },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+  }),
+  component: PracticeIndex,
+});
+
+type Kp = {
+  id: string;
+  unit: number;
+  slug: string;
+  name_en: string;
+  name_zh: string;
+  description: string | null;
+  sort_order: number;
+};
+
+type Counts = Record<string, { total: number; draft: number }>;
+type KpProgressInfo = { done: number; total: number; round: number };
+
+function PracticeIndex() {
+  const { user } = useAuth();
+  const [kps, setKps] = useState<Kp[]>([]);
+  const [counts, setCounts] = useState<Counts>({});
+  const [loading, setLoading] = useState(true);
+  const [unit, setUnit] = useState<number | null>(null);
+  const [kpProgress, setKpProgress] = useState<Record<string, KpProgressInfo>>({});
+
+  useEffect(() => {
+    (async () => {
+      const { data: kpData } = await supabase
+        .from("knowledge_points")
+        .select("*")
+        .order("unit")
+        .order("sort_order");
+      const { data: qData } = await supabase
+        .from("questions")
+        .select("knowledge_point_id,status")
+        .eq("exclude_from_pool", false);
+      const c: Counts = {};
+      (qData ?? []).forEach((q) => {
+        const k = q.knowledge_point_id as string;
+        if (!c[k]) c[k] = { total: 0, draft: 0 };
+        if (q.status === "published") c[k].total += 1;
+        else c[k].draft += 1;
+      });
+      const kpList = (kpData ?? []) as Kp[];
+      setKps(kpList);
+      setUnit((cur) => cur ?? kpList[0]?.unit ?? null);
+      setCounts(c);
+      setLoading(false);
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setKpProgress({});
+      return;
+    }
+    if (Object.keys(counts).length === 0) return;
+    (async () => {
+      const { data } = await supabase
+        .from("answer_attempts")
+        .select("knowledge_point_id,question_id,created_at")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: true });
+      const grouped: Record<string, string[]> = {};
+      (data ?? []).forEach((r) => {
+        const k = r.knowledge_point_id as string;
+        (grouped[k] ??= []).push(r.question_id as string);
+      });
+      const next: Record<string, KpProgressInfo> = {};
+      for (const [kpId, qids] of Object.entries(grouped)) {
+        const total = counts[kpId]?.total ?? 0;
+        if (total === 0) continue;
+        let round = 1;
+        let seen = new Set<string>();
+        for (const qid of qids) {
+          seen.add(qid);
+          if (seen.size >= total) {
+            round += 1;
+            seen = new Set();
+          }
+        }
+        const done = seen.size === 0 && round > 1 ? total : seen.size;
+        const displayRound = seen.size === 0 && round > 1 ? round - 1 : round;
+        next[kpId] = { done, total, round: displayRound };
+      }
+      setKpProgress(next);
+    })();
+  }, [user, counts]);
+
+  const allUnits = Array.from(new Set(kps.map((k) => k.unit))).sort((a, b) => a - b);
+  const visibleKps = unit == null ? kps : kps.filter((k) => k.unit === unit);
+
+  return (
+    <div className="min-h-screen">
+      <main className="mx-auto max-w-6xl px-3 py-6 sm:px-4 sm:py-8">
+        <Link to="/" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-4 w-4" /> 返回首页
+        </Link>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">选择题</h1>
+
+        <section className="mt-5 mb-3 flex items-center gap-2 text-xs text-primary font-medium">
+          <Sparkles className="h-3.5 w-3.5" /> 知识点 · 选一个开始
+        </section>
+
+        {allUnits.length > 0 && (
+          <div className="mb-4 flex flex-wrap gap-2">
+            {allUnits.map((u) => (
+              <button
+                key={u}
+                onClick={() => setUnit(u)}
+                className={`px-3 py-1.5 rounded-pill text-sm border transition-colors ${
+                  unit === u ? "bg-primary text-primary-foreground border-primary" : "bg-card hover:bg-accent"
+                }`}
+              >
+                Unit {u}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {loading ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="h-40 rounded-card border bg-card animate-pulse" />
+            ))}
+          </div>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {visibleKps.map((kp) => {
+              const c = counts[kp.id] ?? { total: 0, draft: 0 };
+              const n = c.total;
+              const kpInfo = kpProgress[kp.id];
+              return (
+                <Link key={kp.id} to="/practice/$slug" params={{ slug: kp.slug }} search={{}} className="group">
+                  <Card className="h-full transition-all hover:border-primary/50 hover:shadow-md">
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <CardTitle className="text-base">{kp.name_zh}</CardTitle>
+                          <CardDescription className="mt-0.5 text-xs font-mono">{kp.name_en}</CardDescription>
+                        </div>
+                        <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {kp.description && (
+                        <p className="text-xs text-muted-foreground line-clamp-2">{kp.description}</p>
+                      )}
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">
+                          {n > 0 ? `${n} 题` : c.draft > 0 ? `暂无题目（${c.draft} 道待审核）` : "暂无题目"}
+                        </span>
+                        {kpInfo && n > 0 ? (
+                          <span className="text-primary font-medium">
+                            {kpInfo.round > 1 ? `第${kpInfo.round}轮 ` : ""}
+                            {kpInfo.done}/{kpInfo.total}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">未开始</span>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
