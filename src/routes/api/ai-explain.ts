@@ -112,20 +112,30 @@ export const Route = createFileRoute("/api/ai-explain")({
               headers: jsonHeaders,
             });
           }
-          let streamText: string;
-          try {
-            streamText = await upstream.text();
-          } catch (error) {
+          // Pass the upstream SSE through unbuffered so the client renders
+          // tokens progressively. Refund the quota if the stream yields nothing.
+          let sawContent = false;
+          const passthrough = new TransformStream<Uint8Array, Uint8Array>({
+            transform(chunk, controller) {
+              if (chunk.byteLength > 0) sawContent = true;
+              controller.enqueue(chunk);
+            },
+            async flush() {
+              if (!sawContent) {
+                await releaseAiQuota(supabaseAdmin, user.userId, "ai_explain");
+              }
+            },
+          });
+          void upstream.body.pipeTo(passthrough.writable).catch(async (error) => {
             console.error("AI stream interrupted", error);
             await releaseAiQuota(supabaseAdmin, user.userId, "ai_explain");
-            return new Response(JSON.stringify({ error: "ai_failed" }), { status: 500, headers: jsonHeaders });
-          }
-          if (!streamText.includes("[DONE]")) {
-            await releaseAiQuota(supabaseAdmin, user.userId, "ai_explain");
-            return new Response(JSON.stringify({ error: "ai_failed" }), { status: 500, headers: jsonHeaders });
-          }
-          return new Response(streamText, {
-            headers: { "Content-Type": "text/event-stream" },
+          });
+          return new Response(passthrough.readable, {
+            headers: {
+              "Content-Type": "text/event-stream",
+              "Cache-Control": "no-cache, no-transform",
+              Connection: "keep-alive",
+            },
           });
         } catch (e) {
           console.error("ai-explain error", e);
