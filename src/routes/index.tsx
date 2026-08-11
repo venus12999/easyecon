@@ -264,7 +264,7 @@ function Index() {
               <div className="h-8 w-8 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-white/55 backdrop-blur flex items-center justify-center shadow-sm ring-1 ring-white/50">
                 <BookOpen className="h-4 w-4 sm:h-6 sm:w-6" />
               </div>
-              <ArrowRight className="h-4 w-4 sm:h-5 sm:h-5 sm:w-5 opacity-70 group-hover:translate-x-1 transition-transform" />
+              <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5 opacity-70 group-hover:translate-x-1 transition-transform" />
             </div>
             <div>
               <div className="text-base font-bold sm:text-2xl">选择题</div>
