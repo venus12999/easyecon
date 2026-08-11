@@ -67,6 +67,7 @@ export type Database = {
       }
       answer_attempts: {
         Row: {
+          archived_at: string | null
           created_at: string
           id: string
           is_correct: boolean
@@ -77,6 +78,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          archived_at?: string | null
           created_at?: string
           id?: string
           is_correct: boolean
@@ -87,6 +89,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          archived_at?: string | null
           created_at?: string
           id?: string
           is_correct?: boolean
@@ -372,6 +375,9 @@ export type Database = {
           detail: Json
           duration_seconds: number
           id: string
+          mode: string
+          paper_slug: string | null
+          paper_title: string | null
           total: number
           user_id: string
         }
@@ -381,6 +387,9 @@ export type Database = {
           detail?: Json
           duration_seconds: number
           id?: string
+          mode?: string
+          paper_slug?: string | null
+          paper_title?: string | null
           total: number
           user_id: string
         }
@@ -390,6 +399,9 @@ export type Database = {
           detail?: Json
           duration_seconds?: number
           id?: string
+          mode?: string
+          paper_slug?: string | null
+          paper_title?: string | null
           total?: number
           user_id?: string
         }
