@@ -288,6 +288,20 @@
   backdrop-filter: blur(calc(var(--glass-blur) - 8px)) saturate(var(--glass-saturate));
 }
 
+/* 着色玻璃卡片（深色渐变底 + 内高光 + 柔和大投影）hover 提升投影 */
+@utility glass-tint {
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(20px) saturate(150%);
+  box-shadow: 0 24px 54px -22px rgba(18, 48, 110, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transition: box-shadow 0.3s ease, transform 0.3s ease;
+}
+@utility glass-tint-hover {
+  &:hover {
+    box-shadow: 0 32px 70px -24px rgba(18, 48, 110, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.42);
+    transform: translateY(-2px);
+  }
+}
+
 /* 让全站基于 bg-card 的卡片自动变成悬浮毛玻璃 */
 .app-gradient-bg .bg-card,
 .app-gradient-bg .bg-popover {
