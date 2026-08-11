@@ -90,6 +90,8 @@ function RootComponent() {
       </AuthProvider>
     );
   }
+  // Hide the floating mascot during mock exams so it doesn't distract the user.
+  const isMockExam = path.startsWith("/mock/");
   return (
     <AuthProvider>
       <div className="app-gradient-bg flex min-h-screen w-full flex-col">
@@ -105,7 +107,7 @@ function RootComponent() {
         </footer>
       </div>
       {!path.startsWith("/admin") && <FeedbackButton />}
-      <FloatingMascot />
+      {!isMockExam && <FloatingMascot />}
       <Toaster richColors position="top-center" />
     </AuthProvider>
   );
