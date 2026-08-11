@@ -13,6 +13,16 @@ import { cn } from "@/lib/utils";
 import { FrqAnswerBox, EMPTY_ANSWER, type FrqAnswerState } from "@/components/frq/FrqAnswerBox";
 import { FrqGradeCard, type GradeResult } from "@/components/frq/FrqGradeCard";
 import { FrqContent } from "@/components/frq/FrqContent";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { FRQ_CATEGORIES, getFrqUnit } from "@/lib/frq-categories";
 
@@ -86,6 +96,8 @@ function PaperRunner() {
   const [draftSaving, setDraftSaving] = useState<Record<string, boolean>>({});
   const [draftSavedAt, setDraftSavedAt] = useState<Record<string, number>>({});
   const [draftHydrated, setDraftHydrated] = useState(false);
+  const [restartPrompt, setRestartPrompt] = useState(false);
+  const [restarting, setRestarting] = useState(false);
   const [answers, setAnswers] = useState<Record<string, OptKey>>({});
   const [idx, setIdx] = useState(0);
   const [seconds, setSeconds] = useState(0);
@@ -220,6 +232,7 @@ function PaperRunner() {
         .eq("user_id", user.id)
         .eq("paper_id", paper.id)
         .in("frq_id", frqIds)
+        .is("archived_at", null)
         .order("created_at", { ascending: false }),
       supabase
         .from("frq_drafts")
@@ -281,9 +294,37 @@ function PaperRunner() {
       setDraftHydrated(true);
       const hasDraft = Object.keys(answersFromDrafts).length > 0;
       if (hasDraft) toast.success("已恢复上次未完成的草稿");
+      const allGraded = frqs.length > 0 && frqs.every((f) => grades[f.id]);
+      if (allGraded) setRestartPrompt(true);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, paper?.id, frqs.length]);
+
+  async function restartAllFrqs() {
+    if (!user || !paper) return;
+    setRestarting(true);
+    const frqIds = frqs.map((f) => f.id);
+    await supabase
+      .from("frq_submissions")
+      .update({ archived_at: new Date().toISOString() })
+      .eq("user_id", user.id)
+      .eq("paper_id", paper.id)
+      .in("frq_id", frqIds)
+      .is("archived_at", null);
+    await supabase
+      .from("frq_drafts")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("paper_id", paper.id)
+      .in("frq_id", frqIds);
+    setFrqGrades({});
+    setFrqAnswers({});
+    setDraftSavedAt({});
+    setFrqSubmitted(false);
+    setRestarting(false);
+    setRestartPrompt(false);
+    toast.success("已清空作答与分数，旧记录已存入历史");
+  }
 
   // 自动保存草稿（去抖 800ms）
   useEffect(() => {
@@ -700,8 +741,35 @@ function PaperRunner() {
     const ss = String(frqSeconds % 60).padStart(2, "0");
     const allGrading = Object.values(grading).some(Boolean);
     const isFrqOnly = slug === "frq-pdf-practice" || slug.startsWith("frq-pack-");
+    const gradedEarned = frqs.reduce((sum, f) => sum + (frqGrades[f.id]?.total_score ?? 0), 0);
+    const gradedMax = frqs.reduce((sum, f) => sum + (frqGrades[f.id]?.max_score ?? 0), 0);
     return (
       <main className="mx-auto max-w-3xl px-4 py-8 space-y-6">
+        <AlertDialog open={restartPrompt} onOpenChange={setRestartPrompt}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>要重新作答这个板块吗？</AlertDialogTitle>
+              <AlertDialogDescription>
+                {frqs.length === 1 ? "这道大题" : `这个板块的 ${frqs.length} 道大题`}已全部完成并评分
+                {gradedMax > 0 ? `，当前得分 ${gradedEarned} / ${gradedMax} 分` : ""}。
+                <br />
+                选择「重新作答」会清空作答内容与显示的分数（旧记录会保留在历史里）；选择「继续复习」则保留你的答案和 AI 评分，用于复习。
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={restarting}>继续复习</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={restarting}
+                onClick={(e) => {
+                  e.preventDefault();
+                  void restartAllFrqs();
+                }}
+              >
+                {restarting ? "清空中…" : "重新作答（清空）"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
         {isFrqOnly && (
           <Link
             to="/frq"

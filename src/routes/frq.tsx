@@ -105,6 +105,7 @@ function FrqCategoriesPage() {
       .select("paper_id,frq_id")
       .eq("user_id", user.id)
       .in("paper_id", paperIds)
+      .is("archived_at", null)
       .then(({ data }) => {
         const map: Record<string, Set<string>> = {};
         ((data ?? []) as { paper_id: string; frq_id: string }[]).forEach((r) => {
