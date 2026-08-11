@@ -13,6 +13,16 @@ import { cn } from "@/lib/utils";
 import { FrqAnswerBox, EMPTY_ANSWER, type FrqAnswerState } from "@/components/frq/FrqAnswerBox";
 import { FrqGradeCard, type GradeResult } from "@/components/frq/FrqGradeCard";
 import { FrqContent } from "@/components/frq/FrqContent";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { FRQ_CATEGORIES, getFrqUnit } from "@/lib/frq-categories";
 
