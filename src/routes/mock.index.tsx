@@ -2,7 +2,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
-import { Clock, FileText, Shuffle, ChevronRight, Loader2 } from "lucide-react";
+import { Clock, FileText, Shuffle, ChevronRight, Loader2, History } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/mock/")({
   head: () => ({ meta: [{ title: "模考 · 真题卷库" }] }),
@@ -20,6 +21,8 @@ type Paper = {
 
 function MockLibrary() {
   const [papers, setPapers] = useState<Paper[] | null>(null);
+  const { user } = useAuth();
+  const [best, setBest] = useState<Record<string, { correct: number; total: number; created_at: string }>>({});
 
   useEffect(() => {
     supabase
@@ -31,13 +34,41 @@ function MockLibrary() {
       .then(({ data }) => setPapers((data ?? []) as Paper[]));
   }, []);
 
+  useEffect(() => {
+    if (!user) {
+      setBest({});
+      return;
+    }
+    void supabase
+      .from("mock_attempts")
+      .select("paper_slug,correct,total,created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(100)
+      .then(({ data }) => {
+        const map: Record<string, { correct: number; total: number; created_at: string }> = {};
+        ((data ?? []) as { paper_slug: string | null; correct: number; total: number; created_at: string }[]).forEach((r) => {
+          const key = r.paper_slug ?? "random";
+          if (!map[key]) map[key] = { correct: r.correct, total: r.total, created_at: r.created_at };
+        });
+        setBest(map);
+      });
+  }, [user]);
+
   return (
     <div className="min-h-screen">
       <main className="mx-auto max-w-3xl px-4 py-10">
         <h1 className="text-2xl font-bold mb-2">模考</h1>
-        <p className="text-sm text-muted-foreground mb-8">
+        <p className="text-sm text-muted-foreground mb-3">
           选择一份真题卷按官方题目顺序作答，或用随机模考按 AP 比例抽题练习。
         </p>
+        <Link
+          to="/history"
+          search={{ tab: "mock" }}
+          className="mb-8 inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+        >
+          <History className="h-3.5 w-3.5" /> 历史记录
+        </Link>
 
         <h2 className="text-sm font-semibold text-muted-foreground mb-3">真题卷库</h2>
         {papers === null ? (
@@ -77,6 +108,11 @@ function MockLibrary() {
                           {Math.round(p.total_seconds / 60)} 分钟
                         </span>
                         {p.year && <span>{p.year} 年</span>}
+                        {best[p.slug] && (
+                          <span className="text-primary">
+                            上次 {best[p.slug]!.total > 0 ? Math.round((best[p.slug]!.correct / best[p.slug]!.total) * 100) : 0}%
+                          </span>
+                        )}
                       </div>
                     </div>
                     <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary" />
@@ -101,6 +137,11 @@ function MockLibrary() {
                 </p>
                 <div className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground">
                   <Clock className="h-3 w-3" /> 70 分钟
+                  {best["random"] && (
+                    <span className="ml-2 text-primary">
+                      上次 {best["random"]!.total > 0 ? Math.round((best["random"]!.correct / best["random"]!.total) * 100) : 0}%
+                    </span>
+                  )}
                 </div>
               </div>
               <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary" />
