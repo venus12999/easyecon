@@ -731,8 +731,35 @@ function PaperRunner() {
     const ss = String(frqSeconds % 60).padStart(2, "0");
     const allGrading = Object.values(grading).some(Boolean);
     const isFrqOnly = slug === "frq-pdf-practice" || slug.startsWith("frq-pack-");
+    const gradedEarned = frqs.reduce((sum, f) => sum + (frqGrades[f.id]?.total_score ?? 0), 0);
+    const gradedMax = frqs.reduce((sum, f) => sum + (frqGrades[f.id]?.max_score ?? 0), 0);
     return (
       <main className="mx-auto max-w-3xl px-4 py-8 space-y-6">
+        <AlertDialog open={restartPrompt} onOpenChange={setRestartPrompt}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>要重新作答这个板块吗？</AlertDialogTitle>
+              <AlertDialogDescription>
+                {frqs.length === 1 ? "这道大题" : `这个板块的 ${frqs.length} 道大题`}已全部完成并评分
+                {gradedMax > 0 ? `，当前得分 ${gradedEarned} / ${gradedMax} 分` : ""}。
+                <br />
+                选择「重新作答」会清空作答内容与显示的分数（旧记录会保留在历史里）；选择「继续复习」则保留你的答案和 AI 评分，用于复习。
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={restarting}>继续复习</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={restarting}
+                onClick={(e) => {
+                  e.preventDefault();
+                  void restartAllFrqs();
+                }}
+              >
+                {restarting ? "清空中…" : "重新作答（清空）"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
         {isFrqOnly && (
           <Link
             to="/frq"
