@@ -86,6 +86,8 @@ function PaperRunner() {
   const [draftSaving, setDraftSaving] = useState<Record<string, boolean>>({});
   const [draftSavedAt, setDraftSavedAt] = useState<Record<string, number>>({});
   const [draftHydrated, setDraftHydrated] = useState(false);
+  const [restartPrompt, setRestartPrompt] = useState(false);
+  const [restarting, setRestarting] = useState(false);
   const [answers, setAnswers] = useState<Record<string, OptKey>>({});
   const [idx, setIdx] = useState(0);
   const [seconds, setSeconds] = useState(0);
