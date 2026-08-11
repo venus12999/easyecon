@@ -258,7 +258,7 @@ function Index() {
         <section className="grid grid-cols-2 gap-2.5 mb-4 sm:gap-4 md:grid-cols-3 sm:mb-5">
           <Link
             to="/practice"
-            className="group glass relative overflow-hidden rounded-2xl p-3.5 min-h-[128px] sm:p-6 sm:min-h-[230px] flex flex-col justify-between text-foreground transition-shadow"
+            className="group glass glass-hover relative overflow-hidden rounded-2xl p-3.5 min-h-[128px] sm:p-6 sm:min-h-[230px] flex flex-col justify-between text-foreground"
           >
             <div className="flex items-start justify-between">
               <div className="h-8 w-8 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-white/55 backdrop-blur flex items-center justify-center shadow-sm ring-1 ring-white/50">
@@ -281,7 +281,7 @@ function Index() {
 
           <Link
             to="/frq"
-            className="group glass relative overflow-hidden rounded-2xl p-3.5 min-h-[128px] sm:p-6 sm:min-h-[230px] flex flex-col justify-between text-foreground transition-shadow"
+            className="group glass glass-hover relative overflow-hidden rounded-2xl p-3.5 min-h-[128px] sm:p-6 sm:min-h-[230px] flex flex-col justify-between text-foreground"
           >
             <div className="flex items-start justify-between">
               <div className="h-8 w-8 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-primary/15 backdrop-blur flex items-center justify-center ring-1 ring-white/50">
