@@ -184,53 +184,134 @@
   }
 }
 
-/* ===== 柔和蓝色渐变背景 + 奶油毛玻璃组件 ===== */
+/* =========================================================
+ * 主题变量：品牌蓝 / 圆角 / 毛玻璃透明度
+ * 只改这里即可全站生效（背景、卡片、玻璃组件、主按钮）
+ * ========================================================= */
+:root {
+  /* 品牌蓝阶 */
+  --brand-50: #f2f7fe;
+  --brand-100: #e7f1fd;
+  --brand-200: #cfe4fb;
+  --brand-300: #b0d1f6;
+  --brand-400: #69aef0;
+  --brand-500: #3b86ea;
+  --brand-600: #2266e0;
+  --brand-700: #1c56c4;
+  --brand-900: #12306e;
+
+  /* 圆角尺度 */
+  --radius-pill: 999px;
+  --radius-card: calc(var(--radius) + 0.375rem);
+  --radius-panel: calc(var(--radius) + 0.75rem);
+
+  /* 毛玻璃：透明度 / 模糊 / 描边 / 阴影 */
+  --glass-alpha: 0.78;
+  --glass-alpha-tint: 0.6;
+  --glass-alpha-soft: 0.5;
+  --glass-blur: 20px;
+  --glass-saturate: 135%;
+  --glass-border: rgba(255, 255, 255, 0.7);
+  --glass-highlight: rgba(255, 255, 255, 0.85);
+  --glass-tint: 231, 241, 254;
+  --glass-shadow: 0 18px 40px -22px rgba(18, 48, 110, 0.3);
+  --glass-shadow-strong: 0 26px 56px -24px rgba(18, 48, 110, 0.38);
+
+  /* 渐变 */
+  --gradient-brand: linear-gradient(135deg, var(--brand-500) 0%, var(--brand-600) 55%, var(--brand-700) 100%);
+  --gradient-glass: linear-gradient(
+    140deg,
+    rgba(255, 255, 255, calc(var(--glass-alpha) + 0.12)) 0%,
+    rgba(var(--glass-tint), var(--glass-alpha)) 100%
+  );
+}
+
+/* 桌面端玻璃质感更明显：更透、更模糊、描边与投影更强 */
+@media (min-width: 768px) {
+  :root {
+    --glass-alpha: 0.6;
+    --glass-alpha-tint: 0.44;
+    --glass-alpha-soft: 0.34;
+    --glass-blur: 30px;
+    --glass-saturate: 165%;
+    --glass-border: rgba(255, 255, 255, 0.8);
+    --glass-shadow: 0 24px 54px -22px rgba(18, 48, 110, 0.4);
+    --glass-shadow-strong: 0 32px 70px -24px rgba(18, 48, 110, 0.48);
+  }
+}
+
+.dark {
+  --glass-alpha: 0.34;
+  --glass-alpha-tint: 0.26;
+  --glass-alpha-soft: 0.2;
+  --glass-border: rgba(255, 255, 255, 0.16);
+  --glass-highlight: rgba(255, 255, 255, 0.22);
+  --glass-tint: 30, 44, 74;
+  --glass-shadow: 0 20px 46px -22px rgba(0, 0, 0, 0.6);
+  --glass-shadow-strong: 0 30px 64px -24px rgba(0, 0, 0, 0.68);
+}
+
+/* ===== 柔和蓝色渐变背景 ===== */
 .app-gradient-bg {
-  background-color: #eaf3fd;
+  background-color: var(--brand-100);
   --muted-foreground: #5a6b87;
   background-image:
-    radial-gradient(900px 620px at 0% 0%, #cfe4fb 0%, transparent 62%),
+    radial-gradient(900px 620px at 0% 0%, var(--brand-200) 0%, transparent 62%),
     radial-gradient(820px 560px at 100% 8%, #dceafb 0%, transparent 60%),
     radial-gradient(1000px 700px at 55% 105%, #bfd9f7 0%, transparent 66%),
-    linear-gradient(155deg, #e7f1fd 0%, #f2f7fe 45%, #eaf2fd 100%);
+    linear-gradient(155deg, var(--brand-100) 0%, var(--brand-50) 45%, #eaf2fd 100%);
   background-attachment: fixed;
   background-size: cover;
 }
 
 @utility glass {
-  background-image: linear-gradient(140deg, rgba(255, 255, 255, 0.92) 0%, rgba(232, 242, 255, 0.78) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(20px) saturate(130%);
-  box-shadow: 0 18px 40px -22px rgba(30, 79, 168, 0.28);
+  background-color: transparent;
+  background-image: var(--gradient-glass);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--glass-shadow), inset 0 1px 0 var(--glass-highlight);
 }
 
 @utility glass-strong {
-  background-image: linear-gradient(140deg, rgba(255, 255, 255, 0.97) 0%, rgba(226, 238, 255, 0.88) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(24px) saturate(140%);
-  box-shadow: 0 22px 50px -24px rgba(30, 79, 168, 0.32);
+  background-color: transparent;
+  background-image: linear-gradient(
+    140deg,
+    rgba(255, 255, 255, calc(var(--glass-alpha) + 0.24)) 0%,
+    rgba(var(--glass-tint), calc(var(--glass-alpha) + 0.12)) 100%
+  );
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(calc(var(--glass-blur) + 6px)) saturate(calc(var(--glass-saturate) + 10%));
+  box-shadow: var(--glass-shadow-strong), inset 0 1px 0 var(--glass-highlight);
 }
 
-/* 让全站基于 bg-card 的卡片自动变成柔和悬浮毛玻璃 */
-.app-gradient-bg .bg-card {
+@utility glass-soft {
+  background-color: rgba(255, 255, 255, var(--glass-alpha-soft));
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(calc(var(--glass-blur) - 8px)) saturate(var(--glass-saturate));
+}
+
+/* 让全站基于 bg-card 的卡片自动变成悬浮毛玻璃 */
+.app-gradient-bg .bg-card,
+.app-gradient-bg .bg-popover {
   background-color: transparent;
-  background-image: linear-gradient(140deg, rgba(255, 255, 255, 0.95) 0%, rgba(231, 241, 254, 0.82) 100%);
-  backdrop-filter: blur(20px) saturate(130%);
-  border-color: rgba(255, 255, 255, 0.8);
-  box-shadow: 0 18px 40px -24px rgba(30, 79, 168, 0.28);
+  background-image: var(--gradient-glass);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border-color: var(--glass-border);
+  box-shadow: var(--glass-shadow), inset 0 1px 0 var(--glass-highlight);
 }
 
 .app-gradient-bg .bg-background,
 .app-gradient-bg .bg-muted,
-.app-gradient-bg .bg-secondary {
-  background-color: rgba(255, 255, 255, 0.6);
-  backdrop-filter: blur(12px);
+.app-gradient-bg .bg-secondary,
+.app-gradient-bg .bg-accent {
+  background-color: rgba(255, 255, 255, var(--glass-alpha-tint));
+  backdrop-filter: blur(calc(var(--glass-blur) - 8px)) saturate(var(--glass-saturate));
 }
 
-/* 主按钮：柔和蓝色渐变胶囊 */
+/* 主按钮：品牌蓝渐变 */
 .app-gradient-bg .bg-primary {
-  background-image: linear-gradient(135deg, #3b86ea 0%, #2266e0 55%, #1c56c4 100%);
-  box-shadow: 0 12px 26px -14px rgba(30, 79, 168, 0.55);
+  background-image: var(--gradient-brand);
+  box-shadow: 0 12px 26px -14px rgba(18, 48, 110, 0.55);
 }
 
 @keyframes float {
