@@ -22,6 +22,7 @@ export const Route = createFileRoute("/api/tutor/taken-slots")({
           .from("tutor_trial_bookings")
           .select("scheduled_at")
           .eq("teacher", teacher)
+          .neq("status", "cancelled")
           .not("scheduled_at", "is", null)
           .gte("scheduled_at", start)
           .lt("scheduled_at", end);
