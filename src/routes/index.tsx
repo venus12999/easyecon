@@ -300,11 +300,14 @@ function Index() {
 
           <Link
             to="/mock"
-            className="group relative overflow-hidden col-span-2 md:col-span-1 rounded-2xl p-3.5 min-h-[104px] sm:p-6 sm:min-h-[230px] flex flex-col justify-between text-white shadow-sm hover:shadow-md transition-shadow"
-            style={{ background: "linear-gradient(135deg,#27406b 0%,#3b5f95 60%,#5d82b8 100%)" }}
+            className="group relative overflow-hidden col-span-2 md:col-span-1 rounded-2xl p-3.5 min-h-[104px] sm:p-6 sm:min-h-[230px] flex flex-col justify-between text-white border border-white/25 backdrop-blur-xl transition-shadow"
+            style={{
+              background: "linear-gradient(135deg, rgba(39,64,107,0.88) 0%, rgba(59,95,149,0.82) 60%, rgba(93,130,184,0.78) 100%)",
+              boxShadow: "0 24px 54px -22px rgba(18,48,110,0.45), inset 0 1px 0 rgba(255,255,255,0.35)",
+            }}
           >
             <div className="flex items-start justify-between">
-              <div className="h-8 w-8 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-white/15 backdrop-blur flex items-center justify-center">
+              <div className="h-8 w-8 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center ring-1 ring-white/30">
                 <Target className="h-4 w-4 sm:h-6 sm:w-6" />
               </div>
               <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5 opacity-80 group-hover:translate-x-1 transition-transform" />
@@ -312,7 +315,7 @@ function Index() {
             <div>
               <div className="text-base font-bold sm:text-2xl">模拟考试</div>
               <div className="text-[11px] leading-snug opacity-80 mt-0.5 sm:text-sm sm:mt-1">真题套卷 · MCQ + FRQ</div>
-              <div className="mt-2 sm:mt-4 inline-flex items-center gap-2 rounded-full bg-white/15 backdrop-blur px-2.5 py-1 text-[11px] sm:px-4 sm:py-2 sm:text-sm font-medium">
+              <div className="mt-2 sm:mt-4 inline-flex items-center gap-2 rounded-full bg-white/20 backdrop-blur px-2.5 py-1 text-[11px] sm:px-4 sm:py-2 sm:text-sm font-medium ring-1 ring-white/25">
                 开始考试
               </div>
             </div>
@@ -323,11 +326,14 @@ function Index() {
         <section className="mb-5">
           <Link
             to="/tutor"
-            className="group relative overflow-hidden rounded-2xl p-3.5 sm:p-6 flex items-center justify-between gap-3 sm:gap-4 text-white shadow-sm hover:shadow-md transition-shadow"
-            style={{ background: "linear-gradient(135deg,#1c56c4 0%,#2f7fe0 55%,#69aef0 100%)" }}
+            className="group relative overflow-hidden rounded-2xl p-3.5 sm:p-6 flex items-center justify-between gap-3 sm:gap-4 text-white border border-white/25 backdrop-blur-xl transition-shadow"
+            style={{
+              background: "linear-gradient(135deg, rgba(28,86,196,0.9) 0%, rgba(47,127,224,0.82) 55%, rgba(105,174,240,0.78) 100%)",
+              boxShadow: "0 24px 54px -22px rgba(18,48,110,0.45), inset 0 1px 0 rgba(255,255,255,0.35)",
+            }}
           >
             <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-              <div className="h-9 w-9 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center shrink-0">
+              <div className="h-9 w-9 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center shrink-0 ring-1 ring-white/30">
                 <GraduationCap className="h-5 w-5 sm:h-6 sm:w-6" />
               </div>
               <div>
@@ -335,7 +341,7 @@ function Index() {
                 <div className="text-[11px] opacity-90 mt-0.5 sm:text-sm">订阅 5 分学长学姐的一对一线上辅导课</div>
               </div>
             </div>
-            <div className="hidden sm:inline-flex items-center gap-2 rounded-full bg-white/20 backdrop-blur px-4 py-2 text-sm font-medium shrink-0">
+            <div className="hidden sm:inline-flex items-center gap-2 rounded-full bg-white/20 backdrop-blur px-4 py-2 text-sm font-medium shrink-0 ring-1 ring-white/25">
               查看课程 <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
             </div>
             <ArrowRight className="sm:hidden h-5 w-5 opacity-90 group-hover:translate-x-1 transition-transform" />
