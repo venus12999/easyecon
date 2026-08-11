@@ -303,7 +303,6 @@ function Index() {
             className="group glass-tint glass-tint-hover relative overflow-hidden col-span-2 md:col-span-1 rounded-2xl p-3.5 min-h-[104px] sm:p-6 sm:min-h-[230px] flex flex-col justify-between text-white"
             style={{
               background: "linear-gradient(135deg, rgba(39,64,107,0.88) 0%, rgba(59,95,149,0.82) 60%, rgba(93,130,184,0.78) 100%)",
-              boxShadow: "0 24px 54px -22px rgba(18,48,110,0.45), inset 0 1px 0 rgba(255,255,255,0.35)",
             }}
           >
             <div className="flex items-start justify-between">
@@ -329,7 +328,6 @@ function Index() {
             className="group glass-tint glass-tint-hover relative overflow-hidden rounded-2xl p-3.5 sm:p-6 flex items-center justify-between gap-3 sm:gap-4 text-white"
             style={{
               background: "linear-gradient(135deg, rgba(28,86,196,0.9) 0%, rgba(47,127,224,0.82) 55%, rgba(105,174,240,0.78) 100%)",
-              boxShadow: "0 24px 54px -22px rgba(18,48,110,0.45), inset 0 1px 0 rgba(255,255,255,0.35)",
             }}
           >
             <div className="flex min-w-0 items-center gap-3 sm:gap-4">
