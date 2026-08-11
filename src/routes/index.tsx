@@ -51,16 +51,16 @@ function QuickCard({
   return (
     <Link
       to={to}
-      className="group rounded-2xl border bg-card p-4 hover:shadow-md hover:border-primary/40 transition-all flex flex-col gap-3"
+      className="group rounded-xl sm:rounded-2xl border bg-card p-2.5 sm:p-4 hover:shadow-md hover:border-primary/40 transition-all flex flex-col gap-2 sm:gap-3"
     >
-      <div className={`h-9 w-9 rounded-xl ${iconBg} flex items-center justify-center`}>{icon}</div>
+      <div className={`h-7 w-7 sm:h-9 sm:w-9 rounded-lg sm:rounded-xl ${iconBg} flex items-center justify-center`}>{icon}</div>
       <div>
-        <div className="font-semibold text-sm">{title}</div>
-        <div className="text-xs text-muted-foreground mt-0.5">{subtitle}</div>
+        <div className="font-semibold text-xs sm:text-sm">{title}</div>
+        <div className="hidden sm:block text-xs text-muted-foreground mt-0.5">{subtitle}</div>
       </div>
-      <div className={`flex items-center justify-between text-xs font-medium ${accent}`}>
-        <span>{accentText}</span>
-        <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-1 transition-transform" />
+      <div className={`flex items-center justify-between text-[10px] sm:text-xs font-medium ${accent}`}>
+        <span className="truncate">{accentText}</span>
+        <ArrowRight className="hidden sm:block h-3.5 w-3.5 group-hover:translate-x-1 transition-transform shrink-0" />
       </div>
     </Link>
   );
@@ -196,14 +196,14 @@ function Index() {
   return (
     <div className="min-h-screen">
       
-      <main className="mx-auto max-w-6xl px-3 py-6 sm:px-4 sm:py-8">
+      <main className="mx-auto max-w-6xl px-3 py-4 sm:px-4 sm:py-8">
         {/* 顶部问候 */}
-        <section className="mb-6 flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+        <section className="mb-4 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 sm:mb-6 sm:flex sm:items-start sm:justify-between sm:gap-4">
+          <div className="min-w-0">
+            <h1 className="truncate text-lg font-bold tracking-tight sm:text-3xl">
               {greeting}，{userLabel} <span className="inline-block">👋</span>
             </h1>
-            <p className="mt-2 text-muted-foreground">
+            <p className="mt-1 text-xs text-muted-foreground sm:mt-2 sm:text-base">
               {user
                 ? stats.today > 0
                   ? `今天已完成 ${stats.today} 题，继续保持！`
@@ -212,11 +212,11 @@ function Index() {
             </p>
           </div>
           {user && (
-            <div className="rounded-xl bg-card border px-4 py-2.5 flex items-center gap-2 shadow-sm">
-              <BarChart3 className="h-5 w-5 text-primary" />
+            <div className="shrink-0 rounded-xl bg-card border px-3 py-1.5 sm:px-4 sm:py-2.5 flex items-center gap-2 shadow-sm">
+              <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
               <div className="leading-tight">
                 <div className="text-xs text-muted-foreground">正确率</div>
-                <div className="text-base font-bold">
+                <div className="text-sm font-bold sm:text-base">
                   {stats.rate !== null ? `${stats.rate}%` : "—"}
                 </div>
               </div>
@@ -225,12 +225,12 @@ function Index() {
         </section>
 
         {user && coach && (
-          <section className="mb-5">
-            <div className="flex items-start gap-3 rounded-2xl border border-primary/25 bg-primary/5 p-4">
-              <img src={getCompanion(coachCompanion).image} alt="" className="h-10 w-10 shrink-0" style={{ imageRendering: "pixelated" }} />
+          <section className="mb-4 sm:mb-5">
+            <div className="flex items-start gap-2.5 rounded-2xl border border-primary/25 bg-primary/5 p-3 sm:gap-3 sm:p-4">
+              <img src={getCompanion(coachCompanion).image} alt="" className="h-8 w-8 shrink-0 sm:h-10 sm:w-10" style={{ imageRendering: "pixelated" }} />
               <div className="flex-1 min-w-0">
                 <div className="text-xs font-semibold text-primary">{getCompanion(coachCompanion).name} 的提醒</div>
-                <div className="mt-0.5 text-sm text-foreground">{coach.message}</div>
+                <div className="mt-0.5 text-xs text-foreground sm:text-sm">{coach.message}</div>
               </div>
               {coach.actionTo && coach.actionLabel && (
                 <button
@@ -255,25 +255,25 @@ function Index() {
         <section className="mb-3 flex items-center gap-2 text-xs text-primary font-medium">
           <Sparkles className="h-3.5 w-3.5" /> 选择刷题类型
         </section>
-        <section className="grid gap-4 md:grid-cols-3 mb-5">
+        <section className="grid grid-cols-2 gap-2.5 mb-4 sm:gap-4 md:grid-cols-3 sm:mb-5">
           <Link
             to="/practice"
-            className="group relative overflow-hidden rounded-2xl border bg-gradient-to-br from-[#bcd9f5] via-[#c9e4f5] to-[#e7f1fb] p-6 min-h-[230px] flex flex-col justify-between text-[#16335c] shadow-sm hover:shadow-md transition-shadow"
+            className="group relative overflow-hidden rounded-2xl border bg-gradient-to-br from-[#bcd9f5] via-[#c9e4f5] to-[#e7f1fb] p-3.5 min-h-[128px] sm:p-6 sm:min-h-[230px] flex flex-col justify-between text-[#16335c] shadow-sm hover:shadow-md transition-shadow"
           >
             <div className="flex items-start justify-between">
-              <div className="h-12 w-12 rounded-2xl bg-white/60 backdrop-blur flex items-center justify-center shadow-sm">
-                <BookOpen className="h-6 w-6" />
+              <div className="h-8 w-8 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-white/60 backdrop-blur flex items-center justify-center shadow-sm">
+                <BookOpen className="h-4 w-4 sm:h-6 sm:w-6" />
               </div>
-              <ArrowRight className="h-5 w-5 opacity-70 group-hover:translate-x-1 transition-transform" />
+              <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5 opacity-70 group-hover:translate-x-1 transition-transform" />
             </div>
             <div>
-              <div className="text-2xl font-bold">选择题</div>
-              <div className="text-sm opacity-80 mt-1">
+              <div className="text-base font-bold sm:text-2xl">选择题</div>
+              <div className="text-[11px] leading-snug opacity-80 mt-0.5 sm:text-sm sm:mt-1">
                 {firstKpWithQuestions
                   ? `Unit ${firstKpWithQuestions.unit} · ${firstKpWithQuestions.name_zh}`
                   : "选择知识点开始训练"}
               </div>
-              <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/60 backdrop-blur px-4 py-2 text-sm font-medium">
+              <div className="mt-2 sm:mt-4 inline-flex items-center gap-2 rounded-full bg-white/60 backdrop-blur px-2.5 py-1 text-[11px] sm:px-4 sm:py-2 sm:text-sm font-medium">
                 开始刷选择题
               </div>
             </div>
@@ -281,18 +281,18 @@ function Index() {
 
           <Link
             to="/frq"
-            className="group relative overflow-hidden rounded-2xl border bg-primary/10 p-6 min-h-[230px] flex flex-col justify-between text-foreground shadow-sm hover:shadow-md hover:border-primary/40 transition-all"
+            className="group relative overflow-hidden rounded-2xl border bg-primary/10 p-3.5 min-h-[128px] sm:p-6 sm:min-h-[230px] flex flex-col justify-between text-foreground shadow-sm hover:shadow-md hover:border-primary/40 transition-all"
           >
             <div className="flex items-start justify-between">
-              <div className="h-12 w-12 rounded-2xl bg-primary/15 flex items-center justify-center">
-                <SquarePen className="h-6 w-6 text-primary" />
+              <div className="h-8 w-8 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-primary/15 flex items-center justify-center">
+                <SquarePen className="h-4 w-4 sm:h-6 sm:w-6 text-primary" />
               </div>
-              <ArrowRight className="h-5 w-5 text-primary group-hover:translate-x-1 transition-transform" />
+              <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5 text-primary group-hover:translate-x-1 transition-transform" />
             </div>
             <div>
-              <div className="text-2xl font-bold">大题</div>
-              <div className="text-sm text-muted-foreground mt-1">按 Unit 分类 · 按得分点评分</div>
-              <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-primary/15 px-4 py-2 text-sm font-medium text-primary">
+              <div className="text-base font-bold sm:text-2xl">大题</div>
+              <div className="text-[11px] leading-snug text-muted-foreground mt-0.5 sm:text-sm sm:mt-1">按 Unit 分类 · 按得分点评分</div>
+              <div className="mt-2 sm:mt-4 inline-flex items-center gap-2 rounded-full bg-primary/15 px-2.5 py-1 text-[11px] sm:px-4 sm:py-2 sm:text-sm font-medium text-primary">
                 开始刷大题
               </div>
             </div>
@@ -300,19 +300,19 @@ function Index() {
 
           <Link
             to="/mock"
-            className="group relative overflow-hidden rounded-2xl p-6 min-h-[230px] flex flex-col justify-between text-white shadow-sm hover:shadow-md transition-shadow"
+            className="group relative overflow-hidden col-span-2 md:col-span-1 rounded-2xl p-3.5 min-h-[104px] sm:p-6 sm:min-h-[230px] flex flex-col justify-between text-white shadow-sm hover:shadow-md transition-shadow"
             style={{ background: "linear-gradient(135deg,#27406b 0%,#3b5f95 60%,#5d82b8 100%)" }}
           >
             <div className="flex items-start justify-between">
-              <div className="h-12 w-12 rounded-2xl bg-white/15 backdrop-blur flex items-center justify-center">
-                <Target className="h-6 w-6" />
+              <div className="h-8 w-8 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-white/15 backdrop-blur flex items-center justify-center">
+                <Target className="h-4 w-4 sm:h-6 sm:w-6" />
               </div>
-              <ArrowRight className="h-5 w-5 opacity-80 group-hover:translate-x-1 transition-transform" />
+              <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5 opacity-80 group-hover:translate-x-1 transition-transform" />
             </div>
             <div>
-              <div className="text-2xl font-bold">模拟考试</div>
-              <div className="text-sm opacity-80 mt-1">真题套卷 · MCQ + FRQ</div>
-              <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/15 backdrop-blur px-4 py-2 text-sm font-medium">
+              <div className="text-base font-bold sm:text-2xl">模拟考试</div>
+              <div className="text-[11px] leading-snug opacity-80 mt-0.5 sm:text-sm sm:mt-1">真题套卷 · MCQ + FRQ</div>
+              <div className="mt-2 sm:mt-4 inline-flex items-center gap-2 rounded-full bg-white/15 backdrop-blur px-2.5 py-1 text-[11px] sm:px-4 sm:py-2 sm:text-sm font-medium">
                 开始考试
               </div>
             </div>
@@ -323,16 +323,16 @@ function Index() {
         <section className="mb-5">
           <Link
             to="/tutor"
-            className="group relative overflow-hidden rounded-2xl p-6 flex items-center justify-between gap-4 text-white shadow-sm hover:shadow-md transition-shadow"
+            className="group relative overflow-hidden rounded-2xl p-3.5 sm:p-6 flex items-center justify-between gap-3 sm:gap-4 text-white shadow-sm hover:shadow-md transition-shadow"
             style={{ background: "linear-gradient(135deg,#1c56c4 0%,#2f7fe0 55%,#69aef0 100%)" }}
           >
-            <div className="flex items-center gap-4">
-              <div className="h-12 w-12 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center shrink-0">
-                <GraduationCap className="h-6 w-6" />
+            <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+              <div className="h-9 w-9 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center shrink-0">
+                <GraduationCap className="h-5 w-5 sm:h-6 sm:w-6" />
               </div>
               <div>
-                <div className="text-xl font-bold">五分大神带你飞</div>
-                <div className="text-sm opacity-90 mt-0.5">订阅 5 分学长学姐的一对一线上辅导课</div>
+                <div className="text-base font-bold sm:text-xl">五分大神带你飞</div>
+                <div className="text-[11px] opacity-90 mt-0.5 sm:text-sm">订阅 5 分学长学姐的一对一线上辅导课</div>
               </div>
             </div>
             <div className="hidden sm:inline-flex items-center gap-2 rounded-full bg-white/20 backdrop-blur px-4 py-2 text-sm font-medium shrink-0">
@@ -343,10 +343,10 @@ function Index() {
         </section>
 
         {/* 三张小卡 */}
-        <section className="grid gap-3 grid-cols-1 sm:grid-cols-3 mb-5">
+        <section className="grid gap-2.5 grid-cols-3 mb-4 sm:gap-3 sm:mb-5">
           <QuickCard
             to="/wrong"
-            icon={<XCircle className="h-5 w-5 text-rose-500" />}
+            icon={<XCircle className="h-4 w-4 sm:h-5 sm:w-5 text-rose-500" />}
             iconBg="bg-rose-50"
             title="错题本"
             subtitle="复盘并提升"
@@ -355,7 +355,7 @@ function Index() {
           />
           <QuickCard
             to="/stats"
-            icon={<BarChart3 className="h-5 w-5 text-emerald-500" />}
+            icon={<BarChart3 className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-500" />}
             iconBg="bg-emerald-50"
             title="统计"
             subtitle="查看你的进度"
@@ -364,7 +364,7 @@ function Index() {
           />
           <QuickCard
             to="/terms"
-            icon={<Library className="h-5 w-5 text-primary" />}
+            icon={<Library className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />}
             iconBg="bg-primary/10"
             title="术语表"
             subtitle="中英对照速查"
@@ -375,7 +375,7 @@ function Index() {
 
         {!user && (
           <Card className="mb-6 border-primary/30 bg-primary/5">
-            <CardContent className="p-5 flex items-center justify-between gap-4">
+            <CardContent className="p-3.5 sm:p-5 flex items-center justify-between gap-3 sm:gap-4">
               <div className="text-sm">
                 <div className="font-semibold">注册后所有进度自动云端保存</div>
               </div>
