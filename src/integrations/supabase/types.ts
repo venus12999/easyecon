@@ -192,6 +192,7 @@ export type Database = {
           answer_file_kind: string | null
           answer_file_url: string | null
           answer_text: string | null
+          archived_at: string | null
           created_at: string
           frq_id: string
           id: string
@@ -208,6 +209,7 @@ export type Database = {
           answer_file_kind?: string | null
           answer_file_url?: string | null
           answer_text?: string | null
+          archived_at?: string | null
           created_at?: string
           frq_id: string
           id?: string
@@ -224,6 +226,7 @@ export type Database = {
           answer_file_kind?: string | null
           answer_file_url?: string | null
           answer_text?: string | null
+          archived_at?: string | null
           created_at?: string
           frq_id?: string
           id?: string
