@@ -51,7 +51,7 @@ function QuickCard({
   return (
     <Link
       to={to}
-      className="group rounded-xl sm:rounded-2xl border bg-card p-2.5 sm:p-4 hover:shadow-md hover:border-primary/40 transition-all flex flex-col gap-2 sm:gap-3"
+      className="group rounded-xl sm:rounded-2xl border bg-card p-2.5 sm:p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:border-primary/40 active:translate-y-0 active:scale-[0.97] flex flex-col gap-2 sm:gap-3"
     >
       <div className={`h-7 w-7 sm:h-9 sm:w-9 rounded-lg sm:rounded-xl ${iconBg} flex items-center justify-center`}>{icon}</div>
       <div>
