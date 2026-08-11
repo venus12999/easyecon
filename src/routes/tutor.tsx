@@ -120,8 +120,11 @@ function TutorPage() {
     (async () => {
       const { data } = await supabase
         .from("tutor_trial_bookings")
-        .select("teacher, created_at, scheduled_at")
+        .select("teacher, created_at, scheduled_at, status")
         .eq("user_id", user.id)
+        .neq("status", "cancelled")
+        .order("created_at", { ascending: false })
+        .limit(1)
         .maybeSingle();
       if (!cancelled) {
         setExistingBooking(data ?? null);
