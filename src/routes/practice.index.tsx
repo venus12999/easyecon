@@ -109,13 +109,13 @@ function PracticeIndex() {
 
   return (
     <div className="min-h-screen">
-      <main className="mx-auto max-w-6xl px-3 py-6 sm:px-4 sm:py-8">
+      <main className="mx-auto max-w-6xl px-3 py-4 sm:px-4 sm:py-8">
         <Link to="/" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4" /> 返回首页
         </Link>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">选择题</h1>
+        <h1 className="text-lg font-bold tracking-tight sm:text-3xl">选择题</h1>
 
-        <section className="mt-5 mb-3 flex items-center gap-2 text-xs text-primary font-medium">
+        <section className="mt-4 mb-2.5 flex items-center gap-2 text-xs text-primary font-medium">
           <Sparkles className="h-3.5 w-3.5" /> 知识点 · 选一个开始
         </section>
 
@@ -125,7 +125,7 @@ function PracticeIndex() {
               <button
                 key={u}
                 onClick={() => setUnit(u)}
-                className={`px-3 py-1.5 rounded-pill text-sm border transition-colors ${
+                className={`px-2.5 py-1 text-xs sm:px-3 sm:py-1.5 sm:text-sm rounded-pill border transition-colors ${
                   unit === u ? "bg-primary text-primary-foreground border-primary" : "bg-card hover:bg-accent"
                 }`}
               >
@@ -136,13 +136,13 @@ function PracticeIndex() {
         )}
 
         {loading ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-2.5 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="h-40 rounded-card border bg-card animate-pulse" />
+              <div key={i} className="h-24 sm:h-40 rounded-card border bg-card animate-pulse" />
             ))}
           </div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-2.5 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {visibleKps.map((kp) => {
               const c = counts[kp.id] ?? { total: 0, draft: 0 };
               const n = c.total;
@@ -150,20 +150,20 @@ function PracticeIndex() {
               return (
                 <Link key={kp.id} to="/practice/$slug" params={{ slug: kp.slug }} search={{}} className="group">
                   <Card className="h-full transition-all hover:border-primary/50 hover:shadow-md">
-                    <CardHeader>
+                    <CardHeader className="p-3.5 pb-2 sm:p-6 sm:pb-4">
                       <div className="flex items-start justify-between">
                         <div>
-                          <CardTitle className="text-base">{kp.name_zh}</CardTitle>
-                          <CardDescription className="mt-0.5 text-xs font-mono">{kp.name_en}</CardDescription>
+                          <CardTitle className="text-sm sm:text-base">{kp.name_zh}</CardTitle>
+                          <CardDescription className="mt-0.5 text-[10px] sm:text-xs font-mono">{kp.name_en}</CardDescription>
                         </div>
-                        <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                        <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground group-hover:text-primary transition-colors" />
                       </div>
                     </CardHeader>
-                    <CardContent className="space-y-2">
+                    <CardContent className="p-3.5 pt-0 space-y-1.5 sm:p-6 sm:pt-0 sm:space-y-2">
                       {kp.description && (
-                        <p className="text-xs text-muted-foreground line-clamp-2">{kp.description}</p>
+                        <p className="text-[11px] sm:text-xs text-muted-foreground line-clamp-2">{kp.description}</p>
                       )}
-                      <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center justify-between text-[11px] sm:text-xs">
                         <span className="text-muted-foreground">
                           {n > 0 ? `${n} 题` : c.draft > 0 ? `暂无题目（${c.draft} 道待审核）` : "暂无题目"}
                         </span>
