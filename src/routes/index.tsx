@@ -81,24 +81,17 @@ type Counts = Record<
   { basic: number; application: number; pitfall: number; total: number; draft: number }
 >;
 
-type KpProgressInfo = {
-  done: number; // 当前轮已做题数
-  total: number;
-  round: number; // 第几轮（1 起）
-};
 
 function Index() {
   const [currentDate, setCurrentDate] = useState<Date | null>(null);
   const [kps, setKps] = useState<Kp[]>([]);
   const [counts, setCounts] = useState<Counts>({});
   const [loading, setLoading] = useState(true);
-  const [unit, setUnit] = useState<number | null>(null);
   const { user } = useAuth();
   const navigate = useNavigate();
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [coach, setCoach] = useState<CoachSuggestion | null>(null);
   const [coachCompanion, setCoachCompanion] = useState<CompanionId>("sarah");
-  const [kpProgress, setKpProgress] = useState<Record<string, KpProgressInfo>>({});
   const [stats, setStats] = useState<{ today: number; rate: number | null; totalAttempts: number }>({
     today: 0,
     rate: null,
@@ -187,56 +180,10 @@ function Index() {
       });
       const kpList = (kpData ?? []) as Kp[];
       setKps(kpList);
-      const firstUnit = kpList[0]?.unit ?? null;
-      setUnit((cur) => cur ?? firstUnit);
       setCounts(c);
       setLoading(false);
     })();
   }, []);
-
-  // 计算每个知识点的「当前轮进度」：按时间顺序遍历答题记录，
-  // 每当本轮覆盖该知识点全部题目后开启新一轮。
-  useEffect(() => {
-    if (!user) {
-      setKpProgress({});
-      return;
-    }
-    if (Object.keys(counts).length === 0) return;
-    (async () => {
-      const { data } = await supabase
-        .from("answer_attempts")
-        .select("knowledge_point_id,question_id,created_at")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: true });
-      const grouped: Record<string, { qid: string }[]> = {};
-      (data ?? []).forEach((r) => {
-        const k = r.knowledge_point_id as string;
-        (grouped[k] ??= []).push({ qid: r.question_id as string });
-      });
-      const next: Record<string, KpProgressInfo> = {};
-      for (const [kpId, rows] of Object.entries(grouped)) {
-        const total = counts[kpId]?.total ?? 0;
-        if (total === 0) continue;
-        let round = 1;
-        let seen = new Set<string>();
-        for (const r of rows) {
-          seen.add(r.qid);
-          if (seen.size >= total) {
-            round += 1;
-            seen = new Set();
-          }
-        }
-        // 若刚好整轮结束，显示已完成的整轮
-        const done = seen.size === 0 && round > 1 ? total : seen.size;
-        const displayRound = seen.size === 0 && round > 1 ? round - 1 : round;
-        next[kpId] = { done, total, round: displayRound };
-      }
-      setKpProgress(next);
-    })();
-  }, [user, counts]);
-
-  const allUnits = Array.from(new Set(kps.map((k) => k.unit))).sort((a, b) => a - b);
-  const visibleKps = unit == null ? kps : kps.filter((k) => k.unit === unit);
 
   // 问候语
   const hour = currentDate?.getHours();
