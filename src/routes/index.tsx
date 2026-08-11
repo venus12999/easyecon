@@ -379,7 +379,7 @@ function Index() {
           <Link
             to="/tutor"
             className="group relative overflow-hidden rounded-2xl p-6 flex items-center justify-between gap-4 text-white shadow-sm hover:shadow-md transition-shadow"
-            style={{ background: "linear-gradient(135deg,#b8541f 0%,#e07a2c 55%,#f6b452 100%)" }}
+            style={{ background: "linear-gradient(135deg,#1c56c4 0%,#2f7fe0 55%,#69aef0 100%)" }}
           >
             <div className="flex items-center gap-4">
               <div className="h-12 w-12 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center shrink-0">
