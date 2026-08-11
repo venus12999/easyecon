@@ -310,9 +310,7 @@ function Index() {
         </section>
         <section className="grid gap-4 md:grid-cols-3 mb-5">
           <Link
-            to={firstKpWithQuestions ? "/practice/$slug" : "/"}
-            params={firstKpWithQuestions ? { slug: firstKpWithQuestions.slug } : undefined as never}
-            search={{} as never}
+            to="/practice"
             className="group relative overflow-hidden rounded-2xl border bg-gradient-to-br from-[#bcd9f5] via-[#c9e4f5] to-[#e7f1fb] p-6 min-h-[230px] flex flex-col justify-between text-[#16335c] shadow-sm hover:shadow-md transition-shadow"
           >
             <div className="flex items-start justify-between">
@@ -444,91 +442,6 @@ function Index() {
           </Card>
         )}
 
-        {/* 知识点列表 */}
-        <section className="mb-3 flex items-center gap-2 text-xs text-primary font-medium">
-          <Sparkles className="h-3.5 w-3.5" /> 知识点 · 选一个开始
-        </section>
-
-        {allUnits.length > 0 && (
-          <div className="mb-4 flex flex-wrap gap-2">
-            {allUnits.map((u) => (
-              <button
-                key={u}
-                onClick={() => setUnit(u)}
-                className={`px-3 py-1.5 rounded-md text-sm border transition-colors ${
-                  unit === u
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-card hover:bg-accent"
-                }`}
-              >
-                Unit {u}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {loading ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="h-40 rounded-xl border bg-card animate-pulse" />
-            ))}
-          </div>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {visibleKps.map((kp) => {
-              const c = counts[kp.id] ?? { basic: 0, application: 0, pitfall: 0, total: 0, draft: 0 };
-              const n = c.total;
-              const kpInfo = kpProgress[kp.id];
-              return (
-                <Link
-                  key={kp.id}
-                  to="/practice/$slug"
-                  params={{ slug: kp.slug }}
-                  search={{}}
-                  className="group"
-                >
-                  <Card className="h-full transition-all hover:border-primary/50 hover:shadow-md">
-                    <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <CardTitle className="text-base">{kp.name_zh}</CardTitle>
-                          <CardDescription className="mt-0.5 text-xs font-mono">
-                            {kp.name_en}
-                          </CardDescription>
-                        </div>
-                        <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      {kp.description && (
-                        <p className="text-xs text-muted-foreground line-clamp-2">
-                          {kp.description}
-                        </p>
-                      )}
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-muted-foreground">
-                          {n > 0
-                            ? `${n} 题`
-                            : c.draft > 0
-                              ? `暂无题目（${c.draft} 道待审核）`
-                              : "暂无题目"}
-                        </span>
-                        {kpInfo && n > 0 ? (
-                          <span className="text-primary font-medium">
-                            {kpInfo.round > 1 ? `第${kpInfo.round}轮 ` : ""}
-                            {kpInfo.done}/{kpInfo.total}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">未开始</span>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
-              );
-            })}
-          </div>
-        )}
       </main>
     </div>
   );

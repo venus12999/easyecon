@@ -23,6 +23,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AdminTutorRouteImport } from './routes/admin-tutor'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as PracticeIndexRouteImport } from './routes/practice.index'
 import { Route as MockIndexRouteImport } from './routes/mock.index'
 import { Route as PracticeSlugRouteImport } from './routes/practice.$slug'
 import { Route as MockRandomRouteImport } from './routes/mock.random'
@@ -118,6 +119,11 @@ const AdminRoute = AdminRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PracticeIndexRoute = PracticeIndexRouteImport.update({
+  id: '/practice/',
+  path: '/practice/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MockIndexRoute = MockIndexRouteImport.update({
@@ -277,6 +283,7 @@ export interface FileRoutesByFullPath {
   '/mock/random': typeof MockRandomRoute
   '/practice/$slug': typeof PracticeSlugRoute
   '/mock/': typeof MockIndexRoute
+  '/practice/': typeof PracticeIndexRoute
   '/api/admin/audit': typeof ApiAdminAuditRoute
   '/api/admin/feedback': typeof ApiAdminFeedbackRoute
   '/api/admin/frqs': typeof ApiAdminFrqsRoute
@@ -319,6 +326,7 @@ export interface FileRoutesByTo {
   '/mock/random': typeof MockRandomRoute
   '/practice/$slug': typeof PracticeSlugRoute
   '/mock': typeof MockIndexRoute
+  '/practice': typeof PracticeIndexRoute
   '/api/admin/audit': typeof ApiAdminAuditRoute
   '/api/admin/feedback': typeof ApiAdminFeedbackRoute
   '/api/admin/frqs': typeof ApiAdminFrqsRoute
@@ -362,6 +370,7 @@ export interface FileRoutesById {
   '/mock/random': typeof MockRandomRoute
   '/practice/$slug': typeof PracticeSlugRoute
   '/mock/': typeof MockIndexRoute
+  '/practice/': typeof PracticeIndexRoute
   '/api/admin/audit': typeof ApiAdminAuditRoute
   '/api/admin/feedback': typeof ApiAdminFeedbackRoute
   '/api/admin/frqs': typeof ApiAdminFrqsRoute
@@ -406,6 +415,7 @@ export interface FileRouteTypes {
     | '/mock/random'
     | '/practice/$slug'
     | '/mock/'
+    | '/practice/'
     | '/api/admin/audit'
     | '/api/admin/feedback'
     | '/api/admin/frqs'
@@ -448,6 +458,7 @@ export interface FileRouteTypes {
     | '/mock/random'
     | '/practice/$slug'
     | '/mock'
+    | '/practice'
     | '/api/admin/audit'
     | '/api/admin/feedback'
     | '/api/admin/frqs'
@@ -490,6 +501,7 @@ export interface FileRouteTypes {
     | '/mock/random'
     | '/practice/$slug'
     | '/mock/'
+    | '/practice/'
     | '/api/admin/audit'
     | '/api/admin/feedback'
     | '/api/admin/frqs'
@@ -533,6 +545,7 @@ export interface RootRouteChildren {
   MockRandomRoute: typeof MockRandomRoute
   PracticeSlugRoute: typeof PracticeSlugRoute
   MockIndexRoute: typeof MockIndexRoute
+  PracticeIndexRoute: typeof PracticeIndexRoute
   ApiAdminAuditRoute: typeof ApiAdminAuditRoute
   ApiAdminFeedbackRoute: typeof ApiAdminFeedbackRoute
   ApiAdminFrqsRoute: typeof ApiAdminFrqsRoute
@@ -646,6 +659,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/practice/': {
+      id: '/practice/'
+      path: '/practice'
+      fullPath: '/practice/'
+      preLoaderRoute: typeof PracticeIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/mock/': {
@@ -881,6 +901,7 @@ const rootRouteChildren: RootRouteChildren = {
   MockRandomRoute: MockRandomRoute,
   PracticeSlugRoute: PracticeSlugRoute,
   MockIndexRoute: MockIndexRoute,
+  PracticeIndexRoute: PracticeIndexRoute,
   ApiAdminAuditRoute: ApiAdminAuditRoute,
   ApiAdminFeedbackRoute: ApiAdminFeedbackRoute,
   ApiAdminFrqsRoute: ApiAdminFrqsRoute,
