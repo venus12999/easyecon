@@ -298,7 +298,26 @@
 @utility glass-tint-hover {
   &:hover {
     box-shadow: 0 32px 70px -24px rgba(18, 48, 110, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.42);
-    transform: translateY(-2px);
+    transform: translateY(-3px);
+  }
+  &:active {
+    transform: translateY(-1px) scale(0.985);
+    box-shadow: 0 16px 36px -20px rgba(18, 48, 110, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    transition-duration: 0.12s;
+  }
+}
+
+/* 透明玻璃卡片 hover/active 动效（选择题 / 大题用） */
+@utility glass-hover {
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.28s ease, border-color 0.28s ease;
+  &:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 30px 64px -24px rgba(18, 48, 110, 0.4), inset 0 1px 0 var(--glass-highlight);
+  }
+  &:active {
+    transform: translateY(-1px) scale(0.985);
+    box-shadow: 0 14px 32px -20px rgba(18, 48, 110, 0.38), inset 0 1px 0 var(--glass-highlight);
+    transition-duration: 0.12s;
   }
 }
 

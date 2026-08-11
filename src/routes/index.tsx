@@ -51,7 +51,7 @@ function QuickCard({
   return (
     <Link
       to={to}
-      className="group rounded-xl sm:rounded-2xl border bg-card p-2.5 sm:p-4 hover:shadow-md hover:border-primary/40 transition-all flex flex-col gap-2 sm:gap-3"
+      className="group rounded-xl sm:rounded-2xl border bg-card p-2.5 sm:p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:border-primary/40 active:translate-y-0 active:scale-[0.97] flex flex-col gap-2 sm:gap-3"
     >
       <div className={`h-7 w-7 sm:h-9 sm:w-9 rounded-lg sm:rounded-xl ${iconBg} flex items-center justify-center`}>{icon}</div>
       <div>
@@ -258,7 +258,7 @@ function Index() {
         <section className="grid grid-cols-2 gap-2.5 mb-4 sm:gap-4 md:grid-cols-3 sm:mb-5">
           <Link
             to="/practice"
-            className="group glass relative overflow-hidden rounded-2xl p-3.5 min-h-[128px] sm:p-6 sm:min-h-[230px] flex flex-col justify-between text-foreground transition-shadow"
+            className="group glass glass-hover relative overflow-hidden rounded-2xl p-3.5 min-h-[128px] sm:p-6 sm:min-h-[230px] flex flex-col justify-between text-foreground"
           >
             <div className="flex items-start justify-between">
               <div className="h-8 w-8 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-white/55 backdrop-blur flex items-center justify-center shadow-sm ring-1 ring-white/50">
@@ -281,7 +281,7 @@ function Index() {
 
           <Link
             to="/frq"
-            className="group glass relative overflow-hidden rounded-2xl p-3.5 min-h-[128px] sm:p-6 sm:min-h-[230px] flex flex-col justify-between text-foreground transition-shadow"
+            className="group glass glass-hover relative overflow-hidden rounded-2xl p-3.5 min-h-[128px] sm:p-6 sm:min-h-[230px] flex flex-col justify-between text-foreground"
           >
             <div className="flex items-start justify-between">
               <div className="h-8 w-8 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-primary/15 backdrop-blur flex items-center justify-center ring-1 ring-white/50">
