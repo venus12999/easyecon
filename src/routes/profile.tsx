@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Check, Crown, Loader2, Save, Sparkles, UserRound } from "lucide-react";
+import { ArrowLeft, Check, Crown, Loader2, Save, Sparkles, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,7 +34,7 @@ type Membership = {
   isPro: boolean;
   plan: string | null;
   status: string | null;
-  source: "paid" | "gift" | "free";
+  source: "paid" | "gift" | "lifetime" | "free";
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
   canManage: boolean;
@@ -145,6 +145,9 @@ function ProfilePage() {
   if (!user) {
     return (
       <main className="mx-auto max-w-md px-4 py-16 text-center space-y-4">
+        <Link to="/" className="mb-0 flex w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-4 w-4" /> 返回首页
+        </Link>
         <h1 className="text-2xl font-bold">个人资料</h1>
         <p className="text-sm text-muted-foreground">登录后即可设置你的昵称。</p>
         <Button asChild><Link to="/auth">登录 / 注册</Link></Button>
@@ -154,6 +157,9 @@ function ProfilePage() {
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-10">
+      <Link to="/" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+        <ArrowLeft className="h-4 w-4" /> 返回首页
+      </Link>
       <div className="mb-6 flex items-center gap-3">
         <div className="flex h-11 w-11 items-center justify-center rounded-full bg-primary/10">
           <UserRound className="h-5 w-5 text-primary" />
@@ -280,7 +286,7 @@ function ProfilePage() {
         <CardHeader className="bg-primary/5">
           <div className="flex items-center justify-between gap-4">
             <CardTitle className="flex items-center gap-2 text-base"><Crown className="h-4 w-4 text-primary" />会员</CardTitle>
-            <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">{membership?.isPro ? "Pro 会员" : "免费用户"}</span>
+            <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">{membership?.source === "lifetime" ? "永久 Pro" : membership?.isPro ? "Pro 会员" : "免费用户"}</span>
           </div>
         </CardHeader>
         <CardContent className="space-y-5 pt-5">
@@ -290,8 +296,12 @@ function ProfilePage() {
                 <div className="rounded-lg border p-4"><div className="text-xs text-muted-foreground">AI 答疑</div><div className="mt-1 text-xl font-bold">{membership.usage.aiExplain}/{membership.usage.aiExplainLimit}</div></div>
                 <div className="rounded-lg border p-4"><div className="text-xs text-muted-foreground">FRQ 评分</div><div className="mt-1 text-xl font-bold">{membership.usage.frqGrade}/{membership.usage.frqGradeLimit}</div></div>
               </div>
-              {membership.currentPeriodEnd && <div className="text-sm">有效期至：{new Date(membership.currentPeriodEnd).toLocaleDateString()}</div>}
-              <p className="text-xs text-muted-foreground">到期后可在 <Link to="/pricing" className="text-primary underline">定价页</Link> 再次扫码续费。</p>
+              {membership.source === "lifetime" ? (
+                <div className="text-sm">有效期：永久</div>
+              ) : membership.currentPeriodEnd ? (
+                <div className="text-sm">有效期至：{new Date(membership.currentPeriodEnd).toLocaleDateString()}</div>
+              ) : null}
+              {membership.source !== "lifetime" && <p className="text-xs text-muted-foreground">到期后可在 <Link to="/pricing" className="text-primary underline">定价页</Link> 再次扫码续费。</p>}
             </>
           ) : (
             <>

@@ -1,5 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
+import { ArrowLeft } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -59,6 +60,9 @@ function TermsPage() {
     <div className="min-h-screen">
       
       <main className="mx-auto max-w-4xl px-4 py-8">
+        <Link to="/" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-4 w-4" /> 返回首页
+        </Link>
         <h1 className="text-2xl font-bold tracking-tight mb-1">术语速查</h1>
         <p className="text-muted-foreground text-sm mb-6">英文术语 · 中文翻译 · 定义 · 易混词</p>
         <Input

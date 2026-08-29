@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
-import { Clock, FileText, Shuffle, ChevronRight, Loader2, History } from "lucide-react";
+import { Clock, FileText, Shuffle, ChevronRight, Loader2, History, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/mock/")({
@@ -58,6 +58,9 @@ function MockLibrary() {
   return (
     <div className="min-h-screen">
       <main className="mx-auto max-w-3xl px-4 py-10">
+        <Link to="/" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-4 w-4" /> 返回首页
+        </Link>
         <h1 className="text-2xl font-bold mb-2">模考</h1>
         <p className="text-sm text-muted-foreground mb-3">
           选择一份真题卷按官方题目顺序作答，或用随机模考按 AP 比例抽题练习。

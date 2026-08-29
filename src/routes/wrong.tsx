@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { getWrong, removeWrong } from "@/lib/storage";
-import { Trash2 } from "lucide-react";
+import { ArrowLeft, Trash2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import {
   ResponsiveContainer,
@@ -201,6 +201,9 @@ function WrongBook() {
   return (
     <div className="min-h-screen">
       <main className="mx-auto max-w-4xl px-4 py-8">
+        <Link to="/" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-4 w-4" /> 返回首页
+        </Link>
         <h1 className="text-2xl font-bold tracking-tight mb-1">错题本</h1>
         <p className="text-muted-foreground text-sm mb-6">
           {user ? "已同步至云端" : "数据保存在你的浏览器本地（登录后可同步并查看趋势）"}

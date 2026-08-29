@@ -1,12 +1,12 @@
 import { Outlet, Link, createRootRoute, HeadContent, Scripts, useRouterState } from "@tanstack/react-router";
 
 import appCss from "../styles.css?url";
-import logoAsset from "@/assets/logo.png.asset.json";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/hooks/use-auth";
 import { TopNav } from "@/components/TopNav";
 import { FeedbackButton } from "@/components/FeedbackButton";
 import { FloatingMascot } from "@/components/FloatingMascot";
+import { LOGO_URL } from "@/lib/brand";
 
 function NotFoundComponent() {
   return (
@@ -56,7 +56,7 @@ export const Route = createRootRoute({
       {
         rel: "icon",
         type: "image/png",
-        href: logoAsset.url,
+        href: LOGO_URL,
       },
     ],
   }),
@@ -82,15 +82,6 @@ function RootShell({ children }: { children: React.ReactNode }) {
 function RootComponent() {
   const path = useRouterState({ select: (r) => r.location.pathname });
   const isAuthRoute = path === "/auth" || path === "/reset-password";
-  if (isAuthRoute) {
-    return (
-      <AuthProvider>
-        <Outlet />
-        <Toaster richColors position="top-center" />
-      </AuthProvider>
-    );
-  }
-  // Hide the floating mascot during mock exams so it doesn't distract the user.
   const isMockExam = path.startsWith("/mock/");
   return (
     <AuthProvider>
@@ -99,15 +90,17 @@ function RootComponent() {
         <main className="min-w-0 flex-1">
           <Outlet />
         </main>
-        <footer className="flex flex-wrap justify-center gap-x-5 gap-y-2 px-4 py-4 text-xs text-foreground/60">
-          <Link to="/pricing">定价</Link>
-          <Link to="/legal/terms">服务条款</Link>
-          <Link to="/legal/refunds">退款政策</Link>
-          <Link to="/legal/privacy">隐私声明</Link>
-        </footer>
+        {!isAuthRoute && (
+          <footer className="flex flex-wrap justify-center gap-x-5 gap-y-2 px-4 py-4 text-xs text-foreground/60">
+            <Link to="/pricing">定价</Link>
+            <Link to="/legal/terms">服务条款</Link>
+            <Link to="/legal/refunds">退款政策</Link>
+            <Link to="/legal/privacy">隐私声明</Link>
+          </footer>
+        )}
       </div>
       {!path.startsWith("/admin") && <FeedbackButton />}
-      {!isMockExam && <FloatingMascot />}
+      {!isMockExam && !isAuthRoute && <FloatingMascot />}
       <Toaster richColors position="top-center" />
     </AuthProvider>
   );

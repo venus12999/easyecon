@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { verifyAdminRequest } from "@/lib/admin-auth.server";
 import { verifyUserRequest } from "@/lib/user-auth.server";
+import { isLifetimeVipEmail } from "@/lib/lifetime-vip";
 import { z } from "zod";
 import { isPaidSubscriptionActive, membershipEnvironment } from "@/lib/membership.server";
 
@@ -53,6 +54,7 @@ export const Route = createFileRoute("/api/admin/users")({
              ...(stat[p.user_id] ?? { total: 0, correct: 0, last: null, mocks: 0 }),
               subscription: (subscriptions ?? []).find((s) => s.user_id === p.user_id && isPaidSubscriptionActive(s)) ?? (subscriptions ?? []).find((s) => s.user_id === p.user_id) ?? null,
              gifted_until: (adjustments ?? []).filter((a) => a.user_id === p.user_id).sort((a, b) => b.ends_at.localeCompare(a.ends_at))[0]?.ends_at ?? null,
+             is_lifetime_vip: isLifetimeVipEmail(p.email),
            }));
           return Response.json({ users });
         }
