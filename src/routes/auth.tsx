@@ -9,7 +9,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Loader2, Sparkles, ShieldCheck, BookOpen } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
-import logoAsset from "@/assets/logo.png.asset.json";
+import { LOGO_URL } from "@/lib/brand";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { getRememberPreference, setRememberPreference } from "@/lib/remember-session";
@@ -119,18 +119,11 @@ function AuthPage() {
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-background flex items-center justify-center px-4 py-10">
-      {/* 背景装饰 */}
-      <div className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute -top-32 -left-24 h-80 w-80 rounded-full bg-primary/20 blur-3xl" />
-        <div className="absolute top-1/2 -right-24 h-96 w-96 rounded-full bg-accent/30 blur-3xl" />
-        <div className="absolute bottom-0 left-1/3 h-72 w-72 rounded-full bg-primary/10 blur-3xl" />
-      </div>
-
+    <div className="relative flex min-h-[calc(100vh-4rem)] items-center justify-center px-4 py-10">
       <div className="w-full max-w-md">
         <Link to="/" className="mb-8 flex flex-col items-center gap-3">
-          <div className="rounded-2xl bg-card/60 p-2 shadow-lg ring-1 ring-border/60 backdrop-blur">
-            <img src={logoAsset.url} alt="EasyEcon" className="h-12 w-12 rounded-xl" />
+          <div className="rounded-2xl p-2 shadow-lg ring-1 ring-white/70 glass">
+            <img src={LOGO_URL} alt="EasyEcon" className="h-12 w-12 rounded-xl object-cover" />
           </div>
           <div className="text-center">
             <div className="text-xl font-bold tracking-tight">EasyEcon</div>
@@ -138,7 +131,7 @@ function AuthPage() {
           </div>
         </Link>
 
-        <Card className="border-border/60 shadow-xl backdrop-blur-sm bg-card/95">
+        <Card className="border-white/50 shadow-xl">
           <CardContent className="p-6">
             <div className="mb-4 text-center">
               <h1 className="text-lg font-semibold">

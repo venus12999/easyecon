@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { Loader2, Plus, Trash2, Upload, Image as ImageIcon, Sparkles, Inbox } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
+import { isLifetimeVipEmail } from "@/lib/lifetime-vip";
 import { ManualPaymentsPanel } from "@/components/admin/ManualPaymentsPanel";
 
 // 判断题干是否提示包含图表（导入时在题干里以「[此题含图…]」「见原 PDF」「见图」等方式标注）
@@ -1134,7 +1135,7 @@ function FeedbackPanel({ token }: { token: string }) {
 }
 function UsersPanel({ token }: { token: string }) {
   type Subscription = { status: string; current_period_end: string | null; price_id: string; environment: string };
-  type U = { user_id: string; email: string; display_name: string | null; created_at: string; total: number; correct: number; last: string | null; mocks: number; subscription: Subscription | null; gifted_until: string | null };
+  type U = { user_id: string; email: string; display_name: string | null; created_at: string; total: number; correct: number; last: string | null; mocks: number; subscription: Subscription | null; gifted_until: string | null; is_lifetime_vip?: boolean };
   type Detail = {
     profile: { email: string; display_name: string | null; created_at: string } | null;
     attempts: Array<{ id: string; question_id: string; picked_answer: string | null; is_correct: boolean; mode: string; created_at: string }>;
@@ -1200,8 +1201,10 @@ function UsersPanel({ token }: { token: string }) {
                 <div className="font-medium truncate">{u.display_name?.trim() || "未设置昵称"}</div>
                 <div className="text-xs text-muted-foreground truncate">{u.email}</div>
                  <div className="mt-1 text-xs font-medium text-primary">
-                   {(u.gifted_until && new Date(u.gifted_until).getTime() > Date.now()) ||
-                    (u.subscription && ["active", "trialing", "canceled"].includes(u.subscription.status) && (!u.subscription.current_period_end || new Date(u.subscription.current_period_end).getTime() > Date.now()))
+                   {u.is_lifetime_vip
+                     ? "永久 Pro"
+                     : (u.gifted_until && new Date(u.gifted_until).getTime() > Date.now()) ||
+                       (u.subscription && ["active", "trialing", "canceled"].includes(u.subscription.status) && (!u.subscription.current_period_end || new Date(u.subscription.current_period_end).getTime() > Date.now()))
                      ? "Pro 会员"
                      : "免费用户"}
                  </div>
@@ -1233,8 +1236,8 @@ function UsersPanel({ token }: { token: string }) {
                    <Button size="sm" onClick={() => void grantMembership()}>赠送会员天数</Button>
                  </div>
                  <div className="mt-2 text-xs text-muted-foreground">
-                   {detail.subscriptions[0] ? `订阅：${detail.subscriptions[0].status}${detail.subscriptions[0].current_period_end ? ` · 至 ${new Date(detail.subscriptions[0].current_period_end).toLocaleDateString()}` : ""}` : "暂无付费订阅"}
-                   {detail.adjustments[0] ? ` · 赠送会员至 ${new Date(detail.adjustments[0].ends_at).toLocaleDateString()}` : ""}
+                   {isLifetimeVipEmail(detail.profile?.email) ? "永久 Pro 会员" : detail.subscriptions[0] ? `订阅：${detail.subscriptions[0].status}${detail.subscriptions[0].current_period_end ? ` · 至 ${new Date(detail.subscriptions[0].current_period_end).toLocaleDateString()}` : ""}` : "暂无付费订阅"}
+                   {!isLifetimeVipEmail(detail.profile?.email) && detail.adjustments[0] ? ` · 赠送会员至 ${new Date(detail.adjustments[0].ends_at).toLocaleDateString()}` : ""}
                  </div>
               </div>
               <TabsList>

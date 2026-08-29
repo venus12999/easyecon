@@ -8,12 +8,13 @@ import { renderStemWithTerms, type TermInfo } from "@/lib/term-render";
 import { optionStyles, type OptKey } from "@/lib/option-colors";
 import { recordAnswer } from "@/lib/storage";
 import { recordAnswer as recordMascotAnswer, recordFrqSubmission, recordMockAttempt } from "@/lib/mascot-memory";
-import { Clock, Loader2, SquarePen } from "lucide-react";
+import { ArrowLeft, Clock, Loader2, SquarePen } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 import { FrqAnswerBox, EMPTY_ANSWER, type FrqAnswerState } from "@/components/frq/FrqAnswerBox";
 import { FrqGradeCard, type GradeResult } from "@/components/frq/FrqGradeCard";
 import { FrqContent } from "@/components/frq/FrqContent";
+import { McqResultGrid } from "@/components/mock/McqResultGrid";
 import { Button as UiButton } from "@/components/ui/button";
 
 export const Route = createFileRoute("/mock/random")({
@@ -341,6 +342,15 @@ function Mock() {
   }
 
   async function submitAllFrqs() {
+    const unfinished = frqs.filter((f) => {
+      const a = frqAnswers[f.id];
+      return !(a && (a.text.trim() || a.fileUrl));
+    });
+    if (unfinished.length > 0) {
+      toast.error(`请先写完全部 ${frqs.length} 道大题再交卷`);
+      return;
+    }
+    toast.message("正在批改全部大题…");
     let ok = true;
     for (const f of frqs) {
       if (!frqGrades[f.id]) {
@@ -372,8 +382,7 @@ function Mock() {
       byKp[k].total += 1;
       if (answers[q.id] === q.correct_answer) byKp[k].correct += 1;
     });
-    const wrong = questions.filter((q) => answers[q.id] !== q.correct_answer);
-    return { total, correct, byKp, wrong };
+    return { total, correct, byKp };
   }, [phase, questions, answers]);
 
   if (phase === "idle") {
@@ -381,6 +390,12 @@ function Mock() {
       <div className="min-h-screen">
         
         <main className="mx-auto max-w-2xl px-4 py-12">
+          <Link
+            to="/mock"
+            className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" /> 返回卷库
+          </Link>
           <h1 className="text-2xl font-bold mb-2">完整模考（AP 官方比例）</h1>
           <p className="text-muted-foreground text-sm mb-6">
             按 AP 微观经济考试规格随机抽取 <b>60 道</b> 多选题（限时 <b>70 分钟</b>，时间到自动交卷），
@@ -390,8 +405,8 @@ function Mock() {
             <CardContent className="p-4 space-y-1.5 text-sm">
               <div className="font-semibold text-primary">Section II · 大题（AP 官方比例）</div>
               <div className="text-muted-foreground text-xs leading-relaxed">
-                选择题交卷后将自动进入大题阶段，从大题题库随机抽取 <b>1 道长题（≥8 分）</b> + <b>2 道短题</b>，
-                作答后由 AI 按 rubric 逐点评分，并给出改进建议。
+                选择题交卷后将自动进入大题阶段，从大题题库随机抽取 <b>1 道长题（≥8 分）</b> + <b>2 道短题</b>。
+                三道全部写完后交卷，AI 会一次性按 rubric 批改。
               </div>
               <div className="text-[11px] text-muted-foreground">
                 提示：免费用户每 7 天可参加 1 次完整模考；如已用尽冷却，可在个人资料页升级会员。
@@ -434,12 +449,11 @@ function Mock() {
             </div>
             <h1 className="mt-1 text-2xl font-bold">大题部分（1 长 + 2 短）</h1>
             <p className="mt-1 text-xs text-muted-foreground">
-              按 AP 考试规格作答，提交后 AI 将按官方得分点评分。
+              写完全部 3 道大题后交卷，AI 会一起批改。
             </p>
           </div>
           {frqs.map((f, i) => {
             const ans = frqAnswers[f.id] ?? EMPTY_ANSWER;
-            const grade = frqGrades[f.id];
             return (
               <Card key={f.id}>
                 <CardContent className="space-y-4 p-5">
@@ -456,45 +470,33 @@ function Mock() {
                     frqId={f.id}
                     value={ans}
                     onChange={(v) => setFrqAnswers((s) => ({ ...s, [f.id]: v }))}
-                    disabled={!!grade}
+                    disabled={false}
                   />
-                  {!grade && (
-                    <UiButton
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void gradeOneFrq(f)}
-                      disabled={grading[f.id] || (!ans.text.trim() && !ans.fileUrl)}
-                    >
-                      {grading[f.id] ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                      单独评分本题
-                    </UiButton>
-                  )}
-                  {grade && <FrqGradeCard grade={grade} />}
-                  {grade && (
-                    <UiButton
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        setFrqGrades((g) => {
-                          const n = { ...g };
-                          delete n[f.id];
-                          return n;
-                        });
-                        setFrqAnswers((s) => ({ ...s, [f.id]: EMPTY_ANSWER }));
-                        toast.success("已清空作答，可重新答题");
-                      }}
-                    >
-                      重新作答本题
-                    </UiButton>
-                  )}
                 </CardContent>
               </Card>
             );
           })}
-          <div className="flex justify-end">
-            <UiButton onClick={() => void submitAllFrqs()} disabled={allGrading}>
+          <div className="flex flex-col items-end gap-2">
+            <p className="text-xs text-muted-foreground">
+              {frqs.every((f) => {
+                const a = frqAnswers[f.id];
+                return a && (a.text.trim() || a.fileUrl);
+              })
+                ? "交卷后 AI 将一次性批改全部大题"
+                : "请先完成全部 3 道大题再交卷"}
+            </p>
+            <UiButton
+              onClick={() => void submitAllFrqs()}
+              disabled={
+                allGrading ||
+                !frqs.every((f) => {
+                  const a = frqAnswers[f.id];
+                  return a && (a.text.trim() || a.fileUrl);
+                })
+              }
+            >
               {allGrading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              完成大题并查看全部成绩
+              交卷，AI 一起批改
             </UiButton>
           </div>
         </main>
@@ -622,6 +624,11 @@ function Mock() {
           </CardContent>
         </Card>
 
+        <h2 className="mb-3 font-semibold">选择题 {stats.correct} / {stats.total}</h2>
+        <div className="mb-8">
+          <McqResultGrid questions={questions} answers={answers} termDict={termDict} />
+        </div>
+
         {frqs.length > 0 && (
           <>
             <h2 className="font-semibold mb-3">FRQ · AI 评分</h2>
@@ -671,21 +678,6 @@ function Mock() {
             </div>
           ))}
         </div>
-        {stats.wrong.length > 0 && (
-          <>
-            <h2 className="font-semibold mb-3">错题（{stats.wrong.length}）</h2>
-            <div className="space-y-2 mb-6">
-              {stats.wrong.map((q) => (
-                <Card key={q.id}>
-                  <CardContent className="p-3 text-sm">
-                    <p className="line-clamp-2">{q.stem}</p>
-                    <p className="text-xs text-muted-foreground mt-1">正确：{q.correct_answer} · 你选：{answers[q.id] ?? "未作答"}</p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </>
-        )}
         <div className="flex gap-2">
           <Button onClick={() => setPhase("idle")}>再来一次</Button>
           <Button asChild variant="outline"><Link to="/">返回首页</Link></Button>

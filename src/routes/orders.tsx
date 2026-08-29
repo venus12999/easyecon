@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Receipt, Crown, Loader2, Sparkles, RefreshCw, Check, QrCode, ShieldCheck, XCircle } from "lucide-react";
+import { Receipt, Crown, Loader2, Sparkles, RefreshCw, Check, QrCode, ShieldCheck, XCircle, ArrowLeft } from "lucide-react";
 import { format } from "date-fns";
 
 export const Route = createFileRoute("/orders")({
@@ -173,6 +173,9 @@ function OrdersPage() {
   if (!user) {
     return (
       <main className="mx-auto max-w-xl px-4 py-16 text-center">
+        <Link to="/" className="mb-4 flex w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-4 w-4" /> 返回首页
+        </Link>
         <h1 className="text-2xl font-bold">我的订单</h1>
         <p className="mt-3 text-muted-foreground">请先登录查看你的订单与购买记录。</p>
         <Button asChild className="mt-6"><Link to="/auth">去登录</Link></Button>
@@ -184,6 +187,9 @@ function OrdersPage() {
 
   return (
     <main className="mx-auto w-full max-w-4xl px-4 py-10 sm:px-6 sm:py-12">
+      <Link to="/" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+        <ArrowLeft className="h-4 w-4" /> 返回首页
+      </Link>
       <header className="mb-6 flex flex-wrap items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
           <Receipt className="h-5 w-5 text-primary" />

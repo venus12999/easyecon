@@ -54,6 +54,7 @@ export const Route = createFileRoute("/api/ai-explain")({
              user.userId,
              "ai_explain",
              membershipEnvironment(request),
+             user.email,
            );
            if (!quota.allowed) {
              return new Response(JSON.stringify({ error: "membership_quota_exhausted", ...quota }), {

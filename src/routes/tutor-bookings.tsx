@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { ArrowLeft } from "lucide-react";
 
 export const Route = createFileRoute("/tutor-bookings")({
   head: () => ({ meta: [{ title: "我的试课预约" }] }),
@@ -67,6 +68,9 @@ function MyBookingsPage() {
 
   return (
     <div className="container max-w-3xl py-8 space-y-6">
+      <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+        <ArrowLeft className="h-4 w-4" /> 返回首页
+      </Link>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">我的试课预约</h1>

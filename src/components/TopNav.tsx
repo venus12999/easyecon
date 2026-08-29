@@ -1,6 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { UserRound, Receipt, CalendarCheck, Shield, LogOut, ChevronDown, History } from "lucide-react";
-import logoAsset from "@/assets/logo.png.asset.json";
+import { LOGO_URL } from "@/lib/brand";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -22,7 +22,7 @@ export function TopNav() {
     <header className="sticky top-0 z-40 px-3 pt-3 sm:px-5">
       <div className="glass mx-auto flex h-12 max-w-6xl items-center gap-3 rounded-2xl px-3">
         <Link to="/" className="flex min-w-0 items-center gap-2">
-          <img src={logoAsset.url} alt="EasyEcon" className="h-7 w-7 shrink-0 rounded-lg object-cover" />
+          <img src={LOGO_URL} alt="EasyEcon" className="h-7 w-7 shrink-0 rounded-lg object-cover" />
           <span className="truncate text-sm font-bold">EasyEcon</span>
         </Link>
         <div className="flex-1" />

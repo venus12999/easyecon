@@ -13,7 +13,6 @@ import { Route as WrongRouteImport } from './routes/wrong'
 import { Route as TutorBookingsRouteImport } from './routes/tutor-bookings'
 import { Route as TutorRouteImport } from './routes/tutor'
 import { Route as TermsRouteImport } from './routes/terms'
-import { Route as StatsRouteImport } from './routes/stats'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as PricingRouteImport } from './routes/pricing'
@@ -70,11 +69,6 @@ const TutorRoute = TutorRouteImport.update({
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const StatsRoute = StatsRouteImport.update({
-  id: '/stats',
-  path: '/stats',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -274,7 +268,6 @@ export interface FileRoutesByFullPath {
   '/pricing': typeof PricingRoute
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
-  '/stats': typeof StatsRoute
   '/terms': typeof TermsRoute
   '/tutor': typeof TutorRoute
   '/tutor-bookings': typeof TutorBookingsRoute
@@ -318,7 +311,6 @@ export interface FileRoutesByTo {
   '/pricing': typeof PricingRoute
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
-  '/stats': typeof StatsRoute
   '/terms': typeof TermsRoute
   '/tutor': typeof TutorRoute
   '/tutor-bookings': typeof TutorBookingsRoute
@@ -363,7 +355,6 @@ export interface FileRoutesById {
   '/pricing': typeof PricingRoute
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
-  '/stats': typeof StatsRoute
   '/terms': typeof TermsRoute
   '/tutor': typeof TutorRoute
   '/tutor-bookings': typeof TutorBookingsRoute
@@ -409,7 +400,6 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/profile'
     | '/reset-password'
-    | '/stats'
     | '/terms'
     | '/tutor'
     | '/tutor-bookings'
@@ -453,7 +443,6 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/profile'
     | '/reset-password'
-    | '/stats'
     | '/terms'
     | '/tutor'
     | '/tutor-bookings'
@@ -497,7 +486,6 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/profile'
     | '/reset-password'
-    | '/stats'
     | '/terms'
     | '/tutor'
     | '/tutor-bookings'
@@ -542,7 +530,6 @@ export interface RootRouteChildren {
   PricingRoute: typeof PricingRoute
   ProfileRoute: typeof ProfileRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
-  StatsRoute: typeof StatsRoute
   TermsRoute: typeof TermsRoute
   TutorRoute: typeof TutorRoute
   TutorBookingsRoute: typeof TutorBookingsRoute
@@ -602,13 +589,6 @@ declare module '@tanstack/react-router' {
       path: '/terms'
       fullPath: '/terms'
       preLoaderRoute: typeof TermsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/stats': {
-      id: '/stats'
-      path: '/stats'
-      fullPath: '/stats'
-      preLoaderRoute: typeof StatsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reset-password': {
@@ -906,7 +886,6 @@ const rootRouteChildren: RootRouteChildren = {
   PricingRoute: PricingRoute,
   ProfileRoute: ProfileRoute,
   ResetPasswordRoute: ResetPasswordRoute,
-  StatsRoute: StatsRoute,
   TermsRoute: TermsRoute,
   TutorRoute: TutorRoute,
   TutorBookingsRoute: TutorBookingsRoute,
@@ -940,3 +919,12 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}

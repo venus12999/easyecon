@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { verifyUserRequest } from "@/lib/user-auth.server";
+import { isLifetimeVipEmail } from "@/lib/lifetime-vip";
 import { isPaidSubscriptionActive, membershipEnvironment } from "@/lib/membership.server";
 
 export const Route = createFileRoute("/api/membership")({
@@ -18,14 +19,19 @@ export const Route = createFileRoute("/api/membership")({
         ]);
         const subscription = subscriptions?.find((item) => isPaidSubscriptionActive(item)) ?? subscriptions?.[0] ?? null;
         const paidActive = subscription ? isPaidSubscriptionActive(subscription) : false;
-        const isPro = paidActive || Boolean(gift);
-        const source = paidActive ? "paid" : gift ? "gift" : "free";
+        const lifetime = isLifetimeVipEmail(user.email);
+        const isPro = paidActive || lifetime || Boolean(gift);
+        const source = paidActive ? "paid" : lifetime ? "lifetime" : gift ? "gift" : "free";
         return Response.json({
           isPro,
-          plan: subscription?.price_id ?? (gift ? "gift" : null),
+          plan: subscription?.price_id ?? (lifetime ? "lifetime" : gift ? "gift" : null),
           status: subscription?.status ?? null,
           source,
-          currentPeriodEnd: paidActive ? subscription?.current_period_end ?? null : gift?.ends_at ?? subscription?.current_period_end ?? null,
+          currentPeriodEnd: lifetime
+            ? null
+            : paidActive
+              ? subscription?.current_period_end ?? null
+              : gift?.ends_at ?? subscription?.current_period_end ?? null,
           cancelAtPeriodEnd: subscription?.cancel_at_period_end ?? false,
           usage: {
             aiExplain: usage?.ai_explain_count ?? 0,

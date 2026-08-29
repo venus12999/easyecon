@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Check, Crown, Sparkles } from "lucide-react";
+import { ArrowLeft, Check, Crown, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ManualPayDialog } from "@/components/ManualPayDialog";
@@ -25,6 +25,9 @@ const features = [
 function PricingPage() {
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-12 sm:px-6 sm:py-16">
+      <Link to="/" className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+        <ArrowLeft className="h-4 w-4" /> 返回首页
+      </Link>
       <header className="mx-auto max-w-2xl text-center">
         <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
           <Crown className="h-6 w-6 text-primary" aria-hidden="true" />

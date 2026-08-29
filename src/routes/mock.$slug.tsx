@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { FrqAnswerBox, EMPTY_ANSWER, type FrqAnswerState } from "@/components/frq/FrqAnswerBox";
 import { FrqGradeCard, type GradeResult } from "@/components/frq/FrqGradeCard";
 import { FrqContent } from "@/components/frq/FrqContent";
+import { McqResultGrid } from "@/components/mock/McqResultGrid";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -596,6 +597,18 @@ function PaperRunner() {
   }
 
   async function submitAllFrqs() {
+    const isFrqOnly = slug === "frq-pdf-practice" || slug.startsWith("frq-pack-");
+    if (!isFrqOnly) {
+      const unfinished = frqs.filter((f) => {
+        const a = frqAnswers[f.id];
+        return !(a && (a.text.trim() || a.fileUrl));
+      });
+      if (unfinished.length > 0 && !(mode === "exam" && frqSeconds <= 0)) {
+        toast.error(`请先写完全部 ${frqs.length} 道大题再交卷`);
+        return;
+      }
+    }
+    toast.message("正在批改全部大题…");
     let gradingSucceeded = true;
     for (const f of frqs) {
       if (!frqGrades[f.id]) {
@@ -620,8 +633,7 @@ function PaperRunner() {
     if (phase !== "done") return null;
     const total = questions.length;
     const correct = questions.filter((q) => answers[q.id] === q.correct_answer).length;
-    const wrong = questions.filter((q) => answers[q.id] !== q.correct_answer);
-    return { total, correct, wrong };
+    return { total, correct };
   }, [phase, questions, answers]);
 
   if (loading) {
@@ -691,7 +703,7 @@ function PaperRunner() {
               练习模式
             </div>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              无时间限制：自由作答 MCQ，随时进入 FRQ。提交 FRQ 之后才会显示 MCQ 正确答案与 AI 解析。
+              无时间限制：自由作答 MCQ，再写完 3 道大题后一次性交卷。AI 一起批改后，才显示选择题对错与解析。
             </p>
           </button>
         </div>}
@@ -786,7 +798,11 @@ function PaperRunner() {
           <div>
             <h1 className="text-2xl font-bold">{questions.length === 0 ? "大题练习 · FRQ" : "Section II · FRQ"}</h1>
             <p className="text-xs text-muted-foreground">
-              {mode === "exam" ? "仿真模式：到点自动交卷" : "无时间限制，按得分点逐题评分"}
+              {isFrqOnly
+                ? mode === "exam"
+                  ? "仿真模式：到点自动交卷"
+                  : "无时间限制，按得分点逐题评分"
+                : `写完全部 ${frqs.length} 道大题后交卷，AI 会一起批改`}
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -861,9 +877,9 @@ function PaperRunner() {
                   frqId={f.id}
                   value={ans}
                   onChange={(v) => setFrqAnswers((s) => ({ ...s, [f.id]: v }))}
-                  disabled={!!grade}
+                  disabled={isFrqOnly && !!grade}
                 />
-                {!grade && (
+                {isFrqOnly && !grade && (
                   <Button
                     size="sm"
                     variant="outline"
@@ -874,8 +890,8 @@ function PaperRunner() {
                     单独评分本题
                   </Button>
                 )}
-                {grade && <FrqGradeCard grade={grade} />}
-                {grade && (
+                {isFrqOnly && grade && <FrqGradeCard grade={grade} />}
+                {isFrqOnly && grade && (
                   <div>
                     <Button
                       size="sm"
@@ -891,10 +907,34 @@ function PaperRunner() {
           );
         })}
 
-        <div className="flex justify-end gap-2">
-          <Button onClick={() => void submitAllFrqs()} disabled={allGrading}>
+        <div className="flex flex-col items-end gap-2">
+          {!isFrqOnly && (
+            <p className="text-xs text-muted-foreground">
+              {frqs.every((f) => {
+                const a = frqAnswers[f.id];
+                return a && (a.text.trim() || a.fileUrl);
+              })
+                ? "交卷后 AI 将一次性批改全部大题"
+                : `请先完成全部 ${frqs.length} 道大题再交卷`}
+            </p>
+          )}
+          <Button
+            onClick={() => void submitAllFrqs()}
+            disabled={
+              allGrading ||
+              (!isFrqOnly &&
+                !frqs.every((f) => {
+                  const a = frqAnswers[f.id];
+                  return a && (a.text.trim() || a.fileUrl);
+                }))
+            }
+          >
             {allGrading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            {mode === "exam" ? "交卷并查看全部成绩" : "完成并查看全部评分"}
+            {isFrqOnly
+              ? mode === "exam"
+                ? "交卷并查看全部成绩"
+                : "完成并查看全部评分"
+              : "交卷，AI 一起批改"}
           </Button>
         </div>
       </main>
@@ -1293,42 +1333,9 @@ function PaperRunner() {
 
       {frqSubmitted ? (
         <>
-          <h2 className="font-semibold mb-3">选择题（MCQ）详解</h2>
-          <div className="space-y-3 mb-8">
-            {questions.map((q, i) => {
-              const picked = answers[q.id];
-              const ok = picked === q.correct_answer;
-              return (
-                <Card key={q.id}>
-                  <CardContent className="p-4 space-y-2">
-                    <div className="flex items-center gap-2 text-sm">
-                      <span className="font-mono font-bold">#{i + 1}</span>
-                      <span
-                        className={cn(
-                          "text-xs px-1.5 py-0.5 rounded",
-                          ok ? "bg-success/15 text-success" : "bg-destructive/15 text-destructive",
-                        )}
-                      >
-                        {ok ? "正确" : picked ? "错误" : "未作答"}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        你的答案：{picked ?? "—"}　正确答案：{q.correct_answer}
-                      </span>
-                    </div>
-                    <div className="text-sm leading-relaxed">
-                      {renderStemWithTerms(q.stem, q.term_tags ?? [], termDict)}
-                    </div>
-                    <details className="text-sm">
-                      <summary className="cursor-pointer text-primary text-xs">查看解析</summary>
-                      <div className="mt-2 p-3 bg-muted rounded text-xs whitespace-pre-wrap leading-relaxed">
-                        {renderStemWithTerms(q.explanation, q.term_tags ?? [], termDict)}
-                      </div>
-                    </details>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
+          <h2 className="font-semibold mb-3">选择题 {stats.correct} / {stats.total}</h2>
+          <McqResultGrid questions={questions} answers={answers} termDict={termDict} />
+          <div className="mb-8" />
 
           {frqs.length > 0 && (
             <>

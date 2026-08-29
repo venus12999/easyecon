@@ -1,7 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
   ChevronRight,
   Sparkles,
@@ -346,8 +345,8 @@ function Index() {
           </Link>
         </section>
 
-        {/* 三张小卡 */}
-        <section className="grid gap-2.5 grid-cols-3 mb-4 sm:gap-3 sm:mb-5">
+        {/* 两张小卡 */}
+        <section className="grid gap-2.5 grid-cols-2 mb-4 sm:gap-3 sm:mb-5">
           <QuickCard
             to="/wrong"
             icon={<XCircle className="h-4 w-4 sm:h-5 sm:w-5 text-rose-500" />}
@@ -356,15 +355,6 @@ function Index() {
             subtitle="复盘并提升"
             accent="text-rose-600"
             accentText="去复习"
-          />
-          <QuickCard
-            to="/stats"
-            icon={<BarChart3 className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-500" />}
-            iconBg="bg-emerald-50"
-            title="统计"
-            subtitle="查看你的进度"
-            accent="text-emerald-600"
-            accentText={stats.rate !== null ? `${stats.rate}% 正确率` : "暂无数据"}
           />
           <QuickCard
             to="/terms"
@@ -376,22 +366,6 @@ function Index() {
             accentText="打开"
           />
         </section>
-
-        {!user && (
-          <Card className="mb-6 border-primary/30 bg-primary/5">
-            <CardContent className="p-3.5 sm:p-5 flex items-center justify-between gap-3 sm:gap-4">
-              <div className="text-sm">
-                <div className="font-semibold">注册后所有进度自动云端保存</div>
-              </div>
-              <Link
-                to="/auth"
-                className="shrink-0 inline-flex items-center rounded-md bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:bg-primary/90"
-              >
-                登录 / 注册
-              </Link>
-            </CardContent>
-          </Card>
-        )}
 
       </main>
     </div>
