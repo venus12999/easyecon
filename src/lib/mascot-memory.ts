@@ -4,6 +4,7 @@
 // unlocks, dispatches a `companion:milestone` event the FloatingMascot listens for.
 
 import { COMPANION_KEY, getCompanion, type CompanionId } from "@/lib/mascot-lines";
+import { supabase } from "@/integrations/supabase/client";
 
 const MEM_KEY = "mascot-memory-v1";
 
@@ -186,6 +187,34 @@ export function recordMockAttempt() {
   const newly = checkMilestones(mem);
   safeWrite(mem);
   newly.forEach((id) => fireMilestone(id, mem));
+}
+
+/** Pull cloud totals into local companion memory so profile stats match the homepage. */
+export async function hydrateMascotFromCloud(userId: string) {
+  if (typeof window === "undefined") return;
+  try {
+    const [totalRes, correctRes, frqRes, mockRes] = await Promise.all([
+      supabase.from("answer_attempts").select("id", { count: "exact", head: true }).eq("user_id", userId),
+      supabase.from("answer_attempts").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("is_correct", true),
+      supabase.from("frq_submissions").select("id", { count: "exact", head: true }).eq("user_id", userId),
+      supabase.from("mock_attempts").select("id", { count: "exact", head: true }).eq("user_id", userId),
+    ]);
+    const mem = safeRead();
+    const total = totalRes.count ?? 0;
+    const correct = correctRes.count ?? 0;
+    const frqs = frqRes.count ?? 0;
+    const mocks = mockRes.count ?? 0;
+    if (total <= mem.totalAnswers && frqs <= mem.frqSubmissions && mocks <= mem.mockAttempts) return;
+    mem.totalAnswers = Math.max(mem.totalAnswers, total);
+    mem.correctAnswers = Math.max(mem.correctAnswers, correct);
+    mem.frqSubmissions = Math.max(mem.frqSubmissions, frqs);
+    mem.mockAttempts = Math.max(mem.mockAttempts, mocks);
+    checkMilestones(mem);
+    safeWrite(mem);
+    window.dispatchEvent(new CustomEvent("companion:milestone"));
+  } catch {
+    // keep local memory
+  }
 }
 
 /** Called on app open to detect "回来啦" comeback line without altering counters. */

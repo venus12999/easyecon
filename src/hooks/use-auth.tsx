@@ -36,6 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         hadSession = true;
         setTimeout(() => {
           import("@/lib/migrate-local").then((m) => m.migrateLocalToCloud(s.user.id)).catch(() => {});
+          import("@/lib/mascot-memory").then((m) => m.hydrateMascotFromCloud(s.user.id)).catch(() => {});
         }, 0);
         return;
       }

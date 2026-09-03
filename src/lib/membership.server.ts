@@ -21,7 +21,7 @@ export function isPaidSubscriptionActive(subscription: SubscriptionSummary, now 
 
 export function membershipEnvironment(request: Request): MembershipEnvironment {
   const host = new URL(request.url).hostname;
-  return host.includes("preview") || host.includes("-dev.") || host.endsWith(".lovableproject.com") || host === "localhost"
+  return host.includes("preview") || host.includes("-dev.") || host.endsWith(".lovableproject.com") || host === "localhost" || host === "127.0.0.1"
     ? "sandbox"
     : "live";
 }
@@ -67,10 +67,6 @@ export async function consumeAiQuota(
   email?: string | null,
 ) {
   if (isLifetimeVipEmail(email)) {
-    return consumeLifetimeProQuota(supabaseAdmin, userId, kind);
-  }
-  const { data: profile } = await supabaseAdmin.from("profiles").select("email").eq("user_id", userId).maybeSingle();
-  if (isLifetimeVipEmail(profile?.email)) {
     return consumeLifetimeProQuota(supabaseAdmin, userId, kind);
   }
   const { data, error } = await supabaseAdmin.rpc("consume_ai_quota", {

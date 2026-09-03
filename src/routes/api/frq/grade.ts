@@ -141,7 +141,7 @@ export const Route = createFileRoute("/api/frq/grade")({
         const system = settings?.frq_grader_prompt?.trim() || "你是 AP 微观经济资深阅卷官，按官方 rubric 评分，输出 JSON。";
 
         const apiKey = process.env.LOVABLE_API_KEY;
-        if (!apiKey) return err("AI 未配置", 500);
+        if (!apiKey) return err("ai_not_configured", 503);
          const quota = await consumeAiQuota(supabaseAdmin, u.userId, "frq_grade", membershipEnvironment(request), u.email);
          if (!quota.allowed) return err("membership_quota_exhausted", 403);
 

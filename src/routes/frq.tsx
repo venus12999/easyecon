@@ -134,7 +134,7 @@ function FrqCategoriesPage() {
         search={unit ? {} : undefined}
         className="mb-5 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
-        <ArrowLeft className="h-4 w-4" /> {unit ? "返回大题分类" : "返回刷题"}
+        <ArrowLeft className="h-4 w-4" /> {unit ? "返回大题分类" : "返回首页"}
       </Link>
       <div className="mb-7">
         <div className="mb-2 flex items-center gap-2 text-sm font-medium text-primary">

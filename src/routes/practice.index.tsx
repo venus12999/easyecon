@@ -77,7 +77,6 @@ function PracticeIndex() {
       });
       const kpList = (kpData ?? []) as Kp[];
       setKps(kpList);
-      setUnit((cur) => cur ?? kpList[0]?.unit ?? null);
       setCounts(c);
       setLoading(false);
     })();
@@ -181,7 +180,7 @@ function PracticeIndex() {
           >
             <span className="flex items-center gap-1.5">
               <SlidersHorizontal className="h-3.5 w-3.5" />
-              {unit != null ? `Unit ${unit} · ${visibleKps.length} 个知识点` : "知识点筛选"}
+              {unit != null ? `Unit ${unit} · ${visibleKps.length} 个知识点` : `全部单元 · ${visibleKps.length} 个知识点`}
             </span>
             <ChevronDown className={cn("h-4 w-4 transition-transform", filterOpen && "rotate-180")} />
           </button>
@@ -190,6 +189,15 @@ function PracticeIndex() {
         {/* Filter chips — always visible on desktop, collapsible on mobile */}
         {allUnits.length > 0 && (
           <div className={cn("mb-4 flex flex-wrap gap-2", isMobile && !filterOpen && "hidden")}>
+            <button
+              type="button"
+              onClick={() => setUnit(null)}
+              className={`px-2.5 py-1 text-xs sm:px-3 sm:py-1.5 sm:text-sm rounded-pill border transition-colors ${
+                unit == null ? "bg-primary text-primary-foreground border-primary" : "bg-card hover:bg-accent"
+              }`}
+            >
+              全部
+            </button>
             {allUnits.map((u) => (
               <button
                 key={u}

@@ -13,16 +13,16 @@ function NotFoundComponent() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
+        <h2 className="mt-4 text-xl font-semibold text-foreground">页面不存在</h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          The page you're looking for doesn't exist or has been moved.
+          这个地址没有对应的页面，可能已被移动或删除。
         </p>
         <div className="mt-6">
           <Link
             to="/"
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
-            Go home
+            返回首页
           </Link>
         </div>
       </div>
@@ -36,17 +36,16 @@ export const Route = createRootRoute({
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "EasyEcon" },
-      { name: "description", content: "An AI-powered practice app for Chinese AP Economics students." },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "EasyEcon" },
-      { property: "og:description", content: "An AI-powered practice app for Chinese AP Economics students." },
+      { name: "description", content: "面向中国学生的 AP 微观经济刷题与模考：中英术语对照、官方风格解析与 AI 答疑。" },
+      { name: "author", content: "EasyEcon" },
+      { property: "og:title", content: "EasyEcon · AP 微观经济刷题" },
+      { property: "og:description", content: "面向中国学生的 AP 微观经济刷题与模考：中英术语对照、官方风格解析与 AI 答疑。" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
-      { name: "twitter:title", content: "EasyEcon" },
-      { name: "twitter:description", content: "An AI-powered practice app for Chinese AP Economics students." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/ffd12c22-9b2b-4b0a-9b84-4ea96e4355f3/id-preview-dcf64e09--f5c36f87-53cf-4e52-b0f3-f0fd7949b5f6.lovable.app-1782903843327.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/ffd12c22-9b2b-4b0a-9b84-4ea96e4355f3/id-preview-dcf64e09--f5c36f87-53cf-4e52-b0f3-f0fd7949b5f6.lovable.app-1782903843327.png" },
+      { name: "twitter:title", content: "EasyEcon · AP 微观经济刷题" },
+      { name: "twitter:description", content: "面向中国学生的 AP 微观经济刷题与模考。" },
+      { property: "og:image", content: "https://easyecon.lovable.app/logo.png" },
+      { name: "twitter:image", content: "https://easyecon.lovable.app/logo.png" },
     ],
     links: [
       {
@@ -67,7 +66,7 @@ export const Route = createRootRoute({
 
 function RootShell({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="zh-CN">
       <head>
         <HeadContent />
       </head>
@@ -99,7 +98,7 @@ function RootComponent() {
           </footer>
         )}
       </div>
-      {!path.startsWith("/admin") && <FeedbackButton />}
+      {!isMockExam && !path.startsWith("/admin") && <FeedbackButton />}
       {!isMockExam && !isAuthRoute && <FloatingMascot />}
       <Toaster richColors position="top-center" />
     </AuthProvider>

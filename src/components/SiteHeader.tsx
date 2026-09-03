@@ -25,6 +25,7 @@ export function SiteHeader() {
             to="/mock"
             className="px-3 py-1.5 rounded-md hover:bg-accent flex items-center gap-1.5"
             activeProps={{ className: "bg-accent text-accent-foreground" }}
+            activeOptions={{ exact: true }}
           >
             <ListChecks className="h-4 w-4" /> 模考
           </Link>

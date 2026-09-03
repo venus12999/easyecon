@@ -321,7 +321,7 @@ function QuestionCard({
             <img
               src={q.image_url}
               alt="题目配图"
-              className="max-h-80 w-auto rounded-md border border-border bg-muted/30"
+              className="max-h-80 max-w-full h-auto rounded-md border border-border bg-muted/30"
             />
           )}
           <div className="space-y-2">
@@ -367,7 +367,7 @@ function QuestionCard({
                   >
                     {isCorrect ? <Check className="h-4 w-4" /> : isWrongPick ? <X className="h-4 w-4" /> : o.k}
                   </span>
-                  <span className="flex-1 text-sm leading-relaxed pt-1" style={{ color: s.ink }}>
+                  <span className="min-w-0 flex-1 text-sm leading-relaxed pt-1 break-words" style={{ color: s.ink }}>
                     {renderStemWithTerms(o.v, tags, termDict)}
                   </span>
                 </button>

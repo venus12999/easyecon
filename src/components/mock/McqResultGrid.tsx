@@ -45,7 +45,7 @@ export function McqResultGrid({
         </span>
         <span>点击格子查看标准答案与 AI 答疑</span>
       </div>
-      <div className="grid grid-cols-10 gap-1.5 sm:gap-2">
+      <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-10 sm:gap-2">
         {questions.map((q, i) => {
           const isCorrect = answers[q.id] === q.correct_answer;
           return (
@@ -92,7 +92,7 @@ export function McqResultGrid({
                   {renderStemWithTerms(current.stem, current.term_tags ?? [], termDict)}
                 </div>
                 {current.image_url && (
-                  <img src={current.image_url} alt="题图" className="max-h-64 w-auto rounded border" />
+                  <img src={current.image_url} alt="题图" className="max-h-64 max-w-full h-auto rounded border" />
                 )}
                 <div className="space-y-2">
                   {(

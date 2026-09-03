@@ -86,7 +86,7 @@ function Index() {
   const [kps, setKps] = useState<Kp[]>([]);
   const [counts, setCounts] = useState<Counts>({});
   const [loading, setLoading] = useState(true);
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [coach, setCoach] = useState<CoachSuggestion | null>(null);
@@ -203,7 +203,9 @@ function Index() {
               {greeting}，{userLabel} <span className="inline-block">👋</span>
             </h1>
             <p className="mt-1 text-xs text-muted-foreground sm:mt-2 sm:text-base">
-              {user
+              {authLoading
+                ? "正在读取学习进度…"
+                : user
                 ? stats.today > 0
                   ? `今天已完成 ${stats.today} 题，继续保持！`
                   : "今天还没开始刷题，挑一张卡片出发吧。"

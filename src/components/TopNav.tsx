@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { UserRound, Receipt, CalendarCheck, Shield, LogOut, ChevronDown, History } from "lucide-react";
+import { UserRound, Receipt, CalendarCheck, Shield, LogOut, ChevronDown, History, Loader2 } from "lucide-react";
 import { LOGO_URL } from "@/lib/brand";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,8 +13,11 @@ import { useAuth } from "@/hooks/use-auth";
 import { isAdminEmail } from "@/lib/admin-emails";
 
 export function TopNav() {
-  const { user, signOut } = useAuth();
+  const { user, loading, signOut } = useAuth();
   const path = useRouterState({ select: (r) => r.location.pathname });
+  const redirect = useRouterState({
+    select: (r) => `${r.location.pathname}${r.location.searchStr}`,
+  });
   const showAdmin = isAdminEmail(user?.email);
   const label = user?.email?.split("@")[0] ?? "";
 
@@ -26,7 +29,9 @@ export function TopNav() {
           <span className="truncate text-sm font-bold">EasyEcon</span>
         </Link>
         <div className="flex-1" />
-        {user ? (
+        {loading ? (
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        ) : user ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm" className="max-w-[45vw] gap-1">
@@ -68,7 +73,7 @@ export function TopNav() {
         ) : (
           path !== "/auth" && (
             <Button asChild size="sm">
-              <Link to="/auth">登录 / 注册</Link>
+              <Link to="/auth" search={redirect && redirect !== "/" ? { redirect } : undefined}>登录 / 注册</Link>
             </Button>
           )
         )}

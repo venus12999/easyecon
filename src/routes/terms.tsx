@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -27,13 +27,17 @@ type Term = {
 function TermsPage() {
   const [terms, setTerms] = useState<Term[]>([]);
   const [q, setQ] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     supabase
       .from("terms")
       .select("*")
       .order("term_en")
-      .then(({ data }) => setTerms((data ?? []) as Term[]));
+      .then(({ data }) => {
+        setTerms((data ?? []) as Term[]);
+        setLoading(false);
+      });
   }, []);
 
   const filtered = useMemo(() => {
@@ -71,35 +75,40 @@ function TermsPage() {
           onChange={(e) => setQ(e.target.value)}
           className="mb-6 max-w-md"
         />
-        {groups.map(([letter, items]) => (
-          <section key={letter} className="mb-8">
-            <h2 className="text-sm font-semibold text-primary mb-3">{letter}</h2>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {items.map((t) => (
-                <Card key={t.id}>
-                  <CardContent className="p-4 space-y-1.5">
-                    <div className="flex items-baseline gap-2">
-                      <span className="font-semibold">{t.term_en}</span>
-                      <span className="text-sm text-primary">{t.term_zh}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground leading-relaxed">{t.definition}</p>
-                    {t.confusable_with && t.confusable_with.length > 0 && (
-                      <div className="flex flex-wrap gap-1 pt-1">
-                        {t.confusable_with.map((c) => (
-                          <span key={c} className="text-[10px] px-1.5 py-0.5 rounded bg-warning/15 text-warning-foreground border border-warning/30">
-                            易混：{c}
-                          </span>
-                        ))}
+        {loading ? (
+          <div className="flex justify-center py-16 text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin" />
+          </div>
+        ) : groups.length === 0 ? (
+          <p className="py-12 text-center text-muted-foreground">无匹配结果</p>
+        ) : (
+          groups.map(([letter, items]) => (
+            <section key={letter} className="mb-8">
+              <h2 className="text-sm font-semibold text-primary mb-3">{letter}</h2>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {items.map((t) => (
+                  <Card key={t.id}>
+                    <CardContent className="p-4 space-y-1.5">
+                      <div className="flex items-baseline gap-2">
+                        <span className="font-semibold">{t.term_en}</span>
+                        <span className="text-sm text-primary">{t.term_zh}</span>
                       </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </section>
-        ))}
-        {groups.length === 0 && (
-          <p className="text-center text-muted-foreground py-12">无匹配结果</p>
+                      <p className="text-xs text-muted-foreground leading-relaxed">{t.definition}</p>
+                      {t.confusable_with && t.confusable_with.length > 0 && (
+                        <div className="flex flex-wrap gap-1 pt-1">
+                          {t.confusable_with.map((c) => (
+                            <span key={c} className="text-[10px] px-1.5 py-0.5 rounded bg-warning/15 text-warning-foreground border border-warning/30">
+                              易混：{c}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </section>
+          ))
         )}
       </main>
     </div>

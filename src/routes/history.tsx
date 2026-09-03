@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -65,9 +65,16 @@ function fmt(dt: string) {
   return new Date(dt).toLocaleString("zh-CN", { hour12: false });
 }
 
+function isRecentRound(current: boolean, finishedAt: string) {
+  if (!current) return false;
+  const t = new Date(finishedAt).getTime();
+  return Number.isFinite(t) && Date.now() - t < 7 * 24 * 60 * 60 * 1000;
+}
+
 function HistoryPage() {
   const { tab } = Route.useSearch();
-  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
   const [loading, setLoading] = useState(true);
   const [mcq, setMcq] = useState<McqRound[]>([]);
   const [frq, setFrq] = useState<FrqRound[]>([]);
@@ -75,6 +82,7 @@ function HistoryPage() {
   const [detail, setDetail] = useState<DetailTarget | null>(null);
 
   useEffect(() => {
+    if (authLoading) return;
     if (!user) {
       setLoading(false);
       return;
@@ -174,7 +182,7 @@ function HistoryPage() {
       setMocks((mockRes.data ?? []) as MockRow[]);
       setLoading(false);
     })();
-  }, [user]);
+  }, [user, authLoading]);
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-6 sm:py-10">
@@ -186,17 +194,24 @@ function HistoryPage() {
       </h1>
       <p className="mt-1.5 text-sm text-muted-foreground">每次清空重做前的成绩都会保留在这里。</p>
 
-      {!user ? (
+      {authLoading || (user && loading) ? (
+        <div className="py-16 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-muted-foreground" /></div>
+      ) : !user ? (
         <Card className="mt-6">
           <CardContent className="p-6 text-sm text-muted-foreground">
             历史记录需要登录后才能保存。
-            <Link to="/auth" className="ml-1 text-primary hover:underline">立即登录 / 注册</Link>
+            <Link to="/auth" search={{ redirect: "/history" }} className="ml-1 text-primary hover:underline">立即登录 / 注册</Link>
           </CardContent>
         </Card>
-      ) : loading ? (
-        <div className="py-16 text-center"><Loader2 className="mx-auto h-5 w-5 animate-spin text-muted-foreground" /></div>
       ) : (
-        <Tabs defaultValue={tab ?? "mcq"} className="mt-5">
+        <Tabs
+          value={tab ?? "mcq"}
+          onValueChange={(value) => {
+            const next = value === "frq" || value === "mock" ? value : "mcq";
+            void navigate({ to: "/history", search: { tab: next } });
+          }}
+          className="mt-5"
+        >
           <TabsList>
             <TabsTrigger value="mcq">选择题</TabsTrigger>
             <TabsTrigger value="frq">大题</TabsTrigger>
@@ -213,7 +228,7 @@ function HistoryPage() {
                     <div className="min-w-0">
                       <div className="truncate text-sm font-semibold">
                         {r.unit != null ? `Unit ${r.unit} · ` : ""}{r.kpName}
-                        {r.current && <span className="ml-2 rounded-pill bg-primary/10 px-2 py-0.5 text-[10px] text-primary">进行中</span>}
+                        {isRecentRound(r.current, r.finishedAt) && <span className="ml-2 rounded-pill bg-primary/10 px-2 py-0.5 text-[10px] text-primary">进行中</span>}
                       </div>
                       <div className="mt-0.5 text-xs text-muted-foreground">{fmt(r.finishedAt)}</div>
                     </div>
@@ -255,7 +270,7 @@ function HistoryPage() {
                     <div className="min-w-0">
                       <div className="truncate text-sm font-semibold">
                         {r.paperTitle}
-                        {r.current && <span className="ml-2 rounded-pill bg-primary/10 px-2 py-0.5 text-[10px] text-primary">进行中</span>}
+                        {isRecentRound(r.current, r.finishedAt) && <span className="ml-2 rounded-pill bg-primary/10 px-2 py-0.5 text-[10px] text-primary">进行中</span>}
                       </div>
                       <div className="mt-0.5 text-xs text-muted-foreground">{fmt(r.finishedAt)} · {r.count} 道</div>
                     </div>

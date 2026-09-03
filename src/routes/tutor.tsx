@@ -17,8 +17,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
-import venusAvatar from "@/assets/venus-avatar.jpeg.asset.json";
-import steveAvatar from "@/assets/steve-avatar.jpg.asset.json";
 
 
 const TIME_SLOTS = ["10:00", "14:00", "16:00", "19:00", "20:00", "21:00"];
@@ -90,14 +88,14 @@ const TEACHERS = [
     title: "十一年级在读学长 · 沉稳内敛",
     desc: "他不会直接告诉你\"应该背什么\"，而是陪你把每一个难点真正弄懂。",
     motto: "逸一时，误一世。",
-    avatar: steveAvatar.url,
+    avatar: "https://easyecon.lovable.app/__l5e/assets-v1/166d0b84-c4d5-4b91-b642-a4a48f3a67f7/steve-avatar.jpg",
   },
   {
     name: "Venus",
     title: "十一年级在读学姐 · 激情鲜活",
     desc: "喜欢把经济学讲\"活\"，擅长用商业案例和生活中的真实场景讲清楚复杂的 AP Micro 概念。",
     motto: "希望每一节课结束，你都会觉得：\"原来 AP Micro 可以这么简单。\"",
-    avatar: venusAvatar.url,
+    avatar: "https://easyecon.lovable.app/__l5e/assets-v1/34958274-5567-4e8f-a910-146b51f21610/venus-avatar.jpeg",
   },
 ];
 

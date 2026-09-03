@@ -150,7 +150,7 @@ function ProfilePage() {
         </Link>
         <h1 className="text-2xl font-bold">个人资料</h1>
         <p className="text-sm text-muted-foreground">登录后即可设置你的昵称。</p>
-        <Button asChild><Link to="/auth">登录 / 注册</Link></Button>
+        <Button asChild><Link to="/auth" search={{ redirect: "/profile" }}>登录 / 注册</Link></Button>
       </main>
     );
   }
@@ -306,9 +306,9 @@ function ProfilePage() {
           ) : (
             <>
               <div className="grid gap-3 text-sm sm:grid-cols-3">
-                <div className="flex items-center gap-2"><Check className="h-4 w-4 text-primary" />每天 30 次 AI 答疑</div>
-                <div className="flex items-center gap-2"><Check className="h-4 w-4 text-primary" />每天 10 次 FRQ 评分</div>
-                <div className="flex items-center gap-2"><Check className="h-4 w-4 text-primary" />刷题和模考不限次</div>
+                <div className="flex items-center gap-2"><Check className="h-4 w-4 text-primary" />每天 3 次 AI 答疑</div>
+                <div className="flex items-center gap-2"><Check className="h-4 w-4 text-primary" />每天 1 次大题 AI 评分</div>
+                <div className="flex items-center gap-2"><Check className="h-4 w-4 text-primary" />完整模考每 7 天 1 次</div>
               </div>
               <div className="grid gap-3 sm:grid-cols-3">
                 <ManualPayDialog planKey="pro_monthly" trigger={<Button className="h-auto justify-between px-4 py-3"><span>月度会员</span><span>¥19/月</span></Button>} />

@@ -7,13 +7,27 @@ import { renderStemWithTerms, type TermInfo } from "@/lib/term-render";
 import { optionStyles, type OptKey } from "@/lib/option-colors";
 import { recordAnswer } from "@/lib/storage";
 import { recordAnswer as recordMascotAnswer, recordFrqSubmission, recordMockAttempt } from "@/lib/mascot-memory";
-import { Loader2, ArrowLeft, Bookmark, ChevronDown, ChevronUp, X, MoreVertical, Highlighter, Calculator as CalcIcon, MapPin, Move, Delete } from "lucide-react";
+import { Loader2, ArrowLeft, Bookmark, ChevronDown, ChevronUp, X, MoreVertical, Highlighter, Calculator as CalcIcon, MapPin } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { FrqAnswerBox, EMPTY_ANSWER, type FrqAnswerState } from "@/components/frq/FrqAnswerBox";
 import { FrqGradeCard, type GradeResult } from "@/components/frq/FrqGradeCard";
 import { FrqContent } from "@/components/frq/FrqContent";
 import { McqResultGrid } from "@/components/mock/McqResultGrid";
+import {
+  CalculatorModal,
+  HighlightColorBar,
+  HighlightRemoveMenu,
+  unwrapHighlightSpan,
+  useExamHighlights,
+} from "@/components/mock/exam-tools";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,6 +40,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { FRQ_CATEGORIES, getFrqUnit } from "@/lib/frq-categories";
+import { MockResultAuthGate } from "@/components/AuthGateCard";
+import { clearPendingMock, loadPendingMock, savePendingMock } from "@/lib/pending-mock";
+import { consumeMockAccess } from "@/lib/mock-access-client";
 
 export const Route = createFileRoute("/mock/$slug")({
   head: () => ({ meta: [{ title: "真题卷 · AP 微观经济" }] }),
@@ -87,7 +104,11 @@ function PaperRunner() {
   const [notFound, setNotFound] = useState(false);
 
   const [mode, setMode] = useState<"exam" | "practice">("practice");
-  const [phase, setPhase] = useState<"idle" | "running" | "break" | "frq" | "done">("idle");
+  const [phase, setPhase] = useState<"idle" | "running" | "break" | "frq" | "authGate" | "done">("idle");
+  const [revealError, setRevealError] = useState(false);
+  const revealingRef = useRef(false);
+  const pendingRestoredRef = useRef(false);
+  const mcqPersistedRef = useRef(false);
   const [breakSeconds, setBreakSeconds] = useState(0);
   const [frqSeconds, setFrqSeconds] = useState(0);
   const [frqAnswers, setFrqAnswers] = useState<Record<string, FrqAnswerState>>({});
@@ -110,58 +131,21 @@ function PaperRunner() {
   const [showCalc, setShowCalc] = useState(false);
   const [showDirections, setShowDirections] = useState(false);
   const [confirmSubmit, setConfirmSubmit] = useState(false);
-
-  // Highlighter
-  const stemRef = useRef<HTMLDivElement | null>(null);
-  const [highlightActive, setHighlightActive] = useState(false);
-  type HlColor = "yellow" | "pink" | "blue";
-  const [hlColor, setHlColor] = useState<HlColor>("yellow");
-  const HL_BG: Record<HlColor, string> = {
-    yellow: "#fde68a",
-    pink: "#fbcfe8",
-    blue: "#bfdbfe",
-  };
-
-  function onHighlightableMouseUp(container: HTMLDivElement | null) {
-    if (!highlightActive) return;
-    const sel = window.getSelection();
-    if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
-      return;
-    }
-    const range = sel.getRangeAt(0);
-    if (!container || !container.contains(range.commonAncestorContainer)) {
-      return;
-    }
-    applyHighlight(hlColor, container);
-  }
-
-  function applyHighlight(color: HlColor | "erase", targetContainer?: HTMLDivElement | null) {
-    const sel = window.getSelection();
-    if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
-    const range = sel.getRangeAt(0);
-    const container = targetContainer ?? stemRef.current;
-    if (!container || !container.contains(range.commonAncestorContainer)) return;
-    if (color === "erase") {
-      // unwrap any highlight spans intersecting the selection
-      const spans = Array.from(container.querySelectorAll<HTMLSpanElement>("span[data-hl]"));
-      spans.forEach((s) => {
-        if (range.intersectsNode(s)) {
-          const parent = s.parentNode!;
-          while (s.firstChild) parent.insertBefore(s.firstChild, s);
-          parent.removeChild(s);
-        }
-      });
-    } else {
-      const frag = range.extractContents();
-      const span = document.createElement("span");
-      span.setAttribute("data-hl", color);
-      span.style.backgroundColor = HL_BG[color];
-      span.style.borderRadius = "2px";
-      span.appendChild(frag);
-      range.insertNode(span);
-    }
-    sel.removeAllRanges();
-  }
+  const [highContrast, setHighContrast] = useState(false);
+  const [lineReader, setLineReader] = useState(false);
+  const [lineY, setLineY] = useState(120);
+  const {
+    stemRef,
+    highlightActive,
+    setHighlightActive,
+    hlColor,
+    setHlColor,
+    hlRemove,
+    setHlRemove,
+    onHighlightableMouseUp,
+    onHighlightClick,
+    consumePendingHighlightClick,
+  } = useExamHighlights(idx);
 
   const remaining = paper ? Math.max(0, paper.total_seconds - seconds) : 0;
   const timeUp = phase === "running" && mode === "exam" && remaining === 0;
@@ -211,8 +195,21 @@ function PaperRunner() {
   }, [selectedFrqId, selectedFrqUnit, slug]);
 
   useEffect(() => {
+    if (loading) return;
+    if (!pendingRestoredRef.current) {
+      const pending = loadPendingMock();
+      if (pending?.kind === "paper" && pending.slug === slug) {
+        pendingRestoredRef.current = true;
+        setMode(pending.mode);
+        setAnswers(pending.answers as Record<string, OptKey>);
+        setSeconds(pending.seconds);
+        setFrqAnswers(pending.frqAnswers);
+        setPhase("authGate");
+        return;
+      }
+    }
     const isFrqOnly = slug === "frq-pdf-practice" || slug.startsWith("frq-pack-");
-    if (!loading && isFrqOnly && phase === "idle" && frqs.length > 0) {
+    if (isFrqOnly && phase === "idle" && frqs.length > 0) {
       start();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -220,7 +217,7 @@ function PaperRunner() {
 
   // 加载已提交的评分与未提交的草稿，确保下次登录可继续
   useEffect(() => {
-    if (!user || !paper || frqs.length === 0) {
+    if (!user || !paper || frqs.length === 0 || phase === "authGate" || phase === "done") {
       setDraftHydrated(true);
       return;
     }
@@ -299,7 +296,7 @@ function PaperRunner() {
       if (allGraded) setRestartPrompt(true);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, paper?.id, frqs.length]);
+  }, [user?.id, paper?.id, frqs.length, phase]);
 
   async function restartAllFrqs() {
     if (!user || !paper) return;
@@ -390,6 +387,9 @@ function PaperRunner() {
     setAnswers({});
     setIdx(0);
     setSeconds(0);
+    mcqPersistedRef.current = false;
+    revealingRef.current = false;
+    setRevealError(false);
     // 仅当存在选择题（即非 FRQ-only 卷）时清空 FRQ 状态；
     // FRQ 整卷会从草稿与已有评分恢复，不能清空
     if (questions.length > 0) {
@@ -411,24 +411,73 @@ function PaperRunner() {
 
   async function start() {
     const isFrqOnly = slug === "frq-pdf-practice" || slug.startsWith("frq-pack-");
-    if (!user && !isFrqOnly) {
-      toast.error("请先登录后参加完整模考");
-      return;
-    }
     if (user && !isFrqOnly) {
-      const { data } = await supabase.auth.getSession();
-      const token = data.session?.access_token;
-      if (token) {
-        const response = await fetch(`/api/membership/mock-access?exam_key=${encodeURIComponent(slug)}`, { headers: { Authorization: `Bearer ${token}` } });
-        const access = await response.json();
-        if (response.ok && !access.allowed) {
-          const date = access.nextAvailableAt ? new Date(access.nextAvailableAt).toLocaleString() : null;
-          toast.error(date ? `免费用户下次可于 ${date} 参加模考` : "免费用户每 7 天可参加 1 次模考，可在个人资料页升级会员");
-          return;
-        }
+      const access = await consumeMockAccess(slug, "start");
+      if (!access.ok) {
+        toast.error(access.message);
+        return;
       }
     }
+    clearPendingMock();
     beginPaper();
+  }
+
+  function persistPendingPaper() {
+    savePendingMock({
+      kind: "paper",
+      slug,
+      mode,
+      answers,
+      seconds,
+      frqAnswers,
+    });
+  }
+
+  function persistMcqCloud(userId: string) {
+    if (mcqPersistedRef.current || questions.length === 0) return;
+    mcqPersistedRef.current = true;
+    const total = questions.length;
+    const correct = questions.filter((q) => answers[q.id] === q.correct_answer).length;
+    const detail = questions.map((q) => ({
+      question_id: q.id,
+      knowledge_point_id: q.knowledge_point_id,
+      picked: answers[q.id] ?? null,
+      correct: q.correct_answer,
+      is_correct: answers[q.id] === q.correct_answer,
+    }));
+    void supabase.from("mock_attempts").insert({
+      user_id: userId,
+      total,
+      correct,
+      duration_seconds: seconds,
+      detail,
+      paper_slug: slug,
+      paper_title: paper?.title ?? null,
+      mode: "paper",
+    });
+    const rows = questions
+      .filter((q) => !!answers[q.id])
+      .map((q) => ({
+        user_id: userId,
+        question_id: q.id,
+        knowledge_point_id: q.knowledge_point_id,
+        picked_answer: answers[q.id],
+        is_correct: answers[q.id] === q.correct_answer,
+        mode: "mock",
+      }));
+    if (rows.length > 0) void supabase.from("answer_attempts").insert(rows);
+    questions.forEach((q) => {
+      if (answers[q.id]) recordMascotAnswer({ knowledgePointId: q.knowledge_point_id, isCorrect: answers[q.id] === q.correct_answer });
+    });
+    recordMockAttempt();
+    const wrongRows = questions
+      .filter((q) => !!answers[q.id] && answers[q.id] !== q.correct_answer)
+      .map((q) => ({ user_id: userId, question_id: q.id, source: "mock" }));
+    if (wrongRows.length > 0) {
+      void supabase.from("wrong_questions").upsert(wrongRows, {
+        onConflict: "user_id,question_id,source",
+      });
+    }
   }
 
   function submit() {
@@ -437,53 +486,13 @@ function PaperRunner() {
       const ok = a === q.correct_answer;
       recordAnswer(q.knowledge_point_id, ok);
     });
-    if (user) {
-      const total = questions.length;
-      const correct = questions.filter((q) => answers[q.id] === q.correct_answer).length;
-      const detail = questions.map((q) => ({
-        question_id: q.id,
-        knowledge_point_id: q.knowledge_point_id,
-        picked: answers[q.id] ?? null,
-        correct: q.correct_answer,
-        is_correct: answers[q.id] === q.correct_answer,
-      }));
-      void supabase.from("mock_attempts").insert({
-        user_id: user.id,
-        total,
-        correct,
-        duration_seconds: seconds,
-        detail,
-        paper_slug: slug,
-        paper_title: paper?.title ?? null,
-        mode: "paper",
-      });
-      const rows = questions
-        .filter((q) => !!answers[q.id])
-        .map((q) => ({
-          user_id: user.id,
-          question_id: q.id,
-          knowledge_point_id: q.knowledge_point_id,
-          picked_answer: answers[q.id],
-          is_correct: answers[q.id] === q.correct_answer,
-          mode: "mock",
-        }));
-      if (rows.length > 0) void supabase.from("answer_attempts").insert(rows);
-      questions.forEach((q) => {
-        if (answers[q.id]) recordMascotAnswer({ knowledgePointId: q.knowledge_point_id, isCorrect: answers[q.id] === q.correct_answer });
-      });
-      recordMockAttempt();
-      const wrongRows = questions
-        .filter((q) => !!answers[q.id] && answers[q.id] !== q.correct_answer)
-        .map((q) => ({ user_id: user.id, question_id: q.id, source: "mock" }));
-      if (wrongRows.length > 0) {
-        void supabase.from("wrong_questions").upsert(wrongRows, {
-          onConflict: "user_id,question_id,source",
-        });
-      }
-    }
+    if (user) persistMcqCloud(user.id);
     // 有 FRQ 则进入大题阶段；仿真模式先走休息，练习模式直接进 FRQ
     if (frqs.length > 0) {
       setPhase(mode === "exam" ? "break" : "frq");
+    } else if (!user) {
+      persistPendingPaper();
+      setPhase("authGate");
     } else {
       setFrqSubmitted(true);
       setPhase("done");
@@ -550,7 +559,8 @@ function PaperRunner() {
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
       if (!token) {
-        toast.error("请先登录");
+        persistPendingPaper();
+        setPhase("authGate");
         return false;
       }
       const r = await fetch("/api/frq/grade", {
@@ -573,6 +583,8 @@ function PaperRunner() {
           ? "AI 评分额度暂时不足，请稍后重试"
           : j.error === "rate_limited"
             ? "AI 评分请求过多，请稍后重试"
+            : j.error === "ai_not_configured" || j.error === "server_misconfigured"
+              ? "AI 评分尚未配置（需要 Gemini 接口密钥），请联系管理员"
             : j.error || "AI 评分失败，请稍后重试";
         toast.error(message);
         return false;
@@ -597,16 +609,18 @@ function PaperRunner() {
   }
 
   async function submitAllFrqs() {
-    const isFrqOnly = slug === "frq-pdf-practice" || slug.startsWith("frq-pack-");
-    if (!isFrqOnly) {
-      const unfinished = frqs.filter((f) => {
-        const a = frqAnswers[f.id];
-        return !(a && (a.text.trim() || a.fileUrl));
-      });
-      if (unfinished.length > 0 && !(mode === "exam" && frqSeconds <= 0)) {
-        toast.error(`请先写完全部 ${frqs.length} 道大题再交卷`);
-        return;
-      }
+    const unfinished = frqs.filter((f) => {
+      const a = frqAnswers[f.id];
+      return !(a && (a.text.trim() || a.fileUrl));
+    });
+    if (unfinished.length > 0 && !(mode === "exam" && frqSeconds <= 0)) {
+      toast.error(`请先写完全部 ${frqs.length} 道大题再交卷`);
+      return false;
+    }
+    if (!user) {
+      persistPendingPaper();
+      setPhase("authGate");
+      return false;
     }
     toast.message("正在批改全部大题…");
     let gradingSucceeded = true;
@@ -618,7 +632,7 @@ function PaperRunner() {
     }
     if (!gradingSucceeded) {
       toast.error("部分作答尚未评分，请重试后再查看结果");
-      return;
+      return false;
     }
     const submittedCount = frqs.filter((f) => {
       const a = frqAnswers[f.id];
@@ -627,7 +641,42 @@ function PaperRunner() {
     for (let i = 0; i < submittedCount; i++) recordFrqSubmission();
     setFrqSubmitted(true);
     setPhase("done");
+    clearPendingMock();
+    return true;
   }
+
+  async function revealResultsAfterAuth() {
+    if (revealingRef.current || !user) return;
+    revealingRef.current = true;
+    setRevealError(false);
+    const isFrqOnly = slug === "frq-pdf-practice" || slug.startsWith("frq-pack-");
+    if (!isFrqOnly && questions.length > 0) {
+      const access = await consumeMockAccess(slug, "reveal");
+      if (!access.ok) {
+        toast.error(access.message);
+        setRevealError(true);
+        revealingRef.current = false;
+        return;
+      }
+    }
+    if (questions.length > 0) persistMcqCloud(user.id);
+    if (frqs.length === 0) {
+      setFrqSubmitted(true);
+      setPhase("done");
+      clearPendingMock();
+      revealingRef.current = false;
+      return;
+    }
+    const ok = await submitAllFrqs();
+    if (!ok && phase === "authGate") setRevealError(true);
+    revealingRef.current = false;
+  }
+
+  useEffect(() => {
+    if (phase !== "authGate" || !user) return;
+    void revealResultsAfterAuth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, user?.id]);
 
   const stats = useMemo(() => {
     if (phase !== "done") return null;
@@ -649,7 +698,13 @@ function PaperRunner() {
       <main className="mx-auto max-w-md px-4 py-16 text-center space-y-4">
         <h1 className="text-xl font-bold">未找到该真题卷</h1>
         <Button asChild variant="outline">
-          <Link to="/mock">返回卷库</Link>
+          <Link
+            to="/mock"
+            activeOptions={{ exact: true }}
+            activeProps={{ className: undefined, "aria-current": undefined }}
+          >
+            返回卷库
+          </Link>
         </Button>
       </main>
     );
@@ -663,6 +718,8 @@ function PaperRunner() {
         <Link
           to={isFrqPractice ? "/frq" : "/mock"}
           search={isFrqPractice && selectedFrqUnit ? { unit: selectedFrqUnit } : undefined}
+          activeOptions={{ exact: true }}
+          activeProps={{ className: "inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4", "aria-current": undefined }}
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
         >
           <ArrowLeft className="h-3.5 w-3.5" /> {isFrqPractice ? "返回题目列表" : "卷库"}
@@ -708,7 +765,7 @@ function PaperRunner() {
           </button>
         </div>}
         <Card>
-          <CardContent className="p-6 space-y-4">
+          <CardContent className="space-y-4 p-4 sm:p-6">
             <div className="grid grid-cols-3 gap-3 text-center text-sm">
               <div className="border rounded-md py-3">
                 <div className="text-2xl font-bold text-primary">{questions.length}</div>
@@ -723,6 +780,11 @@ function PaperRunner() {
                 <div className="text-xs text-muted-foreground mt-0.5">分钟</div>
               </div>
             </div>
+            {!user && (
+              <p className="text-xs text-muted-foreground text-center">
+                未登录也可开始作答；查看成绩、解析和大题评分需要登录或注册。
+              </p>
+            )}
             <Button
               onClick={start}
               disabled={questions.length === 0 && frqs.length === 0}
@@ -735,6 +797,26 @@ function PaperRunner() {
           </CardContent>
         </Card>
       </main>
+    );
+  }
+
+  if (phase === "authGate") {
+    const continuePath = `/mock/${slug}`;
+    return (
+      <MockResultAuthGate
+        continuePath={continuePath}
+        signedIn={!!user}
+        revealing={revealingRef.current}
+        revealError={revealError}
+        onRetry={() => void revealResultsAfterAuth()}
+        onDiscard={() => {
+          clearPendingMock();
+          pendingRestoredRef.current = false;
+          revealingRef.current = false;
+          setRevealError(false);
+          setPhase("idle");
+        }}
+      />
     );
   }
 
@@ -789,12 +871,14 @@ function PaperRunner() {
           <Link
             to="/frq"
             search={selectedFrqUnit ? { unit: selectedFrqUnit } : undefined}
+            activeOptions={{ exact: true }}
+            activeProps={{ className: "inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground", "aria-current": undefined }}
             className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="h-3.5 w-3.5" /> 返回题目列表
           </Link>
         )}
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold">{questions.length === 0 ? "大题练习 · FRQ" : "Section II · FRQ"}</h1>
             <p className="text-xs text-muted-foreground">
@@ -817,27 +901,7 @@ function PaperRunner() {
               <span>Highlights</span>
             </button>
             {highlightActive && (
-              <div className="flex items-center gap-1.5">
-                {(["yellow", "pink", "blue"] as HlColor[]).map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => setHlColor(c)}
-                    title={c}
-                    className={cn(
-                      "h-5 w-5 rounded-full border-2 transition-all",
-                      hlColor === c ? "border-foreground scale-110" : "border-transparent",
-                    )}
-                    style={{ backgroundColor: HL_BG[c] }}
-                  />
-                ))}
-                <button
-                  onClick={() => applyHighlight("erase")}
-                  className="text-[11px] px-2 py-0.5 rounded border border-border hover:bg-muted"
-                  title="清除所选高亮"
-                >
-                  擦除
-                </button>
-              </div>
+              <HighlightColorBar hlColor={hlColor} setHlColor={setHlColor} className="text-muted-foreground [&_span]:text-[11px] [&_button]:h-5 [&_button]:w-5" />
             )}
           </div>
           {mode === "exam" && (
@@ -868,6 +932,7 @@ function PaperRunner() {
                 </div>
                 <div
                   onMouseUp={(e) => onHighlightableMouseUp(e.currentTarget)}
+                  onClick={onHighlightClick}
                   className={cn("select-text space-y-2", highlightActive && "cursor-text")}
                 >
                   <FrqContent content={f.content} />
@@ -908,25 +973,24 @@ function PaperRunner() {
         })}
 
         <div className="flex flex-col items-end gap-2">
-          {!isFrqOnly && (
-            <p className="text-xs text-muted-foreground">
-              {frqs.every((f) => {
-                const a = frqAnswers[f.id];
-                return a && (a.text.trim() || a.fileUrl);
-              })
-                ? "交卷后 AI 将一次性批改全部大题"
-                : `请先完成全部 ${frqs.length} 道大题再交卷`}
-            </p>
-          )}
+          <p className="text-xs text-muted-foreground">
+            {frqs.every((f) => {
+              const a = frqAnswers[f.id];
+              return a && (a.text.trim() || a.fileUrl);
+            })
+              ? isFrqOnly
+                ? "全部作答后即可查看评分"
+                : "交卷后 AI 将一次性批改全部大题"
+              : `请先完成全部 ${frqs.length} 道大题再交卷`}
+          </p>
           <Button
             onClick={() => void submitAllFrqs()}
             disabled={
               allGrading ||
-              (!isFrqOnly &&
-                !frqs.every((f) => {
-                  const a = frqAnswers[f.id];
-                  return a && (a.text.trim() || a.fileUrl);
-                }))
+              !frqs.every((f) => {
+                const a = frqAnswers[f.id];
+                return a && (a.text.trim() || a.fileUrl);
+              })
             }
           >
             {allGrading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
@@ -937,6 +1001,15 @@ function PaperRunner() {
               : "交卷，AI 一起批改"}
           </Button>
         </div>
+        <HighlightRemoveMenu
+          target={hlRemove}
+          onClose={() => setHlRemove(null)}
+          onRemove={() => {
+            if (!hlRemove) return;
+            unwrapHighlightSpan(hlRemove.span);
+            setHlRemove(null);
+          }}
+        />
       </main>
     );
   }
@@ -977,77 +1050,83 @@ function PaperRunner() {
       setCrossed({ ...crossed, [cur.id]: next });
     };
     return (
-      <div className="fixed inset-0 z-50 bg-white text-slate-900 flex flex-col font-serif">
+      <div
+        className={cn(
+          "fixed inset-0 z-50 flex flex-col overflow-x-hidden bg-white font-serif text-slate-900",
+          highContrast && "invert",
+        )}
+        onMouseMove={lineReader ? (e) => setLineY(e.clientY) : undefined}
+      >
+        {lineReader && (
+          <div
+            aria-hidden
+            className="pointer-events-none fixed inset-x-0 z-[56] h-9 -translate-y-1/2 bg-amber-300/30 ring-1 ring-amber-500/50"
+            style={{ top: lineY }}
+          />
+        )}
         {/* Top bar */}
-        <header className="h-14 border-b border-slate-300 flex items-center px-6 shrink-0 bg-white">
-          <div className="flex-1 flex items-center gap-6">
-            <div>
-              <div className="font-bold text-base">Section I</div>
+        <header className="shrink-0 border-b border-slate-300 bg-white">
+          <div className="flex items-center gap-2 px-3 py-2 sm:h-14 sm:gap-4 sm:px-6">
+            <div className="min-w-0 flex-1">
+              <div className="font-bold text-sm sm:text-base">Section I</div>
               <button
                 onClick={() => setShowDirections(true)}
-                className="text-xs text-blue-700 hover:underline inline-flex items-center gap-1"
+                className="text-[11px] text-blue-700 hover:underline inline-flex items-center gap-1 sm:text-xs"
               >
                 Directions <ChevronDown className="h-3 w-3" />
               </button>
             </div>
-          </div>
-          <div className="flex flex-col items-center">
-            <div className={cn("font-mono text-lg tabular-nums", lowTime && !hideTime && "text-red-600 font-bold")}>
-              {hideTime ? "—:—" : `${mm}:${ss}`}
-            </div>
-            <button
-              onClick={() => setHideTime((v) => !v)}
-              className="text-xs px-3 py-0.5 rounded-full border border-slate-400 hover:bg-slate-100"
-            >
-              {hideTime ? "Show" : "Hide"}
-            </button>
-          </div>
-          <div className="flex-1 flex items-center justify-end gap-5 text-[11px]">
-            <button
-              onClick={() => setHighlightActive((v) => !v)}
-              className={cn(
-                "flex flex-col items-center gap-0.5 transition-colors",
-                highlightActive ? "text-[#1a2b6b] font-bold" : "text-slate-700 hover:text-slate-900",
-              )}
-            >
-              <Highlighter className="h-5 w-5" />
-              <span>Highlights</span>
-            </button>
-            {highlightActive && (
-              <div className="flex items-center gap-1.5">
-                {(["yellow", "pink", "blue"] as HlColor[]).map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => setHlColor(c)}
-                    title={c}
-                    className={cn(
-                      "h-4 w-4 rounded-full border-2 transition-all",
-                      hlColor === c ? "border-slate-900 scale-110" : "border-transparent",
-                    )}
-                    style={{ backgroundColor: HL_BG[c] }}
-                  />
-                ))}
-                <button
-                  onClick={() => applyHighlight("erase", stemRef.current)}
-                  className="text-[10px] px-1.5 py-0.5 rounded border border-slate-400 hover:bg-slate-100"
-                  title="清除所选高亮"
-                >
-                  擦除
-                </button>
+            <div className="flex shrink-0 flex-col items-center">
+              <div className={cn("font-mono text-base tabular-nums sm:text-lg", lowTime && !hideTime && "text-red-600 font-bold")}>
+                {hideTime ? "—:—" : `${mm}:${ss}`}
               </div>
-            )}
-            <button
-              onClick={() => setShowCalc(true)}
-              className="flex flex-col items-center gap-0.5 text-slate-700 hover:text-slate-900"
-            >
-              <CalcIcon className="h-5 w-5" />
-              <span>Calculator</span>
-            </button>
-            <button className="flex flex-col items-center gap-0.5 text-slate-700 hover:text-slate-900">
-              <MoreVertical className="h-5 w-5" />
-              <span>More</span>
-            </button>
+              <button
+                onClick={() => setHideTime((v) => !v)}
+                className="text-[10px] px-2 py-0.5 rounded-full border border-slate-400 hover:bg-slate-100 sm:text-xs sm:px-3"
+              >
+                {hideTime ? "Show" : "Hide"}
+              </button>
+            </div>
+            <div className="flex min-w-0 flex-1 items-center justify-end gap-2 text-[10px] sm:gap-5 sm:text-[11px]">
+              <button
+                onClick={() => setHighlightActive((v) => !v)}
+                className={cn(
+                  "flex flex-col items-center gap-0.5 transition-colors",
+                  highlightActive ? "text-[#1a2b6b] font-bold" : "text-slate-700 hover:text-slate-900",
+                )}
+              >
+                <Highlighter className="h-5 w-5" />
+                <span className="hidden sm:inline">Highlights</span>
+              </button>
+              <button
+                onClick={() => setShowCalc(true)}
+                className="flex flex-col items-center gap-0.5 text-slate-700 hover:text-slate-900"
+              >
+                <CalcIcon className="h-5 w-5" />
+                <span className="hidden sm:inline">Calculator</span>
+              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" className="flex flex-col items-center gap-0.5 text-slate-700 hover:text-slate-900">
+                    <MoreVertical className="h-5 w-5" />
+                    <span>More</span>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="z-[80] w-48">
+                  <DropdownMenuItem onClick={() => setShowDirections(true)}>Directions</DropdownMenuItem>
+                  <DropdownMenuCheckboxItem checked={highContrast} onCheckedChange={(v) => setHighContrast(!!v)}>
+                    High contrast
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem checked={lineReader} onCheckedChange={(v) => setLineReader(!!v)}>
+                    Line reader
+                  </DropdownMenuCheckboxItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
+          {highlightActive && (
+            <HighlightColorBar hlColor={hlColor} setHlColor={setHlColor} className="justify-end border-t border-slate-200 px-3 py-1.5 sm:px-6" />
+          )}
         </header>
 
         {/* Preview banner */}
@@ -1056,11 +1135,11 @@ function PaperRunner() {
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto">
-          <div className="max-w-3xl mx-auto px-6 py-6">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden">
+          <div className="max-w-3xl mx-auto px-4 py-4 sm:px-6 sm:py-6">
             {/* Question header bar */}
-            <div className="flex items-center justify-between border-b-2 border-dashed border-slate-300 pb-2 mb-5">
-              <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between gap-2 border-b-2 border-dashed border-slate-300 pb-2 mb-5">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                 <span className="bg-slate-900 text-white font-bold px-2.5 py-1 text-sm rounded-sm">
                   {idx + 1}
                 </span>
@@ -1072,13 +1151,13 @@ function PaperRunner() {
                   )}
                 >
                   <Bookmark className={cn("h-4 w-4", isMarked && "fill-red-600")} />
-                  Mark for Review
+                  Mark<span className="hidden sm:inline"> for Review</span>
                 </button>
               </div>
               <button
                 onClick={() => setEliminateMode((v) => !v)}
                 className={cn(
-                  "text-xs font-bold px-2 py-1 rounded border-2",
+                  "shrink-0 text-xs font-bold px-2 py-1 rounded border-2",
                   eliminateMode
                     ? "bg-[#1a2b6b] text-white border-[#1a2b6b]"
                     : "bg-white text-[#1a2b6b] border-[#1a2b6b]",
@@ -1094,12 +1173,13 @@ function PaperRunner() {
               key={cur.id}
               ref={stemRef}
               onMouseUp={() => onHighlightableMouseUp(stemRef.current)}
-              className={cn("text-[17px] leading-relaxed mb-6 select-text", highlightActive && "cursor-text")}
+              onClick={onHighlightClick}
+              className={cn("text-[16px] leading-relaxed mb-6 select-text break-words sm:text-[17px]", highlightActive && "cursor-text")}
             >
               {renderStemWithTerms(cur.stem, cur.term_tags ?? [], termDict)}
             </div>
             {cur.image_url && (
-              <img src={cur.image_url} alt="题图" className="max-h-80 w-auto rounded border border-slate-300 mb-6" />
+              <img src={cur.image_url} alt="题图" className="mb-6 max-h-80 max-w-full h-auto rounded border border-slate-300" />
             )}
 
             {/* Options */}
@@ -1108,15 +1188,16 @@ function PaperRunner() {
                 const picked = answers[cur.id] === o.k;
                 const isCrossed = curCrossed.has(o.k);
                 return (
-                  <div key={o.k} className="flex items-stretch gap-3">
+                  <div key={o.k} className="flex items-stretch gap-2 sm:gap-3">
                     <button
                       onClick={() => {
                         if (isCrossed) return;
+                        if (highlightActive && consumePendingHighlightClick()) return;
                         setAnswers({ ...answers, [cur.id]: o.k });
                       }}
                       disabled={isCrossed}
                       className={cn(
-                        "flex-1 text-left rounded-lg border px-4 py-3 flex items-center gap-3 transition-all bg-white",
+                        "relative min-w-0 flex-1 overflow-hidden text-left rounded-lg border px-3 py-2.5 flex items-start gap-3 transition-all bg-white sm:px-4 sm:py-3 sm:items-center",
                         picked
                           ? "border-[#1a2b6b] border-2 ring-2 ring-[#1a2b6b]/20"
                           : "border-slate-400 hover:border-slate-600",
@@ -1129,35 +1210,46 @@ function PaperRunner() {
                           picked
                             ? "bg-[#1a2b6b] text-white border-[#1a2b6b]"
                             : "bg-white text-slate-700 border-slate-500",
-                          isCrossed && "line-through",
                         )}
                       >
                         {o.k}
                       </span>
-                      <span className={cn("flex-1 text-[15px]", isCrossed && "line-through text-slate-500")}>
+                      <span
+                        onMouseUp={(e) => {
+                          e.stopPropagation();
+                          onHighlightableMouseUp(e.currentTarget);
+                        }}
+                        onClick={onHighlightClick}
+                        className={cn(
+                          "min-w-0 flex-1 break-words text-[15px] leading-relaxed select-text",
+                          highlightActive && "cursor-text",
+                          isCrossed && "text-slate-500",
+                        )}
+                      >
                         {renderStemWithTerms(o.v, cur.term_tags ?? [], termDict)}
                       </span>
                       {isCrossed && (
-                        <span className="absolute left-12 right-16 border-t border-slate-700 pointer-events-none" />
+                        <span
+                          aria-hidden
+                          className="pointer-events-none absolute left-3 right-3 top-1/2 z-[1] h-px -translate-y-1/2 bg-slate-800"
+                        />
                       )}
                     </button>
-                    {eliminateMode &&
-                      (isCrossed ? (
-                        <button
-                          onClick={() => toggleCross(o.k)}
-                          className="px-2 self-center text-sm font-bold text-slate-900 underline"
-                        >
-                          Undo
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => toggleCross(o.k)}
-                          className="shrink-0 self-center w-8 h-8 rounded-full border border-slate-500 flex items-center justify-center text-xs font-bold text-slate-700 hover:bg-slate-100"
-                          title="Cross out"
-                        >
-                          {o.k}
-                        </button>
-                      ))}
+                    {eliminateMode && (
+                      <button
+                        onClick={() => toggleCross(o.k)}
+                        className={cn(
+                          "shrink-0 self-center w-8 h-8 rounded-full border flex items-center justify-center text-xs font-bold hover:bg-slate-100",
+                          isCrossed
+                            ? "border-slate-900 text-slate-900 line-through"
+                            : "border-slate-500 text-slate-700",
+                        )}
+                        title={isCrossed ? "Undo" : "Cross out"}
+                        aria-label={isCrossed ? `撤销划掉选项 ${o.k}` : `划掉选项 ${o.k}`}
+                      >
+                        {o.k}
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -1166,56 +1258,66 @@ function PaperRunner() {
         </div>
 
         {/* Bottom bar */}
-        <footer className="h-16 border-t border-slate-300 bg-white flex items-center px-6 shrink-0 relative">
-          <div className="flex-1 font-bold text-base">{userName}</div>
-          <button
-            onClick={() => setShowNav((v) => !v)}
-            className="bg-slate-900 text-white rounded-full px-5 py-2 text-sm font-semibold inline-flex items-center gap-2 hover:bg-slate-800"
-          >
-            Question {idx + 1} of {questions.length}
-            {showNav ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
-          </button>
-          <div className="flex-1 flex justify-end gap-2">
+        <footer className="relative shrink-0 border-t border-slate-300 bg-white px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:h-16 sm:px-6 sm:py-0 sm:pb-0">
+          <div className="flex h-full items-center gap-2">
+            <div className="hidden min-w-0 flex-1 font-bold text-base sm:block">{userName}</div>
             <Button
               variant="outline"
-              className="rounded-full bg-white"
+              className="rounded-full bg-white px-3 sm:hidden"
               onClick={() => setIdx(Math.max(0, idx - 1))}
               disabled={idx === 0}
             >
               Back
             </Button>
-            {idx < questions.length - 1 ? (
+            <button
+              onClick={() => setShowNav((v) => !v)}
+              className="min-w-0 flex-1 truncate bg-slate-900 text-white rounded-full px-3 py-2 text-xs font-semibold inline-flex items-center justify-center gap-1 hover:bg-slate-800 sm:flex-none sm:px-5 sm:text-sm sm:gap-2"
+            >
+              <span className="truncate">Question {idx + 1} of {questions.length}</span>
+              {showNav ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronUp className="h-4 w-4 shrink-0" />}
+            </button>
+            <div className="flex shrink-0 justify-end gap-2 sm:flex-1">
               <Button
-                onClick={() => setIdx(idx + 1)}
-                className="rounded-full bg-[#1a2b6b] hover:bg-[#0f1e54] text-white"
+                variant="outline"
+                className="hidden rounded-full bg-white sm:inline-flex"
+                onClick={() => setIdx(Math.max(0, idx - 1))}
+                disabled={idx === 0}
               >
-                Next
+                Back
               </Button>
-            ) : (
-              <Button
-                onClick={() => setConfirmSubmit(true)}
-                className="rounded-full bg-[#1a2b6b] hover:bg-[#0f1e54] text-white"
-              >
-                Submit
-              </Button>
-            )}
+              {idx < questions.length - 1 ? (
+                <Button
+                  onClick={() => setIdx(idx + 1)}
+                  className="rounded-full bg-[#1a2b6b] hover:bg-[#0f1e54] text-white px-3 sm:px-4"
+                >
+                  Next
+                </Button>
+              ) : (
+                <Button
+                  onClick={() => setConfirmSubmit(true)}
+                  className="rounded-full bg-[#1a2b6b] hover:bg-[#0f1e54] text-white px-3 sm:px-4"
+                >
+                  Submit
+                </Button>
+              )}
+            </div>
           </div>
 
           {/* Question navigator popup */}
           {showNav && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setShowNav(false)} />
-              <div className="absolute bottom-[60px] left-1/2 -translate-x-1/2 z-50 w-[640px] max-w-[92vw] bg-white rounded-2xl shadow-2xl border border-slate-200 p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex-1" />
-                  <h3 className="text-xl font-bold">Section I Questions</h3>
-                  <div className="flex-1 flex justify-end">
+              <div className="absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 z-50 w-[min(640px,calc(100vw-1.25rem))] max-h-[min(70vh,520px)] overflow-y-auto bg-white rounded-2xl shadow-2xl border border-slate-200 p-4 sm:p-6">
+                <div className="flex items-center justify-between mb-4 gap-2">
+                  <div className="hidden flex-1 sm:block" />
+                  <h3 className="text-base font-bold sm:text-xl">Section I Questions</h3>
+                  <div className="flex flex-1 justify-end">
                     <button onClick={() => setShowNav(false)} className="text-slate-600 hover:text-slate-900">
                       <X className="h-5 w-5" />
                     </button>
                   </div>
                 </div>
-                <div className="border-y border-slate-200 py-2 flex items-center justify-center gap-6 text-sm mb-5">
+                <div className="border-y border-slate-200 py-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs sm:gap-6 sm:text-sm mb-5">
                   <span className="inline-flex items-center gap-1.5">
                     <MapPin className="h-4 w-4" /> Current
                   </span>
@@ -1226,7 +1328,7 @@ function PaperRunner() {
                     <Bookmark className="h-4 w-4 fill-red-600 text-red-600" /> For Review
                   </span>
                 </div>
-                <div className="grid grid-cols-10 gap-2 mb-5">
+                <div className="grid grid-cols-6 gap-1.5 mb-5 sm:grid-cols-10 sm:gap-2">
                   {questions.map((q, i) => {
                     const answered = !!answers[q.id];
                     const isCur = i === idx;
@@ -1243,7 +1345,7 @@ function PaperRunner() {
                             setShowNav(false);
                           }}
                           className={cn(
-                            "w-10 h-9 text-sm font-semibold flex items-center justify-center",
+                            "w-full h-8 text-xs font-semibold flex items-center justify-center sm:h-9 sm:text-sm",
                             answered
                               ? "bg-[#1a2b6b] text-white border border-[#1a2b6b]"
                               : "border-2 border-dashed border-slate-500 text-blue-700",
@@ -1307,6 +1409,15 @@ function PaperRunner() {
             </div>
           </div>
         )}
+        <HighlightRemoveMenu
+          target={hlRemove}
+          onClose={() => setHlRemove(null)}
+          onRemove={() => {
+            if (!hlRemove) return;
+            unwrapHighlightSpan(hlRemove.span);
+            setHlRemove(null);
+          }}
+        />
       </div>
     );
   }
@@ -1398,73 +1509,13 @@ function PaperRunner() {
                 ? { unit: selectedFrqUnit }
                 : undefined
             }
+            activeOptions={{ exact: true }}
+            activeProps={{ className: undefined, "aria-current": undefined }}
           >
             {slug === "frq-pdf-practice" || slug.startsWith("frq-pack-") ? "返回题目列表" : "返回卷库"}
           </Link>
         </Button>
       </div>
     </main>
-  );
-}
-
-function CalculatorModal({ onClose }: { onClose: () => void }) {
-  const [expr, setExpr] = useState("");
-  const [result, setResult] = useState<string>("");
-  const press = (s: string) => setExpr((e) => e + s);
-  const evalExpr = () => {
-    try {
-      // 仅允许数字与基本运算符
-      const safe = expr.replace(/[^0-9+\-*/().√ ]/g, "").replace(/√/g, "Math.sqrt");
-      // eslint-disable-next-line no-new-func
-      const v = Function(`"use strict"; return (${safe})`)();
-      setResult(String(v));
-    } catch {
-      setResult("Error");
-    }
-  };
-  const keys = [
-    ["(", ")", "√", "÷"],
-    ["7", "8", "9", "×"],
-    ["4", "5", "6", "−"],
-    ["1", "2", "3", "+"],
-    ["0", ".", "ans", "="],
-  ];
-  const map: Record<string, string> = { "÷": "/", "×": "*", "−": "-" };
-  return (
-    <div className="fixed top-20 right-6 z-[55] w-[340px] bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden">
-      <div className="bg-slate-900 text-white px-3 py-2 flex items-center justify-between">
-        <span className="font-semibold text-sm">Calculator</span>
-        <button onClick={onClose}><X className="h-4 w-4" /></button>
-      </div>
-      <div className="p-3 space-y-2 bg-slate-50">
-        <div className="h-9 bg-white border border-slate-300 rounded px-2 text-right text-sm font-mono flex items-center justify-end overflow-x-auto">{expr || "\u00A0"}</div>
-        <div className="h-12 bg-white border-2 border-blue-600 rounded px-2 text-right text-lg font-mono flex items-center justify-end overflow-x-auto">{result || "\u00A0"}</div>
-        <div className="flex items-center justify-between px-1">
-          <button onClick={() => setExpr("")} className="text-xs text-slate-600 hover:text-slate-900">clear all</button>
-          <button onClick={() => setExpr((e) => e.slice(0, -1))} className="text-slate-600 hover:text-slate-900"><Delete className="h-4 w-4" /></button>
-        </div>
-        <div className="grid grid-cols-4 gap-1.5">
-          {keys.flat().map((k) => {
-            const isOp = ["÷", "×", "−", "+", "=", "√", "(", ")"].includes(k);
-            return (
-              <button
-                key={k}
-                onClick={() => {
-                  if (k === "=") return evalExpr();
-                  if (k === "ans") return setExpr((e) => e + result);
-                  press(map[k] ?? k);
-                }}
-                className={cn(
-                  "h-10 rounded text-sm font-semibold",
-                  k === "=" ? "bg-blue-600 text-white hover:bg-blue-700" : isOp ? "bg-white border border-slate-300 hover:bg-slate-100" : "bg-slate-200 hover:bg-slate-300",
-                )}
-              >
-                {k}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </div>
   );
 }

@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { MarkdownLite } from "@/components/MarkdownLite";
 
 export type AiExplainQuestion = {
   stem: string;
@@ -20,17 +21,21 @@ export type AiExplainQuestion = {
 export function AskAi({ q }: { q: AiExplainQuestion }) {
   const [input, setInput] = useState("");
   const [answer, setAnswer] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function ask() {
     if (!input.trim()) return;
     setLoading(true);
     setAnswer("");
+    setError(null);
     try {
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
       if (!token) {
-        toast.error("请先登录后使用 AI 答疑");
+        const msg = "请先登录后使用 AI 答疑";
+        setError(msg);
+        toast.error(msg);
         setLoading(false);
         return;
       }
@@ -54,21 +59,28 @@ export function AskAi({ q }: { q: AiExplainQuestion }) {
         }),
       });
       if (!res.ok || !res.body) {
-        if (res.status === 403) {
-          toast.error("今日 AI 答疑次数已用完，可在个人资料页升级会员");
-        } else if (res.status === 429) {
-          toast.error("AI 请求过于频繁，请稍后再试");
-        } else if (res.status === 402) {
-          toast.error("AI 额度已用完，请联系管理员充值");
-        } else {
-          toast.error("AI 暂不可用");
-        }
+        const j = await res.json().catch(() => ({})) as { error?: string };
+        const msg =
+          res.status === 403
+            ? "今日 AI 答疑次数已用完，可在个人资料页升级会员"
+            : res.status === 429
+              ? "AI 请求过于频繁，请稍后再试"
+              : res.status === 402
+                ? "AI 额度已用完，请联系管理员充值"
+                : j.error === "ai_not_configured" || j.error === "server_misconfigured"
+                  ? "AI 答疑尚未配置（需要 Gemini 接口密钥），请联系管理员"
+                  : res.status === 401
+                    ? "请先登录后使用 AI 答疑"
+                    : "AI 暂不可用，请稍后重试";
+        setError(msg);
+        toast.error(msg);
         setLoading(false);
         return;
       }
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buf = "";
+      let text = "";
       let done = false;
       while (!done) {
         const { value, done: d } = await reader.read();
@@ -88,15 +100,25 @@ export function AskAi({ q }: { q: AiExplainQuestion }) {
           try {
             const p = JSON.parse(json);
             const c = p.choices?.[0]?.delta?.content;
-            if (c) setAnswer((a) => a + c);
+            if (c) {
+              text += c;
+              setAnswer(text);
+            }
           } catch {
             buf = line + "\n" + buf;
             break;
           }
         }
       }
+      if (!text.trim()) {
+        const msg = "AI 没有返回内容，请稍后重试";
+        setError(msg);
+        toast.error(msg);
+      }
     } catch {
-      toast.error("AI 请求失败");
+      const msg = "AI 请求失败";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -120,9 +142,10 @@ export function AskAi({ q }: { q: AiExplainQuestion }) {
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "提问"}
           </Button>
         </div>
+        {error && <p className="text-xs text-destructive">{error}</p>}
         {answer && (
-          <div className="whitespace-pre-wrap rounded-md border bg-background p-3 text-sm leading-relaxed">
-            {answer}
+          <div className="rounded-md border bg-background p-3">
+            <MarkdownLite text={answer} />
           </div>
         )}
       </CardContent>

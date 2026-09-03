@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,14 +8,25 @@ import { renderStemWithTerms, type TermInfo } from "@/lib/term-render";
 import { optionStyles, type OptKey } from "@/lib/option-colors";
 import { recordAnswer } from "@/lib/storage";
 import { recordAnswer as recordMascotAnswer, recordFrqSubmission, recordMockAttempt } from "@/lib/mascot-memory";
-import { ArrowLeft, Clock, Loader2, SquarePen } from "lucide-react";
+import { ArrowLeft, Clock, Highlighter, Calculator as CalcIcon, Loader2, SquarePen } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { FrqAnswerBox, EMPTY_ANSWER, type FrqAnswerState } from "@/components/frq/FrqAnswerBox";
 import { FrqGradeCard, type GradeResult } from "@/components/frq/FrqGradeCard";
 import { FrqContent } from "@/components/frq/FrqContent";
 import { McqResultGrid } from "@/components/mock/McqResultGrid";
+import {
+  CalculatorModal,
+  HighlightColorBar,
+  HighlightRemoveMenu,
+  unwrapHighlightSpan,
+  useExamHighlights,
+} from "@/components/mock/exam-tools";
 import { Button as UiButton } from "@/components/ui/button";
+import { MockResultAuthGate } from "@/components/AuthGateCard";
+import { clearPendingMock, loadPendingMock, savePendingMock } from "@/lib/pending-mock";
+import { consumeMockAccess } from "@/lib/mock-access-client";
 
 export const Route = createFileRoute("/mock/random")({
   head: () => ({ meta: [{ title: "模考模式 · AP 微观经济" }] }),
@@ -62,7 +73,11 @@ function shuffle<T>(arr: T[]): T[] {
 
 function Mock() {
   const { user } = useAuth();
-  const [phase, setPhase] = useState<"idle" | "running" | "frq" | "done">("idle");
+  const [phase, setPhase] = useState<"idle" | "running" | "frq" | "authGate" | "done">("idle");
+  const [revealError, setRevealError] = useState(false);
+  const revealingRef = useRef(false);
+  const pendingRestoredRef = useRef(false);
+  const mcqPersistedRef = useRef(false);
   const [questions, setQuestions] = useState<Q[]>([]);
   const [answers, setAnswers] = useState<Record<string, OptKey>>({});
   const [idx, setIdx] = useState(0);
@@ -74,6 +89,18 @@ function Mock() {
   const [frqAnswers, setFrqAnswers] = useState<Record<string, FrqAnswerState>>({});
   const [frqGrades, setFrqGrades] = useState<Record<string, GradeResult>>({});
   const [grading, setGrading] = useState<Record<string, boolean>>({});
+  const [showCalc, setShowCalc] = useState(false);
+  const {
+    highlightActive,
+    setHighlightActive,
+    hlColor,
+    setHlColor,
+    hlRemove,
+    setHlRemove,
+    onHighlightableMouseUp,
+    onHighlightClick,
+    consumePendingHighlightClick,
+  } = useExamHighlights(idx);
 
   // 官方 AP 微观考试：60 题 / 70 分钟
   const TOTAL_QUESTIONS = 60;
@@ -104,6 +131,19 @@ function Mock() {
   }, []);
 
   useEffect(() => {
+    if (pendingRestoredRef.current) return;
+    const pending = loadPendingMock();
+    if (pending?.kind !== "random") return;
+    pendingRestoredRef.current = true;
+    setQuestions(pending.questions as Q[]);
+    setAnswers(pending.answers as Record<string, OptKey>);
+    setSeconds(pending.seconds);
+    setFrqs(pending.frqs as FrqItem[]);
+    setFrqAnswers(pending.frqAnswers);
+    setPhase("authGate");
+  }, []);
+
+  useEffect(() => {
     if (phase !== "running") return;
     const t = setInterval(() => setSeconds((s) => s + 1), 1000);
     return () => clearInterval(t);
@@ -116,26 +156,15 @@ function Mock() {
   }, [timeUp]);
 
   async function start() {
-    if (!user) {
-      toast.error("请先登录后参加完整模考");
-      return;
-    }
     setLoading(true);
     setShortageNote(null);
-    const { data: sessionData } = await supabase.auth.getSession();
-    const token = sessionData.session?.access_token;
-    if (!token) {
-      setLoading(false);
-      toast.error("登录状态已过期，请重新登录");
-      return;
-    }
-    const accessResponse = await fetch("/api/membership/mock-access?exam_key=random-full", { headers: { Authorization: `Bearer ${token}` } });
-    const access = await accessResponse.json().catch(() => ({}));
-    if (!accessResponse.ok || !access.allowed) {
-      setLoading(false);
-      const date = access.nextAvailableAt ? new Date(access.nextAvailableAt).toLocaleString() : null;
-      toast.error(date ? `免费用户下次可于 ${date} 参加模考` : "免费用户每 7 天可参加 1 次模考，可在个人资料页升级会员");
-      return;
+    if (user) {
+      const access = await consumeMockAccess("random-full", "start");
+      if (!access.ok) {
+        setLoading(false);
+        toast.error(access.message);
+        return;
+      }
     }
     const { data } = await supabase
       .from("questions")
@@ -212,6 +241,10 @@ function Mock() {
     }
     // 整体打乱顺序
     const finalQuestions = shuffle(picked);
+    clearPendingMock();
+    mcqPersistedRef.current = false;
+    revealingRef.current = false;
+    setRevealError(false);
     setQuestions(finalQuestions);
     setAnswers({});
     setIdx(0);
@@ -242,6 +275,60 @@ function Mock() {
     setLoading(false);
   }
 
+  function persistPendingRandom() {
+    savePendingMock({
+      kind: "random",
+      answers,
+      seconds,
+      questions,
+      frqs,
+      frqAnswers,
+    });
+  }
+
+  function persistMcqCloud(userId: string) {
+    if (mcqPersistedRef.current || questions.length === 0) return;
+    mcqPersistedRef.current = true;
+    const total = questions.length;
+    const correct = questions.filter((q) => answers[q.id] === q.correct_answer).length;
+    const detail = questions.map((q) => ({
+      question_id: q.id,
+      knowledge_point_id: q.knowledge_point_id,
+      picked: answers[q.id] ?? null,
+      correct: q.correct_answer,
+      is_correct: answers[q.id] === q.correct_answer,
+    }));
+    void supabase.from("mock_attempts").insert({
+      user_id: userId,
+      total,
+      correct,
+      duration_seconds: seconds,
+      detail,
+      paper_slug: "random",
+      paper_title: "随机模考",
+      mode: "random",
+    });
+    const rows = questions
+      .filter((q) => !!answers[q.id])
+      .map((q) => ({
+        user_id: userId,
+        question_id: q.id,
+        knowledge_point_id: q.knowledge_point_id,
+        picked_answer: answers[q.id],
+        is_correct: answers[q.id] === q.correct_answer,
+        mode: "mock",
+      }));
+    if (rows.length > 0) void supabase.from("answer_attempts").insert(rows);
+    const wrongRows = questions
+      .filter((q) => !!answers[q.id] && answers[q.id] !== q.correct_answer)
+      .map((q) => ({ user_id: userId, question_id: q.id, source: "mock" }));
+    if (wrongRows.length > 0) {
+      void supabase.from("wrong_questions").upsert(wrongRows, {
+        onConflict: "user_id,question_id,source",
+      });
+    }
+  }
+
   function submit() {
     questions.forEach((q) => {
       const a = answers[q.id];
@@ -250,48 +337,12 @@ function Mock() {
       recordMascotAnswer({ knowledgePointId: q.knowledge_point_id, isCorrect: ok });
     });
     recordMockAttempt();
-    if (user) {
-      const total = questions.length;
-      const correct = questions.filter((q) => answers[q.id] === q.correct_answer).length;
-      const detail = questions.map((q) => ({
-        question_id: q.id,
-        knowledge_point_id: q.knowledge_point_id,
-        picked: answers[q.id] ?? null,
-        correct: q.correct_answer,
-        is_correct: answers[q.id] === q.correct_answer,
-      }));
-      void supabase.from("mock_attempts").insert({
-        user_id: user.id,
-        total,
-        correct,
-        duration_seconds: seconds,
-        detail,
-        paper_slug: "random",
-        paper_title: "随机模考",
-        mode: "random",
-      });
-      const rows = questions
-        .filter((q) => !!answers[q.id])
-        .map((q) => ({
-          user_id: user.id,
-          question_id: q.id,
-          knowledge_point_id: q.knowledge_point_id,
-          picked_answer: answers[q.id],
-          is_correct: answers[q.id] === q.correct_answer,
-          mode: "mock",
-        }));
-      if (rows.length > 0) void supabase.from("answer_attempts").insert(rows);
-      const wrongRows = questions
-        .filter((q) => !!answers[q.id] && answers[q.id] !== q.correct_answer)
-        .map((q) => ({ user_id: user.id, question_id: q.id, source: "mock" }));
-      if (wrongRows.length > 0) {
-        void supabase.from("wrong_questions").upsert(wrongRows, {
-          onConflict: "user_id,question_id,source",
-        });
-      }
-    }
+    if (user) persistMcqCloud(user.id);
     if (frqs.length > 0) setPhase("frq");
-    else setPhase("done");
+    else if (!user) {
+      persistPendingRandom();
+      setPhase("authGate");
+    } else setPhase("done");
   }
 
   async function gradeOneFrq(f: FrqItem): Promise<boolean> {
@@ -302,7 +353,8 @@ function Mock() {
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
       if (!token) {
-        toast.error("请先登录");
+        persistPendingRandom();
+        setPhase("authGate");
         return false;
       }
       const r = await fetch("/api/frq/grade", {
@@ -326,6 +378,8 @@ function Mock() {
               ? "AI 评分额度暂时不足，请稍后重试"
               : j.error === "rate_limited"
                 ? "AI 评分请求过多，请稍后重试"
+                : j.error === "ai_not_configured" || j.error === "server_misconfigured"
+                  ? "AI 评分尚未配置（需要 Gemini 接口密钥），请联系管理员"
                 : j.error || "AI 评分失败，请稍后重试";
         toast.error(message);
         return false;
@@ -348,7 +402,12 @@ function Mock() {
     });
     if (unfinished.length > 0) {
       toast.error(`请先写完全部 ${frqs.length} 道大题再交卷`);
-      return;
+      return false;
+    }
+    if (!user) {
+      persistPendingRandom();
+      setPhase("authGate");
+      return false;
     }
     toast.message("正在批改全部大题…");
     let ok = true;
@@ -360,7 +419,7 @@ function Mock() {
     }
     if (!ok) {
       toast.error("部分作答尚未评分，请重试后再查看结果");
-      return;
+      return false;
     }
     const submittedCount = frqs.filter((f) => {
       const a = frqAnswers[f.id];
@@ -368,7 +427,38 @@ function Mock() {
     }).length;
     for (let i = 0; i < submittedCount; i++) recordFrqSubmission();
     setPhase("done");
+    clearPendingMock();
+    return true;
   }
+
+  async function revealResultsAfterAuth() {
+    if (revealingRef.current || !user) return;
+    revealingRef.current = true;
+    setRevealError(false);
+    const access = await consumeMockAccess("random-full", "reveal");
+    if (!access.ok) {
+      toast.error(access.message);
+      setRevealError(true);
+      revealingRef.current = false;
+      return;
+    }
+    persistMcqCloud(user.id);
+    if (frqs.length === 0) {
+      setPhase("done");
+      clearPendingMock();
+      revealingRef.current = false;
+      return;
+    }
+    const ok = await submitAllFrqs();
+    if (!ok) setRevealError(true);
+    revealingRef.current = false;
+  }
+
+  useEffect(() => {
+    if (phase !== "authGate" || !user) return;
+    void revealResultsAfterAuth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, user?.id]);
 
   const stats = useMemo(() => {
     if (phase !== "done") return null;
@@ -392,6 +482,8 @@ function Mock() {
         <main className="mx-auto max-w-2xl px-4 py-12">
           <Link
             to="/mock"
+            activeOptions={{ exact: true }}
+            activeProps={{ className: "mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground", "aria-current": undefined }}
             className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" /> 返回卷库
@@ -409,7 +501,7 @@ function Mock() {
                 三道全部写完后交卷，AI 会一次性按 rubric 批改。
               </div>
               <div className="text-[11px] text-muted-foreground">
-                提示：免费用户每 7 天可参加 1 次完整模考；如已用尽冷却，可在个人资料页升级会员。
+                未登录也可开始作答；查看成绩、解析和大题评分需要登录或注册。免费用户每 7 天可参加 1 次完整模考。
               </div>
             </CardContent>
           </Card>
@@ -438,20 +530,67 @@ function Mock() {
     );
   }
 
+  if (phase === "authGate") {
+    return (
+      <MockResultAuthGate
+        continuePath="/mock/random"
+        signedIn={!!user}
+        revealing={revealingRef.current}
+        revealError={revealError}
+        onRetry={() => void revealResultsAfterAuth()}
+        onDiscard={() => {
+          clearPendingMock();
+          pendingRestoredRef.current = false;
+          revealingRef.current = false;
+          setRevealError(false);
+          setQuestions([]);
+          setFrqs([]);
+          setAnswers({});
+          setFrqAnswers({});
+          setPhase("idle");
+        }}
+      />
+    );
+  }
+
   if (phase === "frq") {
     const allGrading = Object.values(grading).some(Boolean);
     return (
       <div className="min-h-screen">
         <main className="mx-auto max-w-3xl px-4 py-8 space-y-6">
-          <div>
-            <div className="flex items-center gap-2 text-sm font-medium text-primary">
-              <SquarePen className="h-4 w-4" /> Section II · FRQ
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 text-sm font-medium text-primary">
+                <SquarePen className="h-4 w-4" /> Section II · FRQ
+              </div>
+              <h1 className="mt-1 text-2xl font-bold">大题部分（1 长 + 2 短）</h1>
+              <p className="mt-1 text-xs text-muted-foreground">
+                写完全部 3 道大题后交卷，AI 会一起批改。
+              </p>
             </div>
-            <h1 className="mt-1 text-2xl font-bold">大题部分（1 长 + 2 短）</h1>
-            <p className="mt-1 text-xs text-muted-foreground">
-              写完全部 3 道大题后交卷，AI 会一起批改。
-            </p>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setHighlightActive((v) => !v)}
+                className={cn(
+                  "flex flex-col items-center gap-0.5 text-[11px] transition-colors",
+                  highlightActive ? "text-primary font-semibold" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Highlighter className="h-5 w-5" />
+                <span>Highlights</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCalc(true)}
+                className="flex flex-col items-center gap-0.5 text-[11px] text-muted-foreground hover:text-foreground"
+              >
+                <CalcIcon className="h-5 w-5" />
+                <span>Calculator</span>
+              </button>
+            </div>
           </div>
+          {highlightActive && <HighlightColorBar hlColor={hlColor} setHlColor={setHlColor} />}
           {frqs.map((f, i) => {
             const ans = frqAnswers[f.id] ?? EMPTY_ANSWER;
             return (
@@ -464,7 +603,13 @@ function Mock() {
                       满分 {f.max_score} 分
                     </span>
                   </div>
-                  <FrqContent content={f.content} />
+                  <div
+                    onMouseUp={(e) => onHighlightableMouseUp(e.currentTarget)}
+                    onClick={onHighlightClick}
+                    className={cn("select-text", highlightActive && "cursor-text")}
+                  >
+                    <FrqContent content={f.content} />
+                  </div>
                   <FrqAnswerBox
                     paperId={f.paper_id}
                     frqId={f.id}
@@ -499,6 +644,16 @@ function Mock() {
               交卷，AI 一起批改
             </UiButton>
           </div>
+          {showCalc && <CalculatorModal onClose={() => setShowCalc(false)} />}
+          <HighlightRemoveMenu
+            target={hlRemove}
+            onClose={() => setHlRemove(null)}
+            onRemove={() => {
+              if (!hlRemove) return;
+              unwrapHighlightSpan(hlRemove.span);
+              setHlRemove(null);
+            }}
+          />
         </main>
       </div>
     );
@@ -524,7 +679,7 @@ function Mock() {
               {shortageNote}
             </div>
           )}
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <span>{idx + 1} / {questions.length}</span>
               {frqs.length > 0 && (
@@ -533,22 +688,48 @@ function Mock() {
                 </span>
               )}
             </div>
-            <div className={`flex items-center gap-1.5 text-sm font-mono ${lowTime ? "text-destructive font-bold" : ""}`}>
-              <Clock className={`h-4 w-4 ${lowTime ? "text-destructive" : "text-primary"}`} />
-              {mm}:{ss}
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setHighlightActive((v) => !v)}
+                className={cn(
+                  "flex flex-col items-center gap-0.5 text-[11px] transition-colors",
+                  highlightActive ? "text-primary font-semibold" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Highlighter className="h-5 w-5" />
+                <span>Highlights</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCalc(true)}
+                className="flex flex-col items-center gap-0.5 text-[11px] text-muted-foreground hover:text-foreground"
+              >
+                <CalcIcon className="h-5 w-5" />
+                <span>Calculator</span>
+              </button>
+              <div className={`flex items-center gap-1.5 text-sm font-mono ${lowTime ? "text-destructive font-bold" : ""}`}>
+                <Clock className={`h-4 w-4 ${lowTime ? "text-destructive" : "text-primary"}`} />
+                {mm}:{ss}
+              </div>
             </div>
           </div>
+          {highlightActive && <HighlightColorBar hlColor={hlColor} setHlColor={setHlColor} className="mb-3 justify-end" />}
           <Progress value={((idx + 1) / questions.length) * 100} className="mb-6" />
           <Card>
-            <CardContent className="p-6 space-y-5">
-              <p className="text-base leading-relaxed">
+            <CardContent className="space-y-5 p-4 sm:p-6">
+              <div
+                onMouseUp={(e) => onHighlightableMouseUp(e.currentTarget)}
+                onClick={onHighlightClick}
+                className={cn("text-base leading-relaxed select-text", highlightActive && "cursor-text")}
+              >
                 {renderStemWithTerms(cur.stem, cur.term_tags ?? [], termDict)}
-              </p>
+              </div>
               {cur.image_url && (
                 <img
                   src={cur.image_url}
                   alt="题图"
-                  className="max-h-80 w-auto rounded border border-border"
+                  className="max-h-80 max-w-full h-auto rounded border border-border"
                 />
               )}
               <div className="space-y-2">
@@ -558,7 +739,10 @@ function Mock() {
                   return (
                     <button
                       key={o.k}
-                      onClick={() => setAnswers({ ...answers, [cur.id]: o.k })}
+                      onClick={() => {
+                        if (highlightActive && consumePendingHighlightClick()) return;
+                        setAnswers({ ...answers, [cur.id]: o.k });
+                      }}
                       className="w-full text-left rounded-lg border-2 px-4 py-3 flex items-start gap-3 transition-all"
                       style={{
                         borderColor: picked ? s.border : "transparent",
@@ -571,7 +755,15 @@ function Mock() {
                       >
                         {o.k}
                       </span>
-                      <span className="flex-1 text-sm pt-1" style={{ color: s.ink }}>
+                      <span
+                        onMouseUp={(e) => {
+                          e.stopPropagation();
+                          onHighlightableMouseUp(e.currentTarget);
+                        }}
+                        onClick={onHighlightClick}
+                        className={cn("min-w-0 flex-1 text-sm pt-1 break-words select-text", highlightActive && "cursor-text")}
+                        style={{ color: s.ink }}
+                      >
                         {renderStemWithTerms(o.v, cur.term_tags ?? [], termDict)}
                       </span>
                     </button>
@@ -580,11 +772,11 @@ function Mock() {
               </div>
             </CardContent>
           </Card>
-          <div className="mt-6 flex items-center justify-between">
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-2">
             <Button variant="outline" onClick={() => setIdx(Math.max(0, idx - 1))} disabled={idx === 0}>
               上一题
             </Button>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-2">
               {idx < questions.length - 1 && (
                 <Button
                   variant="ghost"
@@ -593,16 +785,26 @@ function Mock() {
                     if (confirm(`确认提前交卷？已作答 ${Object.keys(answers).length}/${questions.length}，未答按错处理，随后进入 Section II 大题。`)) submit();
                   }}
                 >
-                  提前交卷 → 大题
+                  提前交卷
                 </Button>
               )}
               {idx < questions.length - 1 ? (
                 <Button onClick={() => setIdx(idx + 1)}>下一题</Button>
               ) : (
-                <Button onClick={submit}>交卷 → 进入大题</Button>
+                <Button onClick={submit}>交卷进入大题</Button>
               )}
             </div>
           </div>
+          {showCalc && <CalculatorModal onClose={() => setShowCalc(false)} />}
+          <HighlightRemoveMenu
+            target={hlRemove}
+            onClose={() => setHlRemove(null)}
+            onRemove={() => {
+              if (!hlRemove) return;
+              unwrapHighlightSpan(hlRemove.span);
+              setHlRemove(null);
+            }}
+          />
         </main>
       </div>
     );

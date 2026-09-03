@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, useRouter, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,9 +13,13 @@ import { LOGO_URL } from "@/lib/brand";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { getRememberPreference, setRememberPreference } from "@/lib/remember-session";
+import { safeRedirectPath } from "@/lib/safe-redirect";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({ meta: [{ title: "登录 / 注册 · AP 微观经济" }, { name: "robots", content: "noindex" }] }),
+  validateSearch: (search: Record<string, unknown>): { redirect?: string } => ({
+    redirect: safeRedirectPath(search.redirect),
+  }),
   component: AuthPage,
 });
 
@@ -26,6 +30,8 @@ const schema = z.object({
 
 function AuthPage() {
   const nav = useNavigate();
+  const router = useRouter();
+  const { redirect } = Route.useSearch();
   const { user } = useAuth();
   const [tab, setTab] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
@@ -35,9 +41,16 @@ function AuthPage() {
   const [remember, setRemember] = useState(true);
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
 
+  function goAfterAuth() {
+    const path = safeRedirectPath(redirect);
+    if (path) router.history.push(path);
+    else void nav({ to: "/" });
+  }
+
   useEffect(() => {
-    if (user) nav({ to: "/" });
-  }, [user, nav]);
+    if (user) goAfterAuth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   useEffect(() => {
     setRemember(getRememberPreference());
@@ -56,7 +69,7 @@ function AuthPage() {
         const { data, error } = await supabase.auth.signUp({
           email: parsed.data.email,
           password: parsed.data.password,
-          options: { emailRedirectTo: `${window.location.origin}/` },
+          options: { emailRedirectTo: `${window.location.origin}${safeRedirectPath(redirect) ?? "/"}` },
         });
         if (error) {
           if (/registered|exists/i.test(error.message)) toast.error("该邮箱已注册，请直接登录");
@@ -66,7 +79,7 @@ function AuthPage() {
         if (data.session) {
           setRememberPreference(remember);
           toast.success("注册成功");
-          nav({ to: "/" });
+          goAfterAuth();
         } else {
           setPendingEmail(parsed.data.email);
           toast.success("验证邮件已发送，请前往邮箱点击链接完成注册");
@@ -87,7 +100,7 @@ function AuthPage() {
         }
         setRememberPreference(remember);
         toast.success("登录成功");
-        nav({ to: "/" });
+        goAfterAuth();
       }
     } finally {
       setBusy(false);

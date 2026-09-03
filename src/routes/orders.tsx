@@ -143,12 +143,13 @@ function OrdersPage() {
   }, [user]);
 
   useEffect(() => {
+    if (authLoading) return;
     if (!user) { setLoading(false); return; }
     let cancelled = false;
     setLoading(true);
     void load().finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [user, load]);
+  }, [user, authLoading, load]);
 
   const hasPending = manual.some((m) => m.status === "pending");
 

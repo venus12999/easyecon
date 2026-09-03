@@ -43,8 +43,8 @@ export const Route = createFileRoute("/api/ai-explain")({
           }
           const apiKey = process.env.LOVABLE_API_KEY;
           if (!apiKey) {
-            return new Response(JSON.stringify({ error: "AI 未配置" }), {
-              status: 500,
+            return new Response(JSON.stringify({ error: "ai_not_configured" }), {
+              status: 503,
               headers: jsonHeaders,
             });
           }
@@ -70,7 +70,8 @@ export const Route = createFileRoute("/api/ai-explain")({
 3. 紧扣 AP CED（Course and Exam Description）大纲与微观经济学标准定义。
 4. 学生若问"为什么不选 X"，请围绕该选项错在哪里、易混点、概念辨析展开。
 5. 涉及 shift/movement、price ceiling/floor、elastic/inelastic 等易混词时，主动给出区分要点。
-6. 回答控制在 200 字以内，分点清晰，避免空泛。`;
+6. 回答控制在 200 字以内，分点清晰，避免空泛。
+7. 不要使用 Markdown 符号（不要用 *、**、#、反引号）。用换行和「1. 2. 3.」分点，强调时直接写中文。`;
 
           const userMsg = `【题目】\n${context.stem}\n\n【选项】\nA. ${context.options.A}\nB. ${context.options.B}\nC. ${context.options.C}\nD. ${context.options.D}\n\n【正确答案】${context.correct}\n\n【官方解析】\n${context.explanation}\n\n【学生提问】\n${question}`;
 
@@ -140,6 +141,13 @@ export const Route = createFileRoute("/api/ai-explain")({
           });
         } catch (e) {
           console.error("ai-explain error", e);
+          const message = e instanceof Error ? e.message : "";
+          if (/SERVICE_ROLE|environment variables/i.test(message)) {
+            return new Response(JSON.stringify({ error: "server_misconfigured" }), {
+              status: 503,
+              headers: jsonHeaders,
+            });
+          }
           return new Response(JSON.stringify({ error: "server_error" }), {
             status: 500,
             headers: jsonHeaders,

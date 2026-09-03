@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/tutor-bookings")({
   head: () => ({ meta: [{ title: "我的试课预约" }] }),
@@ -64,6 +64,14 @@ function MyBookingsPage() {
     if (error) return toast.error(error.message);
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, status: "cancelled" } : r)));
     toast.success("已取消");
+  }
+
+  if (authLoading || !user) {
+    return (
+      <div className="container max-w-3xl py-16 text-center">
+        <Loader2 className="mx-auto h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    );
   }
 
   return (

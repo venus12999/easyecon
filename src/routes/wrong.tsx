@@ -54,14 +54,14 @@ const TYPE_LABEL: Record<QType, string> = {
 };
 
 function WrongBook() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [items, setItems] = useState<Q[]>([]);
   const [loading, setLoading] = useState(true);
   const [unitFilter, setUnitFilter] = useState<string>("all");
   const [kpFilter, setKpFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
-  const [rangeFilter, setRangeFilter] = useState<RangeKey>("30");
+  const [rangeFilter, setRangeFilter] = useState<RangeKey>("all");
 
   async function load() {
     let records: Array<{ question_id: string; added_at: string | null; source: "practice" | "mock" }> = [];
@@ -123,8 +123,10 @@ function WrongBook() {
     setLoading(false);
   }
   useEffect(() => {
-    load();
-  }, [user]);
+    if (authLoading) return;
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, authLoading]);
 
   const units = useMemo(() => {
     const s = new Set<number>();
@@ -206,7 +208,7 @@ function WrongBook() {
         </Link>
         <h1 className="text-2xl font-bold tracking-tight mb-1">错题本</h1>
         <p className="text-muted-foreground text-sm mb-6">
-          {user ? "已同步至云端" : "数据保存在你的浏览器本地（登录后可同步并查看趋势）"}
+          {authLoading ? "正在同步错题…" : user ? "已同步至云端" : "数据保存在你的浏览器本地（登录后可同步并查看趋势）"}
         </p>
 
         {loading ? (
