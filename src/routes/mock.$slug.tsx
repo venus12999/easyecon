@@ -44,7 +44,7 @@ import { MockResultAuthGate } from "@/components/AuthGateCard";
 import { clearPendingMock, loadPendingMock, savePendingMock } from "@/lib/pending-mock";
 import { consumeMockAccess } from "@/lib/mock-access-client";
 import { authFetch } from "@/lib/auth-fetch";
-import { isUuid, saveSchoolExamSession } from "@/lib/school-exam-session";
+import { clearSchoolExamSession, isExamLocalEmail, isUuid, markExamExited, saveSchoolExamSession } from "@/lib/school-exam-session";
 
 export const Route = createFileRoute("/mock/$slug")({
   head: () => ({ meta: [{ title: "真题卷 · AP 微观经济" }] }),
@@ -100,7 +100,7 @@ function PaperRunner() {
   const { unit: selectedFrqUnit, frq: selectedFrqId, assignment: assignmentId } = Route.useSearch();
   const isSchoolExam = !!assignmentId;
   const nav = useNavigate();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, signOut } = useAuth();
   const [paper, setPaper] = useState<Paper | null>(null);
   const [questions, setQuestions] = useState<Q[]>([]);
   const [frqs, setFrqs] = useState<Frq[]>([]);
@@ -159,11 +159,18 @@ function PaperRunner() {
     consumePendingHighlightClick,
   } = useExamHighlights(idx);
 
-  const remaining = paper ? Math.max(0, paper.total_seconds - seconds) : 0;
-  const timeUp = phase === "running" && mode === "exam" && remaining === 0;
+  const remaining = (() => {
+    if (!paper) return 0;
+    const paperLeft = Math.max(0, paper.total_seconds - seconds);
+    if (!isSchoolExam || !schoolEndsAt) return paperLeft;
+    const untilEnd = Math.max(0, Math.floor((Date.parse(schoolEndsAt) - Date.now()) / 1000));
+    return Math.min(paperLeft, untilEnd);
+  })();
+  const timeUp = (phase === "running" || phase === "frq" || phase === "break") && mode === "exam" && remaining === 0;
 
   useEffect(() => {
     (async () => {
+      if (assignmentId) return;
       setLoading(true);
       const { data: p } = await supabase
         .from("mock_papers")
@@ -204,7 +211,7 @@ function PaperRunner() {
       setTermDict(d);
       setLoading(false);
     })();
-  }, [selectedFrqId, selectedFrqUnit, slug]);
+  }, [assignmentId, selectedFrqId, selectedFrqUnit, slug]);
 
   useEffect(() => {
     if (slug.startsWith("school-") && !assignmentId) {
@@ -219,16 +226,19 @@ function PaperRunner() {
       void nav({ to: "/exam" });
       return;
     }
-    if (loading || !paper) return;
     if (schoolHydratedRef.current) return;
     let cancelled = false;
     setMode("exam");
+    setLoading(true);
     void (async () => {
-      const r = await authFetch(`/api/exam/attempt?assignment_id=${assignmentId}`);
+      const r = await authFetch(`/api/exam/paper?assignment_id=${assignmentId}`);
       const j = (await r.json()) as {
         error?: string;
         assignment?: { title: string; ends_at: string; results_published: boolean };
-        paper?: { slug: string };
+        paper?: Paper & { slug?: string };
+        roster?: { student_id: string; student_name: string };
+        questions?: Q[];
+        frqs?: Frq[];
         attempt?: {
           submitted?: boolean;
           duration_seconds?: number | null;
@@ -240,31 +250,50 @@ function PaperRunner() {
         } | null;
       };
       if (cancelled) return;
-      if (!r.ok) {
+      if (!r.ok || !j.paper) {
         setSchoolError(j.error ?? "无法进入本场考试");
         setSchoolReady(true);
+        setLoading(false);
         return;
       }
-      if (j.paper?.slug && j.paper.slug !== slug) {
+      if (j.paper.slug && j.paper.slug !== slug) {
         setSchoolError("试卷不匹配");
         setSchoolReady(true);
+        setLoading(false);
         return;
       }
+      setPaper({
+        id: j.paper.id,
+        slug: j.paper.slug ?? slug,
+        title: j.paper.title,
+        total_seconds: j.paper.total_seconds,
+        frq_seconds: j.paper.frq_seconds,
+        break_seconds: j.paper.break_seconds,
+        description: j.paper.description ?? null,
+      });
+      setQuestions((j.questions ?? []) as Q[]);
+      setFrqs((j.frqs ?? []) as Frq[]);
+      const { data: terms } = await supabase.from("terms").select("term_en,term_zh,definition,confusable_with");
+      const d: Record<string, TermInfo> = {};
+      (terms ?? []).forEach((t) => (d[t.term_en.toLowerCase()] = t as TermInfo));
+      setTermDict(d);
       setSchoolTitle(j.assignment?.title ?? "");
       setSchoolEndsAt(j.assignment?.ends_at ?? "");
       setSchoolPublished(!!j.assignment?.results_published);
       saveSchoolExamSession({
         assignmentId,
-        paperSlug: j.paper?.slug ?? slug,
-        title: j.assignment?.title ?? paper.title,
+        paperSlug: j.paper.slug ?? slug,
+        title: j.assignment?.title ?? j.paper.title,
         endsAt: j.assignment?.ends_at ?? "",
         submitted: !!j.attempt?.submitted,
         resultsPublished: !!j.assignment?.results_published,
+        studentName: j.roster?.student_name,
+        studentId: j.roster?.student_id,
       });
       if (j.attempt) {
         const restored: Record<string, OptKey> = {};
-        (j.attempt.mcq_detail ?? []).forEach((d) => {
-          if (d.picked && ["A", "B", "C", "D", "E"].includes(d.picked)) restored[d.question_id] = d.picked as OptKey;
+        (j.attempt.mcq_detail ?? []).forEach((row) => {
+          if (row.picked && ["A", "B", "C", "D", "E"].includes(row.picked)) restored[row.question_id] = row.picked as OptKey;
         });
         if (Object.keys(restored).length) setAnswers(restored);
         const raw = j.attempt.frq_answers;
@@ -284,9 +313,9 @@ function PaperRunner() {
         if (typeof progress?.seconds === "number") setSeconds(progress.seconds);
         else if (typeof j.attempt.duration_seconds === "number") setSeconds(j.attempt.duration_seconds);
         if (typeof progress?.breakSeconds === "number") setBreakSeconds(progress.breakSeconds);
-        else setBreakSeconds(paper.break_seconds ?? 600);
+        else setBreakSeconds(j.paper.break_seconds ?? 600);
         if (typeof progress?.frqSeconds === "number") setFrqSeconds(progress.frqSeconds);
-        else setFrqSeconds(paper.frq_seconds ?? 3600);
+        else setFrqSeconds(j.paper.frq_seconds ?? 3600);
         if (typeof progress?.idx === "number") setIdx(progress.idx);
         if (j.attempt.submitted) {
           setSchoolSubmitted(true);
@@ -298,13 +327,14 @@ function PaperRunner() {
           setPhase("running");
         }
       }
+      setLoading(false);
       setSchoolReady(true);
       schoolHydratedRef.current = true;
     })();
     return () => {
       cancelled = true;
     };
-  }, [assignmentId, authLoading, loading, nav, paper, slug, user]);
+  }, [assignmentId, authLoading, nav, slug, user]);
 
   useEffect(() => {
     if (loading) return;
@@ -496,7 +526,20 @@ function PaperRunner() {
   }, [phase]);
 
   useEffect(() => {
-    if (timeUp) submit();
+    if (!timeUp) return;
+    if (isSchoolExam && schoolEndsAt && Date.parse(schoolEndsAt) <= Date.now()) {
+      void finalizeSchoolExam();
+      return;
+    }
+    if (phase === "frq") {
+      void submitAllFrqs();
+      return;
+    }
+    if (phase === "break") {
+      setPhase("frq");
+      return;
+    }
+    submit();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timeUp]);
 
@@ -722,6 +765,35 @@ function PaperRunner() {
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSchoolExam, schoolSubmitted, phase, answers, frqAnswers, seconds, idx]);
+
+  useEffect(() => {
+    if (!isSchoolExam || !assignmentId || !schoolSubmitted || schoolPublished) return;
+    const t = window.setInterval(() => {
+      void (async () => {
+        const r = await authFetch(`/api/exam/paper?assignment_id=${assignmentId}`);
+        if (!r.ok) return;
+        const j = (await r.json()) as {
+          assignment?: { results_published?: boolean; title?: string; ends_at?: string };
+          questions?: Q[];
+          roster?: { student_id: string; student_name: string };
+        };
+        if (!j.assignment?.results_published) return;
+        setSchoolPublished(true);
+        if (j.questions?.length) setQuestions(j.questions);
+        saveSchoolExamSession({
+          assignmentId,
+          paperSlug: slug,
+          title: j.assignment.title ?? schoolTitle,
+          endsAt: j.assignment.ends_at ?? schoolEndsAt,
+          submitted: true,
+          resultsPublished: true,
+          studentName: j.roster?.student_name,
+          studentId: j.roster?.student_id,
+        });
+      })();
+    }, 15000);
+    return () => window.clearInterval(t);
+  }, [assignmentId, isSchoolExam, schoolPublished, schoolSubmitted, schoolEndsAt, schoolTitle, slug]);
 
   async function gradeOneFrq(f: Frq): Promise<boolean> {
     return await runGradeOneFrq(f);
@@ -1359,9 +1431,11 @@ function PaperRunner() {
         </header>
 
         {/* Preview banner */}
-        <div className="bg-[#1a2b6b] text-white text-center text-xs font-bold tracking-widest py-1.5">
-          THIS IS A TEST PREVIEW
-        </div>
+        {!isSchoolExam && (
+          <div className="bg-[#1a2b6b] text-white text-center text-xs font-bold tracking-widest py-1.5">
+            THIS IS A TEST PREVIEW
+          </div>
+        )}
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden">
@@ -1627,7 +1701,8 @@ function PaperRunner() {
             <div className="bg-white rounded-xl max-w-md w-full p-6 space-y-4">
               <h3 className="font-bold text-lg">确认交卷？</h3>
               <p className="text-sm text-slate-600">
-                已作答 {Object.keys(answers).length} / {questions.length} 题。交卷后将无法修改。
+                已作答 {Object.keys(answers).length} / {questions.length} 题。
+                {isSchoolExam ? "选择题交卷后进入大题；整场考试在大题交完后才结束。" : "交卷后将无法修改。"}
               </p>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setConfirmSubmit(false)}>取消</Button>
@@ -1743,13 +1818,26 @@ function PaperRunner() {
         </>
       )}
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {!isSchoolExam && <Button onClick={() => { setPhase("idle"); }}>再做一遍</Button>}
+        {isSchoolExam && (
+          <Button
+            variant="outline"
+            onClick={() => {
+              if (assignmentId) markExamExited(assignmentId);
+              clearSchoolExamSession();
+              if (isExamLocalEmail(user?.email)) void signOut();
+              void nav({ to: "/", replace: true });
+            }}
+          >
+            退出考场
+          </Button>
+        )}
         <Button asChild variant="outline">
           <Link
             to={isSchoolExam ? "/exam" : slug === "frq-pdf-practice" || slug.startsWith("frq-pack-") ? "/frq" : "/mock"}
             search={
-              (slug === "frq-pdf-practice" || slug.startsWith("frq-pack-")) && selectedFrqUnit
+              (slug === "frq-pdf-practice" || slug.startsWith("frq-pack-") ) && selectedFrqUnit
                 ? { unit: selectedFrqUnit }
                 : undefined
             }

@@ -34,6 +34,14 @@ export const Route = createFileRoute("/api/teacher/class")({
           .filter((r) => r.student_id && r.student_name);
         if (cleaned.length === 0) return jsonErr("没有有效的学号/姓名");
         if (body.replace) {
+          const { data: live } = await supabaseAdmin
+            .from("school_assignments")
+            .select("id")
+            .eq("class_id", cls.id)
+            .gt("ends_at", new Date().toISOString());
+          if (live && live.length > 0) {
+            return jsonErr("有未结束的考试，不能覆盖花名册。请用追加导入，或等考试截止后再覆盖。");
+          }
           await supabaseAdmin.from("school_roster").delete().eq("class_id", cls.id);
         }
         const { error } = await supabaseAdmin.from("school_roster").upsert(

@@ -1,15 +1,26 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import {
+  BarChart3,
+  Check,
+  ClipboardList,
+  Copy,
+  FileUp,
+  Loader2,
+  Users,
+} from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { authFetch } from "@/lib/auth-fetch";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/teacher")({
   head: () => ({ meta: [{ title: "教师端 · 学校考试" }, { name: "robots", content: "noindex" }] }),
@@ -84,6 +95,49 @@ function downloadText(filename: string, content: string) {
   URL.revokeObjectURL(url);
 }
 
+function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      {children}
+      {hint ? <p className="text-[11px] leading-relaxed text-muted-foreground">{hint}</p> : null}
+    </div>
+  );
+}
+
+function Pill({ children, tone }: { children: ReactNode; tone: "ok" | "warn" | "muted" | "live" }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium",
+        tone === "ok" && "border-emerald-500/20 bg-emerald-500/10 text-emerald-800",
+        tone === "warn" && "border-amber-500/25 bg-amber-500/10 text-amber-800",
+        tone === "muted" && "border-transparent bg-muted text-muted-foreground",
+        tone === "live" && "border-primary/20 bg-primary/10 text-primary",
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+function examWindow(startsAt: string, endsAt: string) {
+  const now = Date.now();
+  if (now < new Date(startsAt).getTime()) return { label: "未开始", tone: "muted" as const };
+  if (now > new Date(endsAt).getTime()) return { label: "已结束", tone: "warn" as const };
+  return { label: "进行中", tone: "live" as const };
+}
+
+function EmptyState({ icon: Icon, title, hint }: { icon: typeof Users; title: string; hint: string }) {
+  return (
+    <div className="glass rounded-2xl px-6 py-12 text-center">
+      <Icon className="mx-auto mb-3 h-8 w-8 text-muted-foreground/70" />
+      <p className="font-medium">{title}</p>
+      <p className="mt-1 text-sm text-muted-foreground">{hint}</p>
+    </div>
+  );
+}
+
 function emptyItem(page: number, order: number, kind: "mcq" | "frq"): PdfItem {
   return {
     kind,
@@ -125,6 +179,8 @@ function TeacherHome() {
   const [items, setItems] = useState<PdfItem[]>([]);
   const [pdfBusy, setPdfBusy] = useState("");
   const [pdfTitle, setPdfTitle] = useState("");
+  const [tab, setTab] = useState("roster");
+  const [copied, setCopied] = useState("");
 
   const loadClass = useCallback(async () => {
     const r = await authFetch("/api/teacher/class");
@@ -158,6 +214,9 @@ function TeacherHome() {
   }, [authLoading, user, loadClass, loadAssignments, loadPdfs]);
 
   async function importRoster(replace: boolean) {
+    if (replace && !window.confirm("覆盖会删除现有花名册。有未结束的考试时系统会拒绝覆盖。确定继续？")) {
+      return;
+    }
     const rows = parseRosterCsv(csvText);
     if (rows.length === 0) {
       toast.error("没有读到学号/姓名");
@@ -194,17 +253,36 @@ function TeacherHome() {
         toast.error(j.error ?? "布置失败");
         return;
       }
-      toast.success(`考试码 ${j.assignment.exam_code}`);
+      toast.success(`考试码 ${j.assignment.exam_code} 已复制`);
       setTitle("");
       await loadAssignments();
       setGradeId(j.assignment.id);
+      setTab("assign");
+      try {
+        await navigator.clipboard.writeText(j.assignment.exam_code);
+        setCopied(j.assignment.exam_code);
+      } catch {
+        /* 浏览器可能拦截剪贴板，考试码仍会显示在列表里 */
+      }
     } finally {
       setCreating(false);
     }
   }
 
+  async function copyCode(code: string) {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(code);
+      toast.success("考试码已复制");
+      window.setTimeout(() => setCopied((c) => (c === code ? "" : c)), 1600);
+    } catch {
+      toast.error("复制失败，请手动抄写");
+    }
+  }
+
   async function loadGradebook(id: string) {
     setGradeId(id);
+    setTab("grades");
     const r = await authFetch(`/api/teacher/gradebook?assignment_id=${id}`);
     const j = await r.json();
     if (!r.ok) {
@@ -335,12 +413,20 @@ function TeacherHome() {
     await Promise.all([loadPdfs(), loadAssignments()]);
     setPaperId(j.paper.id);
     setSource("existing");
+    setTab("assign");
   }
 
   const libraryPapers = useMemo(
     () => papers.filter((p) => !p.slug.startsWith("frq-")),
     [papers],
   );
+  const selectedPaper = libraryPapers.find((p) => p.id === paperId);
+
+  useEffect(() => {
+    if (paperId) return;
+    const first = libraryPapers[0];
+    if (first) setPaperId(first.id);
+  }, [libraryPapers, paperId]);
 
   if (authLoading) {
     return (
@@ -351,19 +437,24 @@ function TeacherHome() {
   }
   if (!user) {
     return (
-      <main className="mx-auto max-w-md px-4 py-16 text-center space-y-3">
-        <h1 className="text-xl font-bold">请先登录</h1>
-        <Button asChild>
-          <Link to="/auth" search={{ redirect: "/teacher" }}>去登录</Link>
-        </Button>
+      <main className="mx-auto max-w-md px-4 py-16 text-center space-y-4">
+        <div className="glass mx-auto max-w-sm rounded-2xl p-8 space-y-3">
+          <h1 className="text-xl font-bold">请先登录</h1>
+          <p className="text-sm text-muted-foreground">教师工作台需要登录后才能布置考试。</p>
+          <Button asChild className="w-full">
+            <Link to="/auth" search={{ redirect: "/teacher" }}>去登录</Link>
+          </Button>
+        </div>
       </main>
     );
   }
   if (denied) {
     return (
-      <main className="mx-auto max-w-md px-4 py-16 text-center space-y-3">
-        <h1 className="text-xl font-bold">需要教师权限</h1>
-        <p className="text-sm text-muted-foreground">请让管理员把你的账号设为 teacher，或使用管理员账号进入。</p>
+      <main className="mx-auto max-w-md px-4 py-16 text-center">
+        <div className="glass mx-auto max-w-sm rounded-2xl p-8 space-y-3">
+          <h1 className="text-xl font-bold">需要教师权限</h1>
+          <p className="text-sm text-muted-foreground">请让管理员把你的账号设为 teacher，或使用管理员账号进入。</p>
+        </div>
       </main>
     );
   }
@@ -375,210 +466,374 @@ function TeacherHome() {
     );
   }
 
+  const submittedCount = gradeRows.filter((r) => r.status === "submitted").length;
+  const inProgressCount = gradeRows.filter((r) => r.status === "in_progress").length;
+
   return (
-    <main className="mx-auto max-w-4xl px-4 py-8 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">教师端</h1>
-        <p className="text-sm text-muted-foreground">布置计分考：花名册、考试码、成绩册。PDF 必须整页出图并人工校对后才能发布。</p>
-      </div>
-      <Tabs defaultValue="roster">
-        <TabsList className="flex flex-wrap h-auto">
-          <TabsTrigger value="roster">花名册</TabsTrigger>
-          <TabsTrigger value="assign">布置考试</TabsTrigger>
-          <TabsTrigger value="grades">成绩册</TabsTrigger>
-          <TabsTrigger value="pdf">PDF 出题</TabsTrigger>
+    <main className="mx-auto max-w-5xl px-3 py-5 pb-[max(4rem,env(safe-area-inset-bottom))] sm:px-4 sm:py-8 sm:pb-16 space-y-5 sm:space-y-6">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+        <div className="space-y-1 min-w-0">
+          <p className="text-xs font-medium tracking-wide text-primary">学校计分考</p>
+          <h1 className="text-xl font-bold tracking-tight sm:text-3xl">教师工作台</h1>
+          <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground sm:text-sm">
+            导入花名册后生成考试码。学生凭学号、姓名和考试码入场，未交卷可再次进入。
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:flex">
+          <div className="glass rounded-2xl px-3 py-2 sm:min-w-[92px] sm:px-4 sm:py-2.5">
+            <div className="text-base font-semibold tabular-nums sm:text-lg">{roster.length}</div>
+            <div className="text-[11px] text-muted-foreground">花名册</div>
+          </div>
+          <div className="glass rounded-2xl px-3 py-2 sm:min-w-[92px] sm:px-4 sm:py-2.5">
+            <div className="text-base font-semibold tabular-nums sm:text-lg">{assignments.length}</div>
+            <div className="text-[11px] text-muted-foreground">已布置</div>
+          </div>
+        </div>
+      </header>
+
+      <Tabs
+        value={tab}
+        onValueChange={(v) => {
+          setTab(v);
+          if (v === "assign" && !title.trim()) {
+            setStartsAt(toLocalInput(new Date()));
+            setEndsAt(toLocalInput(new Date(Date.now() + 2 * 60 * 60 * 1000)));
+          }
+        }}
+      >
+        <TabsList className="grid h-auto w-full grid-cols-4 rounded-2xl p-1">
+          <TabsTrigger value="roster" className="w-full flex-col gap-0.5 rounded-xl px-1 py-2 text-[11px] sm:flex-row sm:gap-1.5 sm:text-sm">
+            <Users className="h-3.5 w-3.5" />
+            花名册
+          </TabsTrigger>
+          <TabsTrigger value="assign" className="w-full flex-col gap-0.5 rounded-xl px-1 py-2 text-[11px] sm:flex-row sm:gap-1.5 sm:text-sm">
+            <ClipboardList className="h-3.5 w-3.5" />
+            <span className="sm:hidden">布置</span>
+            <span className="hidden sm:inline">布置考试</span>
+          </TabsTrigger>
+          <TabsTrigger value="grades" className="w-full flex-col gap-0.5 rounded-xl px-1 py-2 text-[11px] sm:flex-row sm:gap-1.5 sm:text-sm">
+            <BarChart3 className="h-3.5 w-3.5" />
+            成绩册
+          </TabsTrigger>
+          <TabsTrigger value="pdf" className="w-full flex-col gap-0.5 rounded-xl px-1 py-2 text-[11px] sm:flex-row sm:gap-1.5 sm:text-sm">
+            <FileUp className="h-3.5 w-3.5" />
+            <span className="sm:hidden">PDF</span>
+            <span className="hidden sm:inline">PDF 出题</span>
+          </TabsTrigger>
         </TabsList>
-        <TabsContent value="roster" className="space-y-4">
-          <Card>
-            <CardContent className="p-4 space-y-3">
-              <p className="text-sm text-muted-foreground">CSV 两列：学号,姓名。可从 Excel 另存为 CSV 后粘贴。</p>
-              <Textarea rows={8} value={csvText} onChange={(e) => setCsvText(e.target.value)} />
-              <div className="flex gap-2">
-                <Button onClick={() => void importRoster(false)}>追加导入</Button>
-                <Button variant="outline" onClick={() => void importRoster(true)}>覆盖导入</Button>
+
+        <TabsContent value="roster" className="mt-4 space-y-4">
+          <Card className="glass rounded-2xl border-white/60 shadow-none">
+            <CardContent className="space-y-3 p-5">
+              <Field label="粘贴花名册" hint="两列：学号,姓名。可从 Excel 另存为 CSV 后整表粘贴。追加不会清掉已有学生。覆盖会整表替换；有未结束的考试时不能覆盖。">
+                <Textarea
+                  rows={6}
+                  value={csvText}
+                  onChange={(e) => setCsvText(e.target.value)}
+                  className="min-h-[8rem] font-mono text-sm sm:min-h-[10rem]"
+                  aria-label="花名册 CSV"
+                />
+              </Field>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button className="w-full sm:w-auto" onClick={() => void importRoster(false)}>追加导入</Button>
+                <Button className="w-full sm:w-auto" variant="outline" onClick={() => void importRoster(true)}>覆盖导入</Button>
               </div>
             </CardContent>
           </Card>
-          <p className="text-sm">当前 {roster.length} 人</p>
-          <div className="overflow-x-auto text-sm">
-            <table className="w-full">
-              <thead>
-                <tr className="text-left text-muted-foreground">
-                  <th className="py-1">学号</th>
-                  <th>姓名</th>
-                  <th>账号</th>
-                </tr>
-              </thead>
-              <tbody>
-                {roster.map((r) => (
-                  <tr key={r.id} className="border-t">
-                    <td className="py-1 font-mono">{r.student_id}</td>
-                    <td>{r.student_name}</td>
-                    <td>{r.user_id ? "已绑定" : "未入场"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {roster.length === 0 ? (
+            <EmptyState icon={Users} title="还没有学生" hint="粘贴学号和姓名后点「追加导入」，学生才能用考试码入场。" />
+          ) : (
+            <Card className="glass overflow-hidden rounded-2xl border-white/60 shadow-none">
+              <CardContent className="p-0">
+                <div className="flex items-center justify-between px-5 py-3">
+                  <p className="text-sm font-medium">当前 {roster.length} 人</p>
+                  <p className="text-xs text-muted-foreground">
+                    {roster.filter((r) => r.user_id).length} 人已入场绑定
+                  </p>
+                </div>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="whitespace-nowrap">学号</TableHead>
+                        <TableHead className="whitespace-nowrap">姓名</TableHead>
+                        <TableHead className="whitespace-nowrap">账号</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {roster.map((r) => (
+                        <TableRow key={r.id}>
+                          <TableCell className="whitespace-nowrap font-mono">{r.student_id}</TableCell>
+                          <TableCell className="whitespace-nowrap">{r.student_name}</TableCell>
+                          <TableCell>
+                            <Pill tone={r.user_id ? "ok" : "muted"}>{r.user_id ? "已绑定" : "未入场"}</Pill>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
-        <TabsContent value="assign" className="space-y-4">
-          <Card>
-            <CardContent className="p-4 space-y-3">
-              <Input placeholder="考试名称，如 期中考试" value={title} onChange={(e) => setTitle(e.target.value)} />
-              <div className="flex gap-2">
-                <Button type="button" variant={source === "existing" ? "default" : "outline"} onClick={() => setSource("existing")}>现有卷库</Button>
-                <Button type="button" variant={source === "random" ? "default" : "outline"} onClick={() => setSource("random")}>生成固定随机卷</Button>
-              </div>
+
+        <TabsContent value="assign" className="mt-4 space-y-4">
+          <Card className="glass rounded-2xl border-white/60 shadow-none">
+            <CardContent className="space-y-4 p-5">
+              <Field label="考试名称">
+                <Input placeholder="例如：期中考试" value={title} onChange={(e) => setTitle(e.target.value)} />
+              </Field>
+              <Field label="试卷来源">
+                <div className="flex flex-wrap gap-2">
+                  <Button type="button" variant={source === "existing" ? "default" : "outline"} onClick={() => setSource("existing")}>
+                    现有卷库
+                  </Button>
+                  <Button type="button" variant={source === "random" ? "default" : "outline"} onClick={() => setSource("random")}>
+                    生成固定随机卷
+                  </Button>
+                </div>
+              </Field>
               {source === "existing" && (
-                <Select value={paperId} onValueChange={setPaperId}>
-                  <SelectTrigger><SelectValue placeholder="选择试卷" /></SelectTrigger>
-                  <SelectContent>
-                    {libraryPapers.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.title}{p.slug.startsWith("school-") ? " · 学校卷" : p.year ? ` · ${p.year}` : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Field label="选择试卷">
+                  <Select value={paperId} onValueChange={setPaperId}>
+                    <SelectTrigger><SelectValue placeholder="选择试卷" /></SelectTrigger>
+                    <SelectContent>
+                      {libraryPapers.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.title}{p.slug.startsWith("school-") ? " · 学校卷" : p.year ? ` · ${p.year}` : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+              )}
+              {source === "existing" && selectedPaper && !selectedPaper.slug.startsWith("school-") && (
+                <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-900">
+                  这是公开卷库。未走考试入场的学生仍可能在「模考」里练习同一份卷。课上请只用考试码入场；随机卷或 PDF 导入卷不会出现在公开模考列表。
+                </p>
               )}
               {source === "random" && (
-                <p className="text-xs text-muted-foreground">开考前抽好 60 题 + 3 道 FRQ，全班同一套，保证评分公平。</p>
+                <p className="rounded-xl bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
+                  开考前抽好 60 题选择题 + 3 道大题，全班同一套，保证评分公平。题量较大，课上计时请预留充足时间。
+                </p>
               )}
-              <div className="grid sm:grid-cols-2 gap-3">
-                <label className="text-xs text-muted-foreground space-y-1">
-                  开考
-                  <Input type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} />
-                </label>
-                <label className="text-xs text-muted-foreground space-y-1">
-                  截止
-                  <Input type="datetime-local" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
-                </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="开考时间">
+                  <Input type="datetime-local" className="min-w-0 w-full text-sm" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} />
+                </Field>
+                <Field label="截止时间">
+                  <Input type="datetime-local" className="min-w-0 w-full text-sm" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
+                </Field>
               </div>
-              <Button onClick={() => void createAssignment()} disabled={creating || !title.trim()}>
-                {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              <Button className="w-full sm:w-auto" onClick={() => void createAssignment()} disabled={creating || !title.trim() || (source === "existing" && !paperId)}>
+                {creating ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
                 生成考试码
               </Button>
             </CardContent>
           </Card>
-          <div className="space-y-2">
-            {assignments.map((a) => (
-              <Card key={a.id}>
-                <CardContent className="p-4 flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <div className="font-semibold">{a.title}</div>
-                    <div className="text-xs text-muted-foreground">{a.paper?.title} · {new Date(a.starts_at).toLocaleString()} – {new Date(a.ends_at).toLocaleString()}</div>
-                    <div className="mt-1 font-mono text-lg tracking-[0.25em]">{a.exam_code}</div>
+          {assignments.length === 0 ? (
+            <EmptyState icon={ClipboardList} title="还没有考试" hint="填好名称和试卷后点「生成考试码」，把 6 位码发给学生即可。" />
+          ) : (
+            <div className="space-y-3">
+              {assignments.map((a) => {
+                const win = examWindow(a.starts_at, a.ends_at);
+                return (
+                  <Card key={a.id} className="glass rounded-2xl border-white/60 shadow-none">
+                    <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+                      <div className="min-w-0 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h2 className="font-semibold">{a.title}</h2>
+                          <Pill tone={win.tone}>{win.label}</Pill>
+                          <Pill tone={a.results_published ? "ok" : "muted"}>
+                            {a.results_published ? "已公布解析" : "未公布解析"}
+                          </Pill>
+                        </div>
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                          {a.paper?.title ?? "试卷"}
+                          <span className="hidden sm:inline"> · {new Date(a.starts_at).toLocaleString()} – {new Date(a.ends_at).toLocaleString()}</span>
+                        </p>
+                        <p className="text-[11px] text-muted-foreground sm:hidden">
+                          {new Date(a.starts_at).toLocaleString()} – {new Date(a.ends_at).toLocaleString()}
+                        </p>
+                        <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center">
+                          <span className="font-mono text-lg tracking-[0.12em] sm:text-xl sm:tracking-[0.16em]">{a.exam_code}</span>
+                          <Button size="sm" variant="outline" className="h-8 w-full gap-1 sm:w-auto" onClick={() => void copyCode(a.exam_code)}>
+                            {copied === a.exam_code ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                            {copied === a.exam_code ? "已复制" : "复制考试码"}
+                          </Button>
+                        </div>
+                      </div>
+                      <Button size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => void loadGradebook(a.id)}>
+                        查看成绩册
+                      </Button>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="grades" className="mt-4 space-y-4">
+          {assignments.length === 0 ? (
+            <EmptyState icon={BarChart3} title="还没有可查看的考试" hint="先到「布置考试」生成考试码，学生交卷后这里会出现成绩。" />
+          ) : (
+            <>
+              <Card className="glass rounded-2xl border-white/60 shadow-none">
+                <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
+                  <div className="flex-1">
+                    <Field label="选择考试">
+                      <Select value={gradeId} onValueChange={(id) => void loadGradebook(id)}>
+                        <SelectTrigger><SelectValue placeholder="选择一场考试" /></SelectTrigger>
+                        <SelectContent>
+                          {assignments.map((a) => (
+                            <SelectItem key={a.id} value={a.id}>{a.title}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </Field>
                   </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="outline" onClick={() => void loadGradebook(a.id)}>成绩册</Button>
-                    <span className="text-xs text-muted-foreground self-center">{a.results_published ? "已公布" : "未公布解析"}</span>
+                  {gradeMeta && (
+                    <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                      <Button size="sm" className="w-full sm:w-auto" onClick={() => void togglePublish(!gradeMeta.results_published)}>
+                        {gradeMeta.results_published ? "取消公布成绩" : "公布成绩与解析"}
+                      </Button>
+                      <Button size="sm" variant="outline" className="w-full sm:w-auto" onClick={exportCsv}>导出 CSV</Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+              {gradeMeta && (
+                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                  <Pill tone="ok">{submittedCount} 已交</Pill>
+                  <Pill tone="live">{inProgressCount} 作答中</Pill>
+                  <Pill tone="muted">{Math.max(0, gradeRows.length - submittedCount - inProgressCount)} 未交</Pill>
+                </div>
+              )}
+              {!gradeId ? (
+                <EmptyState icon={BarChart3} title="请选择一场考试" hint="从上方下拉框挑一场，或从「布置考试」点「查看成绩册」。" />
+              ) : gradeRows.length === 0 ? (
+                <EmptyState icon={Users} title="这份成绩册还是空的" hint="确认花名册已导入。学生入场后会出现「作答中」，交卷后显示选择题对错。" />
+              ) : (
+                <Card className="glass overflow-hidden rounded-2xl border-white/60 shadow-none">
+                  <CardContent className="p-0">
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="hover:bg-transparent">
+                            <TableHead className="whitespace-nowrap">学号</TableHead>
+                            <TableHead className="whitespace-nowrap">姓名</TableHead>
+                            <TableHead className="whitespace-nowrap">状态</TableHead>
+                            <TableHead className="whitespace-nowrap">选择题</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {gradeRows.map((row) => (
+                            <TableRow key={row.student_id}>
+                              <TableCell className="whitespace-nowrap font-mono">{row.student_id}</TableCell>
+                              <TableCell className="whitespace-nowrap">{row.student_name}</TableCell>
+                              <TableCell>
+                                <Pill tone={row.status === "submitted" ? "ok" : row.status === "in_progress" ? "live" : "muted"}>
+                                  {row.status === "submitted" ? "已交" : row.status === "in_progress" ? "作答中" : "未交"}
+                                </Pill>
+                              </TableCell>
+                              <TableCell className="whitespace-nowrap tabular-nums">
+                                {row.mcq_correct != null ? `${row.mcq_correct}/${row.mcq_total}` : "—"}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+              {gradeRows.some((r) => Object.keys(r.frq_answers ?? {}).length > 0) && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold">大题原文（学生端不展示得分）</h3>
+                  {gradeRows.filter((r) => r.status === "submitted").map((r) => (
+                    <Card key={`frq-${r.student_id}`} className="glass rounded-2xl border-white/60 shadow-none">
+                      <CardContent className="space-y-2 p-4 text-xs">
+                        <div className="font-medium">{r.student_id} {r.student_name}</div>
+                        {Object.entries(r.frq_answers ?? {}).map(([id, ans]) => (
+                          <pre key={id} className="whitespace-pre-wrap rounded-xl bg-muted/70 p-3">{ans.text || (ans.fileUrl ? ans.fileUrl : "（空）")}</pre>
+                        ))}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </TabsContent>
+
+        <TabsContent value="pdf" className="mt-4 space-y-4">
+          <Card className="glass rounded-2xl border-white/60 shadow-none">
+            <CardContent className="space-y-3 p-5">
+              <p className="text-sm text-muted-foreground">
+                上传 PDF 后会把每一页渲染成图。请按页切题、校对选项和答案，全部勾选「已校对」才能发布。未发布的卷不能开考。
+              </p>
+              <label className={cn(
+                "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-primary/30 bg-primary/5 px-4 py-8 text-center transition hover:bg-primary/10",
+                pdfBusy && "pointer-events-none opacity-70",
+              )}>
+                <FileUp className="h-6 w-6 text-primary" />
+                <span className="text-sm font-medium">{pdfBusy || "点击选择 PDF"}</span>
+                <span className="text-xs text-muted-foreground">建议先用少量页试跑，校对完成后再布置考试</span>
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  className="sr-only"
+                  disabled={!!pdfBusy}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void onPdfFile(f);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+            </CardContent>
+          </Card>
+          {imports.length === 0 && !activeImport ? (
+            <EmptyState icon={FileUp} title="还没有 PDF 导入" hint="现有卷库不够用时再上传。日常考试可直接用「布置考试」里的卷库。" />
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {imports.map((imp) => (
+                <Button key={imp.id} size="sm" variant={activeImport === imp.id ? "default" : "outline"} onClick={() => void openImport(imp.id)}>
+                  {imp.filename} · {imp.status}
+                </Button>
+              ))}
+            </div>
+          )}
+          {activeImport && (
+            <div className="space-y-4">
+              <Card className="glass rounded-2xl border-white/60 shadow-none">
+                <CardContent className="space-y-3 p-5">
+                  <Field label="发布后的试卷标题">
+                    <Input placeholder="例如：校本练习 1" value={pdfTitle} onChange={(e) => setPdfTitle(e.target.value)} />
+                  </Field>
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" className="w-full sm:w-auto" onClick={() => setItems((xs) => [...xs, emptyItem(pages[0]?.page_number ?? 1, xs.length + 1, "mcq")])}>加选择题</Button>
+                    <Button size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => setItems((xs) => [...xs, emptyItem(pages[0]?.page_number ?? 1, xs.length + 1, "frq")])}>加大题</Button>
+                    <Button size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => void saveItems()}>保存切题</Button>
+                    <Button size="sm" className="w-full sm:w-auto" onClick={() => void publishPdf()}>校对完成，发布试卷</Button>
                   </div>
                 </CardContent>
               </Card>
-            ))}
-          </div>
-        </TabsContent>
-        <TabsContent value="grades" className="space-y-4">
-          <Select value={gradeId} onValueChange={(id) => void loadGradebook(id)}>
-            <SelectTrigger><SelectValue placeholder="选择一场考试" /></SelectTrigger>
-            <SelectContent>
-              {assignments.map((a) => (
-                <SelectItem key={a.id} value={a.id}>{a.title}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {gradeMeta && (
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" onClick={() => void togglePublish(!gradeMeta.results_published)}>
-                {gradeMeta.results_published ? "取消公布成绩" : "公布成绩与解析"}
-              </Button>
-              <Button size="sm" variant="outline" onClick={exportCsv}>导出 CSV</Button>
-            </div>
-          )}
-          <div className="overflow-x-auto text-sm">
-            <table className="w-full">
-              <thead>
-                <tr className="text-left text-muted-foreground">
-                  <th className="py-1">学号</th>
-                  <th>姓名</th>
-                  <th>状态</th>
-                  <th>MCQ</th>
-                </tr>
-              </thead>
-              <tbody>
-                {gradeRows.map((row) => (
-                  <tr key={row.student_id} className="border-t align-top">
-                    <td className="py-1 font-mono">{row.student_id}</td>
-                    <td>{row.student_name}</td>
-                    <td>{row.status === "submitted" ? "已交" : row.status === "in_progress" ? "作答中" : "未交"}</td>
-                    <td>{row.mcq_correct != null ? `${row.mcq_correct}/${row.mcq_total}` : "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {gradeRows.some((r) => Object.keys(r.frq_answers ?? {}).length > 0) && (
-            <div className="space-y-2">
-              <h3 className="font-semibold text-sm">FRQ 原文（学生端不展示得分）</h3>
-              {gradeRows.filter((r) => r.status === "submitted").map((r) => (
-                <Card key={`frq-${r.student_id}`}>
-                  <CardContent className="p-3 text-xs space-y-2">
-                    <div className="font-medium">{r.student_id} {r.student_name}</div>
-                    {Object.entries(r.frq_answers ?? {}).map(([id, ans]) => (
-                      <pre key={id} className="whitespace-pre-wrap bg-muted rounded p-2">{ans.text || (ans.fileUrl ? ans.fileUrl : "（空）")}</pre>
-                    ))}
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </TabsContent>
-        <TabsContent value="pdf" className="space-y-4">
-          <Card>
-            <CardContent className="p-4 space-y-3">
-              <p className="text-sm text-muted-foreground">上传 PDF 后系统把每一页栅格化成图。请按页切题、校对选项和答案，全部勾选「已校对」才能发布。未发布的卷不能开考。</p>
-              <Input
-                type="file"
-                accept="application/pdf"
-                disabled={!!pdfBusy}
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) void onPdfFile(f);
-                  e.target.value = "";
-                }}
-              />
-              {pdfBusy && <p className="text-sm text-primary">{pdfBusy}</p>}
-            </CardContent>
-          </Card>
-          <div className="flex flex-wrap gap-2">
-            {imports.map((imp) => (
-              <Button key={imp.id} size="sm" variant={activeImport === imp.id ? "default" : "outline"} onClick={() => void openImport(imp.id)}>
-                {imp.filename} · {imp.status}
-              </Button>
-            ))}
-          </div>
-          {activeImport && (
-            <div className="space-y-4">
-              <Input placeholder="发布后的试卷标题" value={pdfTitle} onChange={(e) => setPdfTitle(e.target.value)} />
-              <div className="flex gap-2">
-                <Button size="sm" onClick={() => setItems((xs) => [...xs, emptyItem(pages[0]?.page_number ?? 1, xs.length + 1, "mcq")])}>加选择题</Button>
-                <Button size="sm" variant="outline" onClick={() => setItems((xs) => [...xs, emptyItem(pages[0]?.page_number ?? 1, xs.length + 1, "frq")])}>加大题</Button>
-                <Button size="sm" variant="outline" onClick={() => void saveItems()}>保存切题</Button>
-                <Button size="sm" onClick={() => void publishPdf()}>校对完成，发布试卷</Button>
-              </div>
               {pages.map((p) => (
-                <Card key={p.id}>
-                  <CardContent className="p-3 space-y-2">
+                <Card key={p.id} className="glass rounded-2xl border-white/60 shadow-none">
+                  <CardContent className="space-y-2 p-4">
                     <div className="text-sm font-medium">第 {p.page_number} 页</div>
-                    <img src={p.image_url} alt={`page ${p.page_number}`} className="w-full rounded border" />
-                    {p.extracted_text && <p className="text-[11px] text-muted-foreground whitespace-pre-wrap">{p.extracted_text.slice(0, 400)}</p>}
+                    <img src={p.image_url} alt={`page ${p.page_number}`} className="w-full rounded-xl border" />
+                    {p.extracted_text && <p className="whitespace-pre-wrap text-[11px] text-muted-foreground">{p.extracted_text.slice(0, 400)}</p>}
                   </CardContent>
                 </Card>
               ))}
               {items.map((it, idx) => (
-                <Card key={idx}>
-                  <CardContent className="p-3 space-y-2">
-                    <div className="flex flex-wrap gap-2 items-center">
+                <Card key={idx} className="glass rounded-2xl border-white/60 shadow-none">
+                  <CardContent className="space-y-2 p-4">
+                    <div className="flex flex-wrap items-center gap-2">
                       <Select value={it.kind} onValueChange={(v) => setItems((xs) => xs.map((x, i) => i === idx ? { ...x, kind: v as "mcq" | "frq" } : x))}>
                         <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
                         <SelectContent>
@@ -589,10 +844,11 @@ function TeacherHome() {
                       <Input
                         className="w-24"
                         type="number"
+                        aria-label="页码"
                         value={it.page_number}
                         onChange={(e) => setItems((xs) => xs.map((x, i) => i === idx ? { ...x, page_number: Number(e.target.value) } : x))}
                       />
-                      <label className="text-xs flex items-center gap-1">
+                      <label className="flex items-center gap-1 text-xs">
                         <input
                           type="checkbox"
                           checked={it.reviewed}
@@ -604,14 +860,14 @@ function TeacherHome() {
                     </div>
                     <Input placeholder="题干（可短，页图会挂到本题）" value={it.stem} onChange={(e) => setItems((xs) => xs.map((x, i) => i === idx ? { ...x, stem: e.target.value } : x))} />
                     {it.kind === "mcq" ? (
-                      <div className="grid sm:grid-cols-2 gap-2">
+                      <div className="grid gap-2 sm:grid-cols-2">
                         {(["option_a", "option_b", "option_c", "option_d", "option_e"] as const).map((k, n) => (
                           <Input key={k} placeholder={`选项 ${"ABCDE"[n]}`} value={it[k]} onChange={(e) => setItems((xs) => xs.map((x, i) => i === idx ? { ...x, [k]: e.target.value } : x))} />
                         ))}
                         <Input placeholder="正确答案 A-E" value={it.correct_answer} onChange={(e) => setItems((xs) => xs.map((x, i) => i === idx ? { ...x, correct_answer: e.target.value.toUpperCase() } : x))} />
                       </div>
                     ) : (
-                      <div className="grid sm:grid-cols-2 gap-2">
+                      <div className="grid gap-2 sm:grid-cols-2">
                         <Textarea placeholder="大题文字（可与页图互补）" value={it.content} onChange={(e) => setItems((xs) => xs.map((x, i) => i === idx ? { ...x, content: e.target.value } : x))} />
                         <Input type="number" placeholder="满分" value={it.max_score} onChange={(e) => setItems((xs) => xs.map((x, i) => i === idx ? { ...x, max_score: Number(e.target.value) } : x))} />
                       </div>

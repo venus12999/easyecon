@@ -75,7 +75,7 @@ function PracticeIndex() {
         if (q.status === "published") c[k].total += 1;
         else c[k].draft += 1;
       });
-      const kpList = (kpData ?? []) as Kp[];
+      const kpList = ((kpData ?? []) as Kp[]).filter((k) => k.slug !== "school-import");
       setKps(kpList);
       setCounts(c);
       setLoading(false);

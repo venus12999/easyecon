@@ -46,6 +46,8 @@ import { Route as ApiTeacherAssignmentsRouteImport } from './routes/api/teacher/
 import { Route as ApiMembershipMockAccessRouteImport } from './routes/api/membership/mock-access'
 import { Route as ApiFrqUploadRouteImport } from './routes/api/frq/upload'
 import { Route as ApiFrqGradeRouteImport } from './routes/api/frq/grade'
+import { Route as ApiExamSessionRouteImport } from './routes/api/exam/session'
+import { Route as ApiExamPaperRouteImport } from './routes/api/exam/paper'
 import { Route as ApiExamEnterRouteImport } from './routes/api/exam/enter'
 import { Route as ApiExamAttemptRouteImport } from './routes/api/exam/attempt'
 import { Route as ApiAdminUsersRouteImport } from './routes/api/admin/users'
@@ -244,6 +246,16 @@ const ApiFrqGradeRoute = ApiFrqGradeRouteImport.update({
   path: '/api/frq/grade',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiExamSessionRoute = ApiExamSessionRouteImport.update({
+  id: '/api/exam/session',
+  path: '/api/exam/session',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiExamPaperRoute = ApiExamPaperRouteImport.update({
+  id: '/api/exam/paper',
+  path: '/api/exam/paper',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiExamEnterRoute = ApiExamEnterRouteImport.update({
   id: '/api/exam/enter',
   path: '/api/exam/enter',
@@ -346,6 +358,8 @@ export interface FileRoutesByFullPath {
   '/api/admin/users': typeof ApiAdminUsersRoute
   '/api/exam/attempt': typeof ApiExamAttemptRoute
   '/api/exam/enter': typeof ApiExamEnterRoute
+  '/api/exam/paper': typeof ApiExamPaperRoute
+  '/api/exam/session': typeof ApiExamSessionRoute
   '/api/frq/grade': typeof ApiFrqGradeRoute
   '/api/frq/upload': typeof ApiFrqUploadRoute
   '/api/membership/mock-access': typeof ApiMembershipMockAccessRoute
@@ -397,6 +411,8 @@ export interface FileRoutesByTo {
   '/api/admin/users': typeof ApiAdminUsersRoute
   '/api/exam/attempt': typeof ApiExamAttemptRoute
   '/api/exam/enter': typeof ApiExamEnterRoute
+  '/api/exam/paper': typeof ApiExamPaperRoute
+  '/api/exam/session': typeof ApiExamSessionRoute
   '/api/frq/grade': typeof ApiFrqGradeRoute
   '/api/frq/upload': typeof ApiFrqUploadRoute
   '/api/membership/mock-access': typeof ApiMembershipMockAccessRoute
@@ -449,6 +465,8 @@ export interface FileRoutesById {
   '/api/admin/users': typeof ApiAdminUsersRoute
   '/api/exam/attempt': typeof ApiExamAttemptRoute
   '/api/exam/enter': typeof ApiExamEnterRoute
+  '/api/exam/paper': typeof ApiExamPaperRoute
+  '/api/exam/session': typeof ApiExamSessionRoute
   '/api/frq/grade': typeof ApiFrqGradeRoute
   '/api/frq/upload': typeof ApiFrqUploadRoute
   '/api/membership/mock-access': typeof ApiMembershipMockAccessRoute
@@ -502,6 +520,8 @@ export interface FileRouteTypes {
     | '/api/admin/users'
     | '/api/exam/attempt'
     | '/api/exam/enter'
+    | '/api/exam/paper'
+    | '/api/exam/session'
     | '/api/frq/grade'
     | '/api/frq/upload'
     | '/api/membership/mock-access'
@@ -553,6 +573,8 @@ export interface FileRouteTypes {
     | '/api/admin/users'
     | '/api/exam/attempt'
     | '/api/exam/enter'
+    | '/api/exam/paper'
+    | '/api/exam/session'
     | '/api/frq/grade'
     | '/api/frq/upload'
     | '/api/membership/mock-access'
@@ -604,6 +626,8 @@ export interface FileRouteTypes {
     | '/api/admin/users'
     | '/api/exam/attempt'
     | '/api/exam/enter'
+    | '/api/exam/paper'
+    | '/api/exam/session'
     | '/api/frq/grade'
     | '/api/frq/upload'
     | '/api/membership/mock-access'
@@ -656,6 +680,8 @@ export interface RootRouteChildren {
   ApiAdminUsersRoute: typeof ApiAdminUsersRoute
   ApiExamAttemptRoute: typeof ApiExamAttemptRoute
   ApiExamEnterRoute: typeof ApiExamEnterRoute
+  ApiExamPaperRoute: typeof ApiExamPaperRoute
+  ApiExamSessionRoute: typeof ApiExamSessionRoute
   ApiFrqGradeRoute: typeof ApiFrqGradeRoute
   ApiFrqUploadRoute: typeof ApiFrqUploadRoute
   ApiTeacherAssignmentsRoute: typeof ApiTeacherAssignmentsRoute
@@ -926,6 +952,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiFrqGradeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/exam/session': {
+      id: '/api/exam/session'
+      path: '/api/exam/session'
+      fullPath: '/api/exam/session'
+      preLoaderRoute: typeof ApiExamSessionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/exam/paper': {
+      id: '/api/exam/paper'
+      path: '/api/exam/paper'
+      fullPath: '/api/exam/paper'
+      preLoaderRoute: typeof ApiExamPaperRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/exam/enter': {
       id: '/api/exam/enter'
       path: '/api/exam/enter'
@@ -1076,6 +1116,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAdminUsersRoute: ApiAdminUsersRoute,
   ApiExamAttemptRoute: ApiExamAttemptRoute,
   ApiExamEnterRoute: ApiExamEnterRoute,
+  ApiExamPaperRoute: ApiExamPaperRoute,
+  ApiExamSessionRoute: ApiExamSessionRoute,
   ApiFrqGradeRoute: ApiFrqGradeRoute,
   ApiFrqUploadRoute: ApiFrqUploadRoute,
   ApiTeacherAssignmentsRoute: ApiTeacherAssignmentsRoute,

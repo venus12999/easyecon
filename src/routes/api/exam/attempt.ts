@@ -4,36 +4,16 @@ import { jsonErr } from "@/lib/json-api";
 import { verifyUserRequest } from "@/lib/user-auth.server";
 import { isUuid } from "@/lib/school-exam-session";
 import {
+  finalizeIfOverdue,
   inExamWindow,
   loadAssignmentBundle,
   loadAttempt,
+  publicAttempt,
   rosterForUser,
   scorePaperMcq,
   type McqPick,
 } from "@/lib/school-exam.server";
 import type { Json } from "@/integrations/supabase/types";
-
-function publicAttempt(row: {
-  started_at: string;
-  submitted_at: string | null;
-  mcq_total: number | null;
-  mcq_correct: number | null;
-  duration_seconds: number | null;
-  mcq_detail: unknown;
-  frq_answers: unknown;
-}, published: boolean) {
-  const submitted = !!row.submitted_at;
-  return {
-    started_at: row.started_at,
-    submitted,
-    submitted_at: row.submitted_at,
-    duration_seconds: row.duration_seconds,
-    mcq_detail: row.mcq_detail,
-    frq_answers: row.frq_answers,
-    mcq_total: submitted && published ? row.mcq_total : submitted ? row.mcq_total : null,
-    mcq_correct: submitted && published ? row.mcq_correct : null,
-  };
-}
 
 export const Route = createFileRoute("/api/exam/attempt")({
   server: {
@@ -46,7 +26,10 @@ export const Route = createFileRoute("/api/exam/attempt")({
         if (!bundle) return jsonErr("考试不存在", 404);
         const roster = await rosterForUser(u.userId, bundle.assignment.class_id);
         if (!roster) return jsonErr("你不在本场花名册中", 403);
-        const attempt = await loadAttempt(bundle.assignment.id, roster.id);
+        let attempt = await loadAttempt(bundle.assignment.id, roster.id);
+        if (attempt) {
+          attempt = await finalizeIfOverdue(attempt, bundle.paper.id, bundle.assignment.ends_at);
+        }
         return Response.json({
           assignment: bundle.assignment,
           paper: bundle.paper,
@@ -73,7 +56,11 @@ export const Route = createFileRoute("/api/exam/attempt")({
         if (!roster) return jsonErr("你不在本场花名册中", 403);
 
         let attempt = await loadAttempt(bundle.assignment.id, roster.id);
+        if (attempt) {
+          attempt = await finalizeIfOverdue(attempt, bundle.paper.id, bundle.assignment.ends_at);
+        }
         const windowOpen = inExamWindow(bundle.assignment.starts_at, bundle.assignment.ends_at);
+        const overdue = Date.now() > Date.parse(bundle.assignment.ends_at);
 
         if (action === "start") {
           if (attempt?.submitted_at) {
@@ -111,6 +98,7 @@ export const Route = createFileRoute("/api/exam/attempt")({
         if (attempt.submitted_at) return jsonErr("已交卷，不能再改");
 
         if (action === "save") {
+          if (overdue) return jsonErr("考试已截止，请交卷");
           const { error } = await supabaseAdmin
             .from("school_attempts")
             .update({
@@ -118,7 +106,8 @@ export const Route = createFileRoute("/api/exam/attempt")({
               frq_answers: (body.frq_answers ?? attempt.frq_answers) as Json,
               duration_seconds: typeof body.duration_seconds === "number" ? body.duration_seconds : attempt.duration_seconds,
             })
-            .eq("id", attempt.id);
+            .eq("id", attempt.id)
+            .is("submitted_at", null);
           if (error) return jsonErr(error.message, 500);
           return Response.json({ ok: true });
         }
@@ -137,6 +126,7 @@ export const Route = createFileRoute("/api/exam/attempt")({
               mcq_correct: scored.correct,
             })
             .eq("id", attempt.id)
+            .is("submitted_at", null)
             .select("started_at,submitted_at,mcq_total,mcq_correct,duration_seconds,mcq_detail,frq_answers")
             .single();
           if (error || !data) return jsonErr(error?.message ?? "交卷失败", 500);

@@ -1,4 +1,7 @@
 const KEY = "easyecon:school-exam";
+const EXITED_PREFIX = "easyecon:school-exam-exited:";
+
+export const EXAM_LOCK_GRACE_MS = 2 * 60 * 60 * 1000;
 
 export type SchoolExamSession = {
   assignmentId: string;
@@ -7,6 +10,8 @@ export type SchoolExamSession = {
   endsAt: string;
   submitted: boolean;
   resultsPublished: boolean;
+  studentName?: string;
+  studentId?: string;
 };
 
 export function loadSchoolExamSession(): SchoolExamSession | null {
@@ -38,7 +43,30 @@ export function clearSchoolExamSession() {
 export function isSchoolExamLocked(session: SchoolExamSession | null, now = Date.now()) {
   if (!session) return false;
   if (session.submitted && session.resultsPublished) return false;
-  return new Date(session.endsAt).getTime() + 2 * 60 * 60 * 1000 > now;
+  if (session.submitted && hasExitedExam(session.assignmentId)) return false;
+  return Date.parse(session.endsAt) + EXAM_LOCK_GRACE_MS > now;
+}
+
+export function hasExitedExam(assignmentId: string) {
+  if (typeof window === "undefined") return false;
+  try {
+    return sessionStorage.getItem(EXITED_PREFIX + assignmentId) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function markExamExited(assignmentId: string) {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(EXITED_PREFIX + assignmentId, "1");
+  } catch {
+    /* ignore */
+  }
+}
+
+export function isExamLocalEmail(email: string | null | undefined) {
+  return !!email?.toLowerCase().endsWith("@exam.easyecon.local");
 }
 
 export function normalizeStudentName(name: string) {

@@ -145,7 +145,7 @@ function Index() {
           c[k].draft += 1;
         }
       });
-      const kpList = (kpData ?? []) as Kp[];
+      const kpList = ((kpData ?? []) as Kp[]).filter((k) => k.slug !== "school-import");
       setKps(kpList);
       setCounts(c);
       setLoading(false);
@@ -155,7 +155,9 @@ function Index() {
   // 问候语
   const hour = currentDate?.getHours();
   const greeting = hour == null ? "你好" : hour < 6 ? "凌晨好" : hour < 12 ? "早上好" : hour < 14 ? "中午好" : hour < 18 ? "下午好" : "晚上好";
-  const userLabel = displayName ?? (user?.email ? user.email.split("@")[0] : "同学");
+  const userLabel = examSession?.studentName
+    ?? displayName
+    ?? (user?.email && !user.email.endsWith("@exam.easyecon.local") ? user.email.split("@")[0] : "同学");
 
   // 选一个有题目的 KP，用于 Practice 大卡的副标题与跳转
   const firstKpWithQuestions = kps.find((k) => (counts[k.id]?.total ?? 0) > 0) ?? kps[0];
@@ -173,6 +175,10 @@ function Index() {
             <p className="mt-1 text-xs text-muted-foreground sm:mt-2 sm:text-base">
               {authLoading
                 ? "正在读取学习进度…"
+                : examLocked && examSession
+                ? examSession.submitted
+                  ? "已交卷。老师公布成绩前，请先退出考场再刷题。"
+                  : `正在考试：${examSession.title}`
                 : user
                 ? stats.today > 0
                   ? `今天已完成 ${stats.today} 题，继续保持！`
@@ -193,7 +199,7 @@ function Index() {
           )}
         </section>
 
-        {user && coach && (
+        {user && coach && !examLocked && (
           <section className="mb-4 sm:mb-5">
             <div className="flex items-start gap-2.5 rounded-2xl border border-primary/25 bg-primary/5 p-3 sm:gap-3 sm:p-4">
               <img src={getCompanion(coachCompanion).image} alt="" className="h-8 w-8 shrink-0 sm:h-10 sm:w-10" style={{ imageRendering: "pixelated" }} />

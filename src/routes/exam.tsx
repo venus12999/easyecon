@@ -64,6 +64,8 @@ function ExamEntry() {
         endsAt: j.assignment.ends_at,
         submitted: !!j.attempt?.submitted,
         resultsPublished: j.assignment.results_published,
+        studentName: studentName.trim(),
+        studentId: studentId.trim(),
       });
       await nav({
         to: "/mock/$slug",

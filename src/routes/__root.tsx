@@ -7,6 +7,7 @@ import { TopNav } from "@/components/TopNav";
 import { FeedbackButton } from "@/components/FeedbackButton";
 import { FloatingMascot } from "@/components/FloatingMascot";
 import { LOGO_URL } from "@/lib/brand";
+import { SchoolExamGuard } from "@/components/SchoolExamGuard";
 import { useSchoolExamLock } from "@/hooks/use-school-exam-lock";
 
 function NotFoundComponent() {
@@ -80,6 +81,16 @@ function RootShell({ children }: { children: React.ReactNode }) {
 }
 
 function RootComponent() {
+  return (
+    <AuthProvider>
+      <SchoolExamGuard>
+        <AppShell />
+      </SchoolExamGuard>
+    </AuthProvider>
+  );
+}
+
+function AppShell() {
   const path = useRouterState({ select: (r) => r.location.pathname });
   const isAuthRoute = path === "/auth" || path === "/reset-password";
   const isMockExam = path.startsWith("/mock/");
@@ -87,7 +98,7 @@ function RootComponent() {
   const { locked: examLocked } = useSchoolExamLock();
   const hideChrome = isMockExam || isExamEntry || examLocked;
   return (
-    <AuthProvider>
+    <>
       <div className="app-gradient-bg flex min-h-screen w-full flex-col">
         <TopNav />
         <main className="min-w-0 flex-1">
@@ -102,9 +113,9 @@ function RootComponent() {
           </footer>
         )}
       </div>
-      {!hideChrome && !path.startsWith("/admin") && <FeedbackButton />}
-      {!hideChrome && !isAuthRoute && <FloatingMascot />}
+      {!hideChrome && !path.startsWith("/admin") && !path.startsWith("/teacher") && <FeedbackButton />}
+      {!hideChrome && !isAuthRoute && !path.startsWith("/teacher") && <FloatingMascot />}
       <Toaster richColors position="top-center" />
-    </AuthProvider>
+    </>
   );
 }

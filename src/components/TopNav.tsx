@@ -14,6 +14,8 @@ import { isAdminEmail } from "@/lib/admin-emails";
 import { useSchoolExamLock } from "@/hooks/use-school-exam-lock";
 import { useEffect, useState } from "react";
 import { authFetch } from "@/lib/auth-fetch";
+import { clearSchoolExamSession, isExamLocalEmail, markExamExited } from "@/lib/school-exam-session";
+import { useNavigate } from "@tanstack/react-router";
 
 export function TopNav() {
   const { user, loading, signOut } = useAuth();
@@ -22,7 +24,8 @@ export function TopNav() {
     select: (r) => `${r.location.pathname}${r.location.searchStr}`,
   });
   const showAdmin = isAdminEmail(user?.email);
-  const { session: examSession, locked: examLocked } = useSchoolExamLock();
+  const { session: examSession, locked: examLocked, refresh } = useSchoolExamLock();
+  const nav = useNavigate();
   const [showTeacher, setShowTeacher] = useState(showAdmin);
   const label = user?.email?.split("@")[0] ?? "";
 
@@ -42,17 +45,33 @@ export function TopNav() {
     void authFetch("/api/teacher/class").then((r) => setShowTeacher(r.ok));
   }, [user]);
 
+  async function leaveExam() {
+    if (!examSession) return;
+    markExamExited(examSession.assignmentId);
+    clearSchoolExamSession();
+    await refresh();
+    if (isExamLocalEmail(user?.email)) {
+      await signOut();
+    }
+    await nav({ to: "/", replace: true });
+  }
+
   if (examLocked && examSession) {
     return (
       <header className="sticky top-0 z-40 px-3 pt-3 sm:px-5">
-        <div className="glass mx-auto flex h-12 max-w-6xl items-center gap-3 rounded-2xl px-3">
-          <span className="truncate text-sm font-bold">EasyEcon 考试</span>
+        <div className="glass mx-auto flex h-12 max-w-6xl items-center gap-2 rounded-2xl px-3 sm:gap-3">
+          <span className="min-w-0 truncate text-sm font-bold">EasyEcon 考试</span>
           <div className="flex-1" />
-          <Button asChild size="sm" variant="secondary">
+          <Button asChild size="sm" variant="secondary" className="shrink-0">
             <Link to="/mock/$slug" params={{ slug: examSession.paperSlug }} search={{ assignment: examSession.assignmentId }}>
               {examSession.submitted ? "交卷状态" : "当前考试"}
             </Link>
           </Button>
+          {examSession.submitted && (
+            <Button size="sm" variant="outline" className="shrink-0" onClick={() => void leaveExam()}>
+              退出考场
+            </Button>
+          )}
         </div>
       </header>
     );
