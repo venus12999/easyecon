@@ -312,18 +312,18 @@ function Index() {
 
         <Link
           to="/exam"
-          className="group glass-tint glass-tint-hover relative overflow-hidden rounded-2xl p-3.5 mb-5 sm:p-6 flex items-center justify-between gap-3 sm:gap-4 text-white"
+          className="group glass-tint glass-tint-hover relative overflow-hidden rounded-2xl p-5 mb-5 min-h-[112px] sm:p-7 sm:min-h-[140px] flex items-center justify-between gap-3 sm:gap-5 text-white"
           style={{
             background: "linear-gradient(135deg, rgba(28,86,196,0.9) 0%, rgba(47,127,224,0.82) 55%, rgba(105,174,240,0.78) 100%)",
           }}
         >
-          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-            <div className="h-9 w-9 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center shrink-0 ring-1 ring-white/30">
-              <ClipboardCheck className="h-5 w-5 sm:h-6 sm:w-6" />
+          <div className="flex min-w-0 items-center gap-3.5 sm:gap-5">
+            <div className="h-12 w-12 sm:h-14 sm:w-14 rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center shrink-0 ring-1 ring-white/30">
+              <ClipboardCheck className="h-6 w-6 sm:h-7 sm:w-7" />
             </div>
             <div>
-              <div className="text-base font-bold sm:text-xl">学校考试</div>
-              <div className="text-[11px] opacity-90 mt-0.5 sm:text-sm">学号 + 考试码入场 · 计分考</div>
+              <div className="text-xl font-bold sm:text-2xl">学校考试</div>
+              <div className="text-xs opacity-90 mt-1 sm:text-base">学号 + 考试码入场 · 计分考</div>
             </div>
           </div>
           <div className="hidden sm:inline-flex items-center gap-2 rounded-full bg-white/20 backdrop-blur px-4 py-2 text-sm font-medium shrink-0 ring-1 ring-white/25">
@@ -336,7 +336,7 @@ function Index() {
         <section className="mb-5">
           <Link
             to="/tutor"
-            className="group glass glass-hover relative overflow-hidden rounded-2xl p-3.5 sm:p-5 flex items-center justify-between gap-3 text-foreground"
+            className="group glass glass-hover relative overflow-hidden rounded-2xl p-3 sm:p-4 flex items-center justify-between gap-3 text-foreground"
           >
             <div className="flex min-w-0 items-center gap-3">
               <div className="h-9 w-9 sm:h-11 sm:w-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
