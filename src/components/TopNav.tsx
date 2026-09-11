@@ -96,6 +96,15 @@ export function TopNav() {
         {loading ? (
           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
         ) : user ? (
+          <div className="flex min-w-0 items-center gap-1.5">
+          {showAdmin && (
+            <Button asChild size="sm" variant="outline" className="shrink-0 gap-1">
+              <Link to="/admin">
+                <Shield className="h-4 w-4" />
+                <span className="hidden sm:inline">后台</span>
+              </Link>
+            </Button>
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm" className="max-w-[45vw] gap-1">
@@ -139,6 +148,7 @@ export function TopNav() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          </div>
         ) : (
           path !== "/auth" && (
             <Button asChild size="sm">
