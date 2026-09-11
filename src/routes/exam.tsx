@@ -18,8 +18,6 @@ function ExamEntry() {
   const [studentId, setStudentId] = useState("");
   const [studentName, setStudentName] = useState("");
   const [examCode, setExamCode] = useState("");
-  const [password, setPassword] = useState("");
-  const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -37,8 +35,6 @@ function ExamEntry() {
           student_id: studentId,
           student_name: studentName,
           exam_code: examCode,
-          password,
-          email: email.trim() || undefined,
         }),
       });
       const j = (await r.json()) as {
@@ -84,13 +80,13 @@ function ExamEntry() {
   return (
     <main className="mx-auto max-w-md px-4 py-10">
       <h1 className="text-2xl font-bold mb-1">学校考试入场</h1>
-      <p className="text-sm text-muted-foreground mb-6">填写花名册上的学号、姓名，以及老师公布的考试码。第一次入场请设置密码，断网后可用同一学号继续未交卷。</p>
+      <p className="text-sm text-muted-foreground mb-6">填写花名册上的学号、姓名，以及老师公布的考试码。同一学号可再次入场继续未交卷。</p>
       <Card>
         <CardContent className="p-5">
           <form className="space-y-3" onSubmit={(e) => void enter(e)}>
             <div>
               <label className="text-xs text-muted-foreground">学号</label>
-              <Input value={studentId} onChange={(e) => setStudentId(e.target.value)} autoComplete="username" required />
+              <Input value={studentId} onChange={(e) => setStudentId(e.target.value)} autoComplete="off" required />
             </div>
             <div>
               <label className="text-xs text-muted-foreground">姓名（须与花名册一致）</label>
@@ -105,14 +101,6 @@ function ExamEntry() {
                 maxLength={8}
                 required
               />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">密码（至少 6 位）</label>
-              <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required minLength={6} />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground">学校邮箱（可选）</label>
-              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="没有可留空" />
             </div>
             <Button type="submit" className="w-full" disabled={busy}>
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}

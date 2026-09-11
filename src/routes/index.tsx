@@ -351,24 +351,32 @@ function Index() {
           </Link>
         </section>
 
-        <section className="mb-4 space-y-1.5 sm:mb-5">
+        <section className="mb-4 grid grid-cols-1 gap-2.5 sm:mb-5 sm:grid-cols-2 sm:gap-4">
           <Link
             to="/wrong"
-            className="group flex h-8 items-center gap-2 rounded-lg border bg-card/70 px-2.5 text-[12px] text-foreground/80 hover:border-primary/30 hover:text-foreground"
+            className="group glass glass-hover flex items-center gap-3 rounded-2xl p-3.5 text-foreground sm:gap-4 sm:p-5"
           >
-            <XCircle className="h-3.5 w-3.5 shrink-0 text-rose-500" />
-            <span className="font-medium">错题本</span>
-            <span className="truncate text-[11px] text-muted-foreground">复盘并提升</span>
-            <ArrowRight className="ml-auto h-3 w-3 shrink-0 opacity-50 group-hover:translate-x-0.5 transition-transform" />
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose-500/10 sm:h-11 sm:w-11">
+              <XCircle className="h-5 w-5 text-rose-500" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-base font-bold sm:text-lg">错题本</div>
+              <div className="truncate text-[11px] text-muted-foreground sm:text-sm">复盘并提升</div>
+            </div>
+            <ArrowRight className="h-4 w-4 shrink-0 opacity-70 group-hover:translate-x-0.5 transition-transform" />
           </Link>
           <Link
             to="/terms"
-            className="group flex h-8 items-center gap-2 rounded-lg border bg-card/70 px-2.5 text-[12px] text-foreground/80 hover:border-primary/30 hover:text-foreground"
+            className="group glass glass-hover flex items-center gap-3 rounded-2xl p-3.5 text-foreground sm:gap-4 sm:p-5"
           >
-            <Library className="h-3.5 w-3.5 shrink-0 text-primary" />
-            <span className="font-medium">术语表</span>
-            <span className="truncate text-[11px] text-muted-foreground">中英对照速查</span>
-            <ArrowRight className="ml-auto h-3 w-3 shrink-0 opacity-50 group-hover:translate-x-0.5 transition-transform" />
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 sm:h-11 sm:w-11">
+              <Library className="h-5 w-5 text-primary" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-base font-bold sm:text-lg">术语表</div>
+              <div className="truncate text-[11px] text-muted-foreground sm:text-sm">中英对照速查</div>
+            </div>
+            <ArrowRight className="h-4 w-4 shrink-0 opacity-70 group-hover:translate-x-0.5 transition-transform" />
           </Link>
         </section>
           </>

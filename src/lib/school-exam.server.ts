@@ -1,14 +1,60 @@
+import { createHmac } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { isUuid } from "@/lib/school-exam-session";
 
-export function examEmail(studentId: string, classId: string, optionalEmail?: string) {
-  const extra = (optionalEmail ?? "").trim().toLowerCase();
-  if (extra && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(extra) && !extra.endsWith("@exam.easyecon.local")) {
-    return extra;
-  }
+export function examEmail(studentId: string, classId: string) {
   const id = studentId.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "stu";
   return `${id}.${classId.replace(/-/g, "").slice(0, 8)}@exam.easyecon.local`;
+}
+
+export function examAccountPassword(studentId: string, classId: string) {
+  const secret = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_URL ?? "easyecon-exam";
+  return createHmac("sha256", secret).update(`exam:${classId}:${studentId.trim().toLowerCase()}`).digest("base64url").slice(0, 32);
+}
+
+async function sessionFromPassword(email: string, password: string) {
+  const anon = anonAuthClient();
+  const session = (await anon.auth.signInWithPassword({ email, password })).data.session;
+  if (!session) throw new Error("无法进入考场，请重试");
+  return session;
+}
+
+async function sessionFromMagicLink(email: string) {
+  const link = await supabaseAdmin.auth.admin.generateLink({ type: "magiclink", email });
+  const tokenHash = link.data.properties?.hashed_token;
+  if (!tokenHash) throw new Error(link.error?.message ?? "无法进入考场");
+  const anon = anonAuthClient();
+  const verified = await anon.auth.verifyOtp({ type: "magiclink", token_hash: tokenHash });
+  if (!verified.data.session) throw new Error(verified.error?.message ?? "无法进入考场，请重试");
+  return verified.data.session;
+}
+
+export async function issueExamSession(email: string, password: string, existingUserId: string | null, metadata: Record<string, unknown>) {
+  if (existingUserId) {
+    const existing = await supabaseAdmin.auth.admin.getUserById(existingUserId);
+    const existingEmail = existing.data.user?.email ?? email;
+    if (existingEmail.endsWith("@exam.easyecon.local")) {
+      const upd = await supabaseAdmin.auth.admin.updateUserById(existingUserId, { password });
+      if (upd.error) throw new Error(upd.error.message);
+      return sessionFromPassword(existingEmail, password);
+    }
+    return sessionFromMagicLink(existingEmail);
+  }
+
+  const created = await supabaseAdmin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: metadata,
+  });
+  if (created.error && !/already|registered|exists/i.test(created.error.message)) {
+    throw new Error(created.error.message);
+  }
+  if (!created.data.user) {
+    return sessionFromMagicLink(email);
+  }
+  return sessionFromPassword(email, password);
 }
 
 export function anonAuthClient() {

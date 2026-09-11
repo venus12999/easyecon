@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { jsonErr } from "@/lib/json-api";
 import { normalizeStudentName } from "@/lib/school-exam-session";
-import { anonAuthClient, examEmail, inExamWindow, loadAttempt } from "@/lib/school-exam.server";
+import { examAccountPassword, examEmail, inExamWindow, issueExamSession, loadAttempt } from "@/lib/school-exam.server";
 
 export const Route = createFileRoute("/api/exam/enter")({
   server: {
@@ -12,15 +12,11 @@ export const Route = createFileRoute("/api/exam/enter")({
           exam_code?: string;
           student_id?: string;
           student_name?: string;
-          password?: string;
-          email?: string;
         };
         const examCode = (body.exam_code ?? "").trim().toUpperCase();
         const studentId = (body.student_id ?? "").trim();
         const studentName = (body.student_name ?? "").trim();
-        const password = body.password ?? "";
         if (!examCode || !studentId || !studentName) return jsonErr("请填写学号、姓名和考试码");
-        if (password.length < 6 || password.length > 72) return jsonErr("密码至少 6 位");
 
         const { data: assignment } = await supabaseAdmin
           .from("school_assignments")
@@ -47,31 +43,22 @@ export const Route = createFileRoute("/api/exam/enter")({
           if (now < Date.parse(assignment.starts_at)) return jsonErr("考试尚未开始");
           return jsonErr("考试已截止");
         }
-        if (attempt?.submitted_at && !assignment.results_published && !windowOpen && now > Date.parse(assignment.ends_at) + 2 * 60 * 60 * 1000) {
-          // still allow viewing submitted state
-        }
 
         const email = roster.user_id
           ? ((await supabaseAdmin.auth.admin.getUserById(roster.user_id)).data.user?.email ?? examEmail(studentId, assignment.class_id))
           : examEmail(studentId, assignment.class_id);
+        const password = examAccountPassword(studentId, assignment.class_id);
 
-        const anon = anonAuthClient();
-        let session = (await anon.auth.signInWithPassword({ email, password })).data.session;
-        if (!session && !roster.user_id) {
-          const created = await supabaseAdmin.auth.admin.createUser({
-            email,
-            password,
-            email_confirm: true,
-            user_metadata: { school_exam: true, student_id: studentId, student_name: studentName, school_email: body.email ?? null },
+        let session;
+        try {
+          session = await issueExamSession(email, password, roster.user_id, {
+            school_exam: true,
+            student_id: studentId,
+            student_name: studentName,
           });
-          if (created.error || !created.data.user) {
-            session = (await anon.auth.signInWithPassword({ email, password })).data.session;
-            if (!session) return jsonErr(created.error?.message ?? "无法创建考试账号");
-          } else {
-            session = (await anon.auth.signInWithPassword({ email, password })).data.session;
-          }
+        } catch (err) {
+          return jsonErr(err instanceof Error ? err.message : "无法进入考场", 500);
         }
-        if (!session) return jsonErr("密码不正确。请使用入场时设置的密码。");
 
         if (roster.user_id && roster.user_id !== session.user.id) {
           return jsonErr("该学号已绑定其他账号");
