@@ -579,6 +579,249 @@ export type Database = {
           },
         ]
       }
+      school_assignments: {
+        Row: {
+          class_id: string
+          created_at: string
+          created_by: string
+          ends_at: string
+          exam_code: string
+          id: string
+          paper_id: string
+          results_published: boolean
+          starts_at: string
+          title: string
+        }
+        Insert: {
+          class_id: string
+          created_at?: string
+          created_by: string
+          ends_at: string
+          exam_code: string
+          id?: string
+          paper_id: string
+          results_published?: boolean
+          starts_at: string
+          title: string
+        }
+        Update: {
+          class_id?: string
+          created_at?: string
+          created_by?: string
+          ends_at?: string
+          exam_code?: string
+          id?: string
+          paper_id?: string
+          results_published?: boolean
+          starts_at?: string
+          title?: string
+        }
+        Relationships: []
+      }
+      school_attempts: {
+        Row: {
+          assignment_id: string
+          duration_seconds: number | null
+          frq_answers: Json
+          id: string
+          mcq_correct: number | null
+          mcq_detail: Json
+          mcq_total: number | null
+          roster_id: string
+          started_at: string
+          submitted_at: string | null
+          user_id: string
+        }
+        Insert: {
+          assignment_id: string
+          duration_seconds?: number | null
+          frq_answers?: Json
+          id?: string
+          mcq_correct?: number | null
+          mcq_detail?: Json
+          mcq_total?: number | null
+          roster_id: string
+          started_at?: string
+          submitted_at?: string | null
+          user_id: string
+        }
+        Update: {
+          assignment_id?: string
+          duration_seconds?: number | null
+          frq_answers?: Json
+          id?: string
+          mcq_correct?: number | null
+          mcq_detail?: Json
+          mcq_total?: number | null
+          roster_id?: string
+          started_at?: string
+          submitted_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      school_classes: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          teacher_user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name?: string
+          teacher_user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          teacher_user_id?: string
+        }
+        Relationships: []
+      }
+      school_pdf_imports: {
+        Row: {
+          class_id: string
+          created_at: string
+          created_by: string
+          filename: string
+          id: string
+          page_count: number
+          paper_id: string | null
+          status: string
+        }
+        Insert: {
+          class_id: string
+          created_at?: string
+          created_by: string
+          filename: string
+          id?: string
+          page_count?: number
+          paper_id?: string | null
+          status?: string
+        }
+        Update: {
+          class_id?: string
+          created_at?: string
+          created_by?: string
+          filename?: string
+          id?: string
+          page_count?: number
+          paper_id?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
+      school_pdf_items: {
+        Row: {
+          content: string | null
+          correct_answer: string | null
+          id: string
+          import_id: string
+          kind: string
+          max_score: number
+          option_a: string | null
+          option_b: string | null
+          option_c: string | null
+          option_d: string | null
+          option_e: string | null
+          page_number: number
+          reviewed: boolean
+          sort_order: number
+          stem: string | null
+        }
+        Insert: {
+          content?: string | null
+          correct_answer?: string | null
+          id?: string
+          import_id: string
+          kind: string
+          max_score?: number
+          option_a?: string | null
+          option_b?: string | null
+          option_c?: string | null
+          option_d?: string | null
+          option_e?: string | null
+          page_number: number
+          reviewed?: boolean
+          sort_order: number
+          stem?: string | null
+        }
+        Update: {
+          content?: string | null
+          correct_answer?: string | null
+          id?: string
+          import_id?: string
+          kind?: string
+          max_score?: number
+          option_a?: string | null
+          option_b?: string | null
+          option_c?: string | null
+          option_d?: string | null
+          option_e?: string | null
+          page_number?: number
+          reviewed?: boolean
+          sort_order?: number
+          stem?: string | null
+        }
+        Relationships: []
+      }
+      school_pdf_pages: {
+        Row: {
+          extracted_text: string | null
+          id: string
+          image_url: string
+          import_id: string
+          page_number: number
+        }
+        Insert: {
+          extracted_text?: string | null
+          id?: string
+          image_url: string
+          import_id: string
+          page_number: number
+        }
+        Update: {
+          extracted_text?: string | null
+          id?: string
+          image_url?: string
+          import_id?: string
+          page_number?: number
+        }
+        Relationships: []
+      }
+      school_roster: {
+        Row: {
+          class_id: string
+          created_at: string
+          id: string
+          name_key: string
+          student_id: string
+          student_name: string
+          user_id: string | null
+        }
+        Insert: {
+          class_id: string
+          created_at?: string
+          id?: string
+          name_key: string
+          student_id: string
+          student_name: string
+          user_id?: string | null
+        }
+        Update: {
+          class_id?: string
+          created_at?: string
+          id?: string
+          name_key?: string
+          student_id?: string
+          student_name?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -936,6 +1179,10 @@ export type Database = {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
+        Returns: boolean
+      }
+      is_school_staff: {
+        Args: { _user_id: string }
         Returns: boolean
       }
       release_ai_quota: {

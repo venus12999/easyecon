@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { verifyUserRequest } from "@/lib/user-auth.server";
 import { consumeAiQuota, membershipEnvironment, releaseAiQuota } from "@/lib/membership.server";
+import { isAdminEmailServer } from "@/lib/admin-emails.server";
 
 function err(msg: string, status = 400) {
   return new Response(JSON.stringify({ error: msg }), {
@@ -17,6 +18,7 @@ type Body = {
   answer_text?: string | null;
   answer_file_url?: string | null;
   answer_file_kind?: "image" | "pdf" | "doc" | "text" | null;
+  assignment_id?: string;
 };
 
 type Breakdown = { point: string; awarded: boolean; comment: string };
@@ -142,7 +144,29 @@ export const Route = createFileRoute("/api/frq/grade")({
 
         const apiKey = process.env.LOVABLE_API_KEY;
         if (!apiKey) return err("ai_not_configured", 503);
-         const quota = await consumeAiQuota(supabaseAdmin, u.userId, "frq_grade", membershipEnvironment(request), u.email);
+        let skipQuota = false;
+        if (body.assignment_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.assignment_id)) {
+          const { data: assignment } = await supabaseAdmin
+            .from("school_assignments")
+            .select("id,class_id")
+            .eq("id", body.assignment_id)
+            .maybeSingle();
+          if (assignment) {
+            const [{ data: roster }, { data: staff }] = await Promise.all([
+              supabaseAdmin
+                .from("school_roster")
+                .select("id")
+                .eq("class_id", assignment.class_id)
+                .eq("user_id", u.userId)
+                .maybeSingle(),
+              supabaseAdmin.rpc("is_school_staff", { _user_id: u.userId }),
+            ]);
+            skipQuota = !!roster || staff === true || isAdminEmailServer(u.email);
+          }
+        }
+         const quota = skipQuota
+           ? { allowed: true }
+           : await consumeAiQuota(supabaseAdmin, u.userId, "frq_grade", membershipEnvironment(request), u.email);
          if (!quota.allowed) return err("membership_quota_exhausted", 403);
 
         const maxScore = frq.max_score ?? 9;
@@ -208,24 +232,24 @@ export const Route = createFileRoute("/api/frq/grade")({
           }),
         });
         if (upstream.status === 429) {
-          await releaseAiQuota(supabaseAdmin, u.userId, "frq_grade");
+          if (!skipQuota) await releaseAiQuota(supabaseAdmin, u.userId, "frq_grade");
           return err("rate_limited", 429);
         }
         if (upstream.status === 402) {
-          await releaseAiQuota(supabaseAdmin, u.userId, "frq_grade");
+          if (!skipQuota) await releaseAiQuota(supabaseAdmin, u.userId, "frq_grade");
           return err("credits_exhausted", 402);
         }
         if (!upstream.ok) {
           const t = await upstream.text();
           console.error("frq grade error", upstream.status, t);
-          await releaseAiQuota(supabaseAdmin, u.userId, "frq_grade");
+          if (!skipQuota) await releaseAiQuota(supabaseAdmin, u.userId, "frq_grade");
           return err("ai_failed", 500);
         }
         const data = await upstream.json();
         const raw = String(data?.choices?.[0]?.message?.content ?? "");
         const grade = tryParseJson(raw);
         if (!grade) {
-          await releaseAiQuota(supabaseAdmin, u.userId, "frq_grade");
+          if (!skipQuota) await releaseAiQuota(supabaseAdmin, u.userId, "frq_grade");
           return Response.json({
             total_score: 0,
             max_score: maxScore,

@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { UserRound, Receipt, CalendarCheck, Shield, LogOut, ChevronDown, History, Loader2 } from "lucide-react";
+import { UserRound, Receipt, CalendarCheck, Shield, LogOut, ChevronDown, History, Loader2, ClipboardCheck } from "lucide-react";
 import { LOGO_URL } from "@/lib/brand";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +11,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/use-auth";
 import { isAdminEmail } from "@/lib/admin-emails";
+import { useSchoolExamLock } from "@/hooks/use-school-exam-lock";
+import { useEffect, useState } from "react";
+import { authFetch } from "@/lib/auth-fetch";
 
 export function TopNav() {
   const { user, loading, signOut } = useAuth();
@@ -19,7 +22,41 @@ export function TopNav() {
     select: (r) => `${r.location.pathname}${r.location.searchStr}`,
   });
   const showAdmin = isAdminEmail(user?.email);
+  const { session: examSession, locked: examLocked } = useSchoolExamLock();
+  const [showTeacher, setShowTeacher] = useState(showAdmin);
   const label = user?.email?.split("@")[0] ?? "";
+
+  useEffect(() => {
+    if (!user) {
+      setShowTeacher(false);
+      return;
+    }
+    if (user.email?.endsWith("@exam.easyecon.local")) {
+      setShowTeacher(false);
+      return;
+    }
+    if (isAdminEmail(user.email)) {
+      setShowTeacher(true);
+      return;
+    }
+    void authFetch("/api/teacher/class").then((r) => setShowTeacher(r.ok));
+  }, [user]);
+
+  if (examLocked && examSession) {
+    return (
+      <header className="sticky top-0 z-40 px-3 pt-3 sm:px-5">
+        <div className="glass mx-auto flex h-12 max-w-6xl items-center gap-3 rounded-2xl px-3">
+          <span className="truncate text-sm font-bold">EasyEcon 考试</span>
+          <div className="flex-1" />
+          <Button asChild size="sm" variant="secondary">
+            <Link to="/mock/$slug" params={{ slug: examSession.paperSlug }} search={{ assignment: examSession.assignmentId }}>
+              {examSession.submitted ? "交卷状态" : "当前考试"}
+            </Link>
+          </Button>
+        </div>
+      </header>
+    );
+  }
 
   return (
     <header className="sticky top-0 z-40 px-3 pt-3 sm:px-5">
@@ -53,6 +90,11 @@ export function TopNav() {
               <DropdownMenuItem asChild>
                 <Link to="/tutor-bookings"><CalendarCheck className="mr-2 h-4 w-4" />我的试课预约</Link>
               </DropdownMenuItem>
+              {showTeacher && (
+                <DropdownMenuItem asChild>
+                  <Link to="/teacher"><ClipboardCheck className="mr-2 h-4 w-4" />教师端</Link>
+                </DropdownMenuItem>
+              )}
               {showAdmin && (
                 <>
                   <DropdownMenuSeparator />

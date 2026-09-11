@@ -23,7 +23,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     hydrateSessionOnlyToken();
     installSessionOnlyPersistence();
     let hadSession = false;
-    const publicPaths = ["/auth", "/reset-password", "/pricing", "/legal", "/terms", "/privacy"];
+    const publicPaths = ["/auth", "/reset-password", "/pricing", "/legal", "/terms", "/privacy", "/exam"];
     const isPublic = () => {
       const p = typeof window !== "undefined" ? window.location.pathname : "/";
       return publicPaths.some((x) => p === x || p.startsWith(x + "/"));

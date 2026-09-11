@@ -12,10 +12,12 @@ import {
   ArrowRight,
   SquarePen,
   GraduationCap,
+  ClipboardCheck,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { computeCoachSuggestion, type CoachSuggestion } from "@/lib/mascot-coach";
 import { getCompanion, COMPANION_KEY, type CompanionId } from "@/lib/mascot-lines";
+import { useSchoolExamLock } from "@/hooks/use-school-exam-lock";
 
 
 export const Route = createFileRoute("/")({
@@ -29,41 +31,6 @@ export const Route = createFileRoute("/")({
   }),
   component: Index,
 });
-
-function QuickCard({
-  to,
-  icon,
-  iconBg,
-  title,
-  subtitle,
-  accent,
-  accentText,
-}: {
-  to: string;
-  icon: React.ReactNode;
-  iconBg: string;
-  title: string;
-  subtitle: string;
-  accent: string;
-  accentText: string;
-}) {
-  return (
-    <Link
-      to={to}
-      className="group rounded-xl sm:rounded-2xl border bg-card p-2.5 sm:p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:border-primary/40 active:translate-y-0 active:scale-[0.97] flex flex-col gap-2 sm:gap-3"
-    >
-      <div className={`h-7 w-7 sm:h-9 sm:w-9 rounded-lg sm:rounded-xl ${iconBg} flex items-center justify-center`}>{icon}</div>
-      <div>
-        <div className="font-semibold text-xs sm:text-sm">{title}</div>
-        <div className="hidden sm:block text-xs text-muted-foreground mt-0.5">{subtitle}</div>
-      </div>
-      <div className={`flex items-center justify-between text-[10px] sm:text-xs font-medium ${accent}`}>
-        <span className="truncate">{accentText}</span>
-        <ArrowRight className="hidden sm:block h-3.5 w-3.5 group-hover:translate-x-1 transition-transform shrink-0" />
-      </div>
-    </Link>
-  );
-}
 
 type Kp = {
   id: string;
@@ -88,6 +55,7 @@ function Index() {
   const [loading, setLoading] = useState(true);
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const { session: examSession, locked: examLocked } = useSchoolExamLock();
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [coach, setCoach] = useState<CoachSuggestion | null>(null);
   const [coachCompanion, setCoachCompanion] = useState<CompanionId>("sarah");
@@ -252,6 +220,26 @@ function Index() {
           </section>
         )}
 
+        {examLocked && examSession && (
+          <section className="mb-5">
+            <Link
+              to="/mock/$slug"
+              params={{ slug: examSession.paperSlug }}
+              search={{ assignment: examSession.assignmentId }}
+              className="group glass-tint glass-tint-hover relative overflow-hidden rounded-2xl p-3.5 sm:p-6 flex items-center justify-between gap-3 text-white"
+              style={{ background: "linear-gradient(135deg, rgba(28,86,196,0.9) 0%, rgba(47,127,224,0.82) 55%, rgba(105,174,240,0.78) 100%)" }}
+            >
+              <div>
+                <div className="text-base font-bold sm:text-xl">{examSession.submitted ? "已交卷 · 当前考试" : "正在进行的学校考试"}</div>
+                <div className="text-xs opacity-80 mt-1">{examSession.title}</div>
+              </div>
+              <ArrowRight className="h-5 w-5 opacity-80" />
+            </Link>
+          </section>
+        )}
+
+        {!examLocked && (
+          <>
         {/* 题型选择 */}
         <section className="mb-3 flex items-center gap-2 text-xs text-primary font-medium">
           <Sparkles className="h-3.5 w-3.5" /> 选择刷题类型
@@ -322,52 +310,69 @@ function Index() {
           </Link>
         </section>
 
+        <Link
+          to="/exam"
+          className="group glass-tint glass-tint-hover relative overflow-hidden rounded-2xl p-3.5 mb-5 sm:p-6 flex items-center justify-between gap-3 sm:gap-4 text-white"
+          style={{
+            background: "linear-gradient(135deg, rgba(28,86,196,0.9) 0%, rgba(47,127,224,0.82) 55%, rgba(105,174,240,0.78) 100%)",
+          }}
+        >
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+            <div className="h-9 w-9 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center shrink-0 ring-1 ring-white/30">
+              <ClipboardCheck className="h-5 w-5 sm:h-6 sm:w-6" />
+            </div>
+            <div>
+              <div className="text-base font-bold sm:text-xl">学校考试</div>
+              <div className="text-[11px] opacity-90 mt-0.5 sm:text-sm">学号 + 考试码入场 · 计分考</div>
+            </div>
+          </div>
+          <div className="hidden sm:inline-flex items-center gap-2 rounded-full bg-white/20 backdrop-blur px-4 py-2 text-sm font-medium shrink-0 ring-1 ring-white/25">
+            进入考场 <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+          </div>
+          <ArrowRight className="sm:hidden h-5 w-5 opacity-90 group-hover:translate-x-1 transition-transform" />
+        </Link>
+
         {/* 五分大神带你飞 */}
         <section className="mb-5">
           <Link
             to="/tutor"
-            className="group glass-tint glass-tint-hover relative overflow-hidden rounded-2xl p-3.5 sm:p-6 flex items-center justify-between gap-3 sm:gap-4 text-white"
-            style={{
-              background: "linear-gradient(135deg, rgba(28,86,196,0.9) 0%, rgba(47,127,224,0.82) 55%, rgba(105,174,240,0.78) 100%)",
-            }}
+            className="group glass glass-hover relative overflow-hidden rounded-2xl p-3.5 sm:p-5 flex items-center justify-between gap-3 text-foreground"
           >
-            <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-              <div className="h-9 w-9 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-white/20 backdrop-blur flex items-center justify-center shrink-0 ring-1 ring-white/30">
-                <GraduationCap className="h-5 w-5 sm:h-6 sm:w-6" />
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="h-9 w-9 sm:h-11 sm:w-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <GraduationCap className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <div className="text-base font-bold sm:text-xl">五分大神带你飞</div>
-                <div className="text-[11px] opacity-90 mt-0.5 sm:text-sm">订阅 5 分学长学姐的一对一线上辅导课</div>
+                <div className="text-base font-bold sm:text-lg">五分大神带你飞</div>
+                <div className="text-[11px] text-muted-foreground sm:text-sm">订阅 5 分学长学姐的一对一线上辅导课</div>
               </div>
             </div>
-            <div className="hidden sm:inline-flex items-center gap-2 rounded-full bg-white/20 backdrop-blur px-4 py-2 text-sm font-medium shrink-0 ring-1 ring-white/25">
-              查看课程 <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
-            </div>
-            <ArrowRight className="sm:hidden h-5 w-5 opacity-90 group-hover:translate-x-1 transition-transform" />
+            <ArrowRight className="h-4 w-4 opacity-70" />
           </Link>
         </section>
 
-        {/* 两张小卡 */}
-        <section className="grid gap-2.5 grid-cols-2 mb-4 sm:gap-3 sm:mb-5">
-          <QuickCard
+        <section className="mb-4 space-y-1.5 sm:mb-5">
+          <Link
             to="/wrong"
-            icon={<XCircle className="h-4 w-4 sm:h-5 sm:w-5 text-rose-500" />}
-            iconBg="bg-rose-50"
-            title="错题本"
-            subtitle="复盘并提升"
-            accent="text-rose-600"
-            accentText="去复习"
-          />
-          <QuickCard
+            className="group flex h-8 items-center gap-2 rounded-lg border bg-card/70 px-2.5 text-[12px] text-foreground/80 hover:border-primary/30 hover:text-foreground"
+          >
+            <XCircle className="h-3.5 w-3.5 shrink-0 text-rose-500" />
+            <span className="font-medium">错题本</span>
+            <span className="truncate text-[11px] text-muted-foreground">复盘并提升</span>
+            <ArrowRight className="ml-auto h-3 w-3 shrink-0 opacity-50 group-hover:translate-x-0.5 transition-transform" />
+          </Link>
+          <Link
             to="/terms"
-            icon={<Library className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />}
-            iconBg="bg-primary/10"
-            title="术语表"
-            subtitle="中英对照速查"
-            accent="text-primary"
-            accentText="打开"
-          />
+            className="group flex h-8 items-center gap-2 rounded-lg border bg-card/70 px-2.5 text-[12px] text-foreground/80 hover:border-primary/30 hover:text-foreground"
+          >
+            <Library className="h-3.5 w-3.5 shrink-0 text-primary" />
+            <span className="font-medium">术语表</span>
+            <span className="truncate text-[11px] text-muted-foreground">中英对照速查</span>
+            <ArrowRight className="ml-auto h-3 w-3 shrink-0 opacity-50 group-hover:translate-x-0.5 transition-transform" />
+          </Link>
         </section>
+          </>
+        )}
 
       </main>
     </div>

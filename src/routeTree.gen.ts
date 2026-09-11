@@ -13,12 +13,14 @@ import { Route as WrongRouteImport } from './routes/wrong'
 import { Route as TutorBookingsRouteImport } from './routes/tutor-bookings'
 import { Route as TutorRouteImport } from './routes/tutor'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as TeacherRouteImport } from './routes/teacher'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as ProfileRouteImport } from './routes/profile'
 import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as OrdersRouteImport } from './routes/orders'
 import { Route as HistoryRouteImport } from './routes/history'
 import { Route as FrqRouteImport } from './routes/frq'
+import { Route as ExamRouteImport } from './routes/exam'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AdminTutorRouteImport } from './routes/admin-tutor'
 import { Route as AdminRouteImport } from './routes/admin'
@@ -37,9 +39,15 @@ import { Route as ApiFeedbackRouteImport } from './routes/api/feedback'
 import { Route as ApiAiExplainRouteImport } from './routes/api/ai-explain'
 import { Route as FrqReviewSlugRouteImport } from './routes/frq.review.$slug'
 import { Route as ApiTutorTakenSlotsRouteImport } from './routes/api/tutor/taken-slots'
+import { Route as ApiTeacherPdfRouteImport } from './routes/api/teacher/pdf'
+import { Route as ApiTeacherGradebookRouteImport } from './routes/api/teacher/gradebook'
+import { Route as ApiTeacherClassRouteImport } from './routes/api/teacher/class'
+import { Route as ApiTeacherAssignmentsRouteImport } from './routes/api/teacher/assignments'
 import { Route as ApiMembershipMockAccessRouteImport } from './routes/api/membership/mock-access'
 import { Route as ApiFrqUploadRouteImport } from './routes/api/frq/upload'
 import { Route as ApiFrqGradeRouteImport } from './routes/api/frq/grade'
+import { Route as ApiExamEnterRouteImport } from './routes/api/exam/enter'
+import { Route as ApiExamAttemptRouteImport } from './routes/api/exam/attempt'
 import { Route as ApiAdminUsersRouteImport } from './routes/api/admin/users'
 import { Route as ApiAdminUploadImageRouteImport } from './routes/api/admin/upload-image'
 import { Route as ApiAdminReanalyzeRouteImport } from './routes/api/admin/reanalyze'
@@ -71,6 +79,11 @@ const TermsRoute = TermsRouteImport.update({
   path: '/terms',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TeacherRoute = TeacherRouteImport.update({
+  id: '/teacher',
+  path: '/teacher',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
   path: '/reset-password',
@@ -99,6 +112,11 @@ const HistoryRoute = HistoryRouteImport.update({
 const FrqRoute = FrqRouteImport.update({
   id: '/frq',
   path: '/frq',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ExamRoute = ExamRouteImport.update({
+  id: '/exam',
+  path: '/exam',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
@@ -191,6 +209,26 @@ const ApiTutorTakenSlotsRoute = ApiTutorTakenSlotsRouteImport.update({
   path: '/api/tutor/taken-slots',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiTeacherPdfRoute = ApiTeacherPdfRouteImport.update({
+  id: '/api/teacher/pdf',
+  path: '/api/teacher/pdf',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiTeacherGradebookRoute = ApiTeacherGradebookRouteImport.update({
+  id: '/api/teacher/gradebook',
+  path: '/api/teacher/gradebook',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiTeacherClassRoute = ApiTeacherClassRouteImport.update({
+  id: '/api/teacher/class',
+  path: '/api/teacher/class',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiTeacherAssignmentsRoute = ApiTeacherAssignmentsRouteImport.update({
+  id: '/api/teacher/assignments',
+  path: '/api/teacher/assignments',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiMembershipMockAccessRoute = ApiMembershipMockAccessRouteImport.update({
   id: '/mock-access',
   path: '/mock-access',
@@ -204,6 +242,16 @@ const ApiFrqUploadRoute = ApiFrqUploadRouteImport.update({
 const ApiFrqGradeRoute = ApiFrqGradeRouteImport.update({
   id: '/api/frq/grade',
   path: '/api/frq/grade',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiExamEnterRoute = ApiExamEnterRouteImport.update({
+  id: '/api/exam/enter',
+  path: '/api/exam/enter',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiExamAttemptRoute = ApiExamAttemptRouteImport.update({
+  id: '/api/exam/attempt',
+  path: '/api/exam/attempt',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAdminUsersRoute = ApiAdminUsersRouteImport.update({
@@ -262,12 +310,14 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRoute
   '/admin-tutor': typeof AdminTutorRoute
   '/auth': typeof AuthRoute
+  '/exam': typeof ExamRoute
   '/frq': typeof FrqRouteWithChildren
   '/history': typeof HistoryRoute
   '/orders': typeof OrdersRoute
   '/pricing': typeof PricingRoute
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/teacher': typeof TeacherRoute
   '/terms': typeof TermsRoute
   '/tutor': typeof TutorRoute
   '/tutor-bookings': typeof TutorBookingsRoute
@@ -294,9 +344,15 @@ export interface FileRoutesByFullPath {
   '/api/admin/reanalyze': typeof ApiAdminReanalyzeRoute
   '/api/admin/upload-image': typeof ApiAdminUploadImageRoute
   '/api/admin/users': typeof ApiAdminUsersRoute
+  '/api/exam/attempt': typeof ApiExamAttemptRoute
+  '/api/exam/enter': typeof ApiExamEnterRoute
   '/api/frq/grade': typeof ApiFrqGradeRoute
   '/api/frq/upload': typeof ApiFrqUploadRoute
   '/api/membership/mock-access': typeof ApiMembershipMockAccessRoute
+  '/api/teacher/assignments': typeof ApiTeacherAssignmentsRoute
+  '/api/teacher/class': typeof ApiTeacherClassRoute
+  '/api/teacher/gradebook': typeof ApiTeacherGradebookRoute
+  '/api/teacher/pdf': typeof ApiTeacherPdfRoute
   '/api/tutor/taken-slots': typeof ApiTutorTakenSlotsRoute
   '/frq/review/$slug': typeof FrqReviewSlugRoute
 }
@@ -305,12 +361,14 @@ export interface FileRoutesByTo {
   '/admin': typeof AdminRoute
   '/admin-tutor': typeof AdminTutorRoute
   '/auth': typeof AuthRoute
+  '/exam': typeof ExamRoute
   '/frq': typeof FrqRouteWithChildren
   '/history': typeof HistoryRoute
   '/orders': typeof OrdersRoute
   '/pricing': typeof PricingRoute
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/teacher': typeof TeacherRoute
   '/terms': typeof TermsRoute
   '/tutor': typeof TutorRoute
   '/tutor-bookings': typeof TutorBookingsRoute
@@ -337,9 +395,15 @@ export interface FileRoutesByTo {
   '/api/admin/reanalyze': typeof ApiAdminReanalyzeRoute
   '/api/admin/upload-image': typeof ApiAdminUploadImageRoute
   '/api/admin/users': typeof ApiAdminUsersRoute
+  '/api/exam/attempt': typeof ApiExamAttemptRoute
+  '/api/exam/enter': typeof ApiExamEnterRoute
   '/api/frq/grade': typeof ApiFrqGradeRoute
   '/api/frq/upload': typeof ApiFrqUploadRoute
   '/api/membership/mock-access': typeof ApiMembershipMockAccessRoute
+  '/api/teacher/assignments': typeof ApiTeacherAssignmentsRoute
+  '/api/teacher/class': typeof ApiTeacherClassRoute
+  '/api/teacher/gradebook': typeof ApiTeacherGradebookRoute
+  '/api/teacher/pdf': typeof ApiTeacherPdfRoute
   '/api/tutor/taken-slots': typeof ApiTutorTakenSlotsRoute
   '/frq/review/$slug': typeof FrqReviewSlugRoute
 }
@@ -349,12 +413,14 @@ export interface FileRoutesById {
   '/admin': typeof AdminRoute
   '/admin-tutor': typeof AdminTutorRoute
   '/auth': typeof AuthRoute
+  '/exam': typeof ExamRoute
   '/frq': typeof FrqRouteWithChildren
   '/history': typeof HistoryRoute
   '/orders': typeof OrdersRoute
   '/pricing': typeof PricingRoute
   '/profile': typeof ProfileRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/teacher': typeof TeacherRoute
   '/terms': typeof TermsRoute
   '/tutor': typeof TutorRoute
   '/tutor-bookings': typeof TutorBookingsRoute
@@ -381,9 +447,15 @@ export interface FileRoutesById {
   '/api/admin/reanalyze': typeof ApiAdminReanalyzeRoute
   '/api/admin/upload-image': typeof ApiAdminUploadImageRoute
   '/api/admin/users': typeof ApiAdminUsersRoute
+  '/api/exam/attempt': typeof ApiExamAttemptRoute
+  '/api/exam/enter': typeof ApiExamEnterRoute
   '/api/frq/grade': typeof ApiFrqGradeRoute
   '/api/frq/upload': typeof ApiFrqUploadRoute
   '/api/membership/mock-access': typeof ApiMembershipMockAccessRoute
+  '/api/teacher/assignments': typeof ApiTeacherAssignmentsRoute
+  '/api/teacher/class': typeof ApiTeacherClassRoute
+  '/api/teacher/gradebook': typeof ApiTeacherGradebookRoute
+  '/api/teacher/pdf': typeof ApiTeacherPdfRoute
   '/api/tutor/taken-slots': typeof ApiTutorTakenSlotsRoute
   '/frq/review/$slug': typeof FrqReviewSlugRoute
 }
@@ -394,12 +466,14 @@ export interface FileRouteTypes {
     | '/admin'
     | '/admin-tutor'
     | '/auth'
+    | '/exam'
     | '/frq'
     | '/history'
     | '/orders'
     | '/pricing'
     | '/profile'
     | '/reset-password'
+    | '/teacher'
     | '/terms'
     | '/tutor'
     | '/tutor-bookings'
@@ -426,9 +500,15 @@ export interface FileRouteTypes {
     | '/api/admin/reanalyze'
     | '/api/admin/upload-image'
     | '/api/admin/users'
+    | '/api/exam/attempt'
+    | '/api/exam/enter'
     | '/api/frq/grade'
     | '/api/frq/upload'
     | '/api/membership/mock-access'
+    | '/api/teacher/assignments'
+    | '/api/teacher/class'
+    | '/api/teacher/gradebook'
+    | '/api/teacher/pdf'
     | '/api/tutor/taken-slots'
     | '/frq/review/$slug'
   fileRoutesByTo: FileRoutesByTo
@@ -437,12 +517,14 @@ export interface FileRouteTypes {
     | '/admin'
     | '/admin-tutor'
     | '/auth'
+    | '/exam'
     | '/frq'
     | '/history'
     | '/orders'
     | '/pricing'
     | '/profile'
     | '/reset-password'
+    | '/teacher'
     | '/terms'
     | '/tutor'
     | '/tutor-bookings'
@@ -469,9 +551,15 @@ export interface FileRouteTypes {
     | '/api/admin/reanalyze'
     | '/api/admin/upload-image'
     | '/api/admin/users'
+    | '/api/exam/attempt'
+    | '/api/exam/enter'
     | '/api/frq/grade'
     | '/api/frq/upload'
     | '/api/membership/mock-access'
+    | '/api/teacher/assignments'
+    | '/api/teacher/class'
+    | '/api/teacher/gradebook'
+    | '/api/teacher/pdf'
     | '/api/tutor/taken-slots'
     | '/frq/review/$slug'
   id:
@@ -480,12 +568,14 @@ export interface FileRouteTypes {
     | '/admin'
     | '/admin-tutor'
     | '/auth'
+    | '/exam'
     | '/frq'
     | '/history'
     | '/orders'
     | '/pricing'
     | '/profile'
     | '/reset-password'
+    | '/teacher'
     | '/terms'
     | '/tutor'
     | '/tutor-bookings'
@@ -512,9 +602,15 @@ export interface FileRouteTypes {
     | '/api/admin/reanalyze'
     | '/api/admin/upload-image'
     | '/api/admin/users'
+    | '/api/exam/attempt'
+    | '/api/exam/enter'
     | '/api/frq/grade'
     | '/api/frq/upload'
     | '/api/membership/mock-access'
+    | '/api/teacher/assignments'
+    | '/api/teacher/class'
+    | '/api/teacher/gradebook'
+    | '/api/teacher/pdf'
     | '/api/tutor/taken-slots'
     | '/frq/review/$slug'
   fileRoutesById: FileRoutesById
@@ -524,12 +620,14 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRoute
   AdminTutorRoute: typeof AdminTutorRoute
   AuthRoute: typeof AuthRoute
+  ExamRoute: typeof ExamRoute
   FrqRoute: typeof FrqRouteWithChildren
   HistoryRoute: typeof HistoryRoute
   OrdersRoute: typeof OrdersRoute
   PricingRoute: typeof PricingRoute
   ProfileRoute: typeof ProfileRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  TeacherRoute: typeof TeacherRoute
   TermsRoute: typeof TermsRoute
   TutorRoute: typeof TutorRoute
   TutorBookingsRoute: typeof TutorBookingsRoute
@@ -556,8 +654,14 @@ export interface RootRouteChildren {
   ApiAdminReanalyzeRoute: typeof ApiAdminReanalyzeRoute
   ApiAdminUploadImageRoute: typeof ApiAdminUploadImageRoute
   ApiAdminUsersRoute: typeof ApiAdminUsersRoute
+  ApiExamAttemptRoute: typeof ApiExamAttemptRoute
+  ApiExamEnterRoute: typeof ApiExamEnterRoute
   ApiFrqGradeRoute: typeof ApiFrqGradeRoute
   ApiFrqUploadRoute: typeof ApiFrqUploadRoute
+  ApiTeacherAssignmentsRoute: typeof ApiTeacherAssignmentsRoute
+  ApiTeacherClassRoute: typeof ApiTeacherClassRoute
+  ApiTeacherGradebookRoute: typeof ApiTeacherGradebookRoute
+  ApiTeacherPdfRoute: typeof ApiTeacherPdfRoute
   ApiTutorTakenSlotsRoute: typeof ApiTutorTakenSlotsRoute
 }
 
@@ -589,6 +693,13 @@ declare module '@tanstack/react-router' {
       path: '/terms'
       fullPath: '/terms'
       preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/teacher': {
+      id: '/teacher'
+      path: '/teacher'
+      fullPath: '/teacher'
+      preLoaderRoute: typeof TeacherRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reset-password': {
@@ -631,6 +742,13 @@ declare module '@tanstack/react-router' {
       path: '/frq'
       fullPath: '/frq'
       preLoaderRoute: typeof FrqRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/exam': {
+      id: '/exam'
+      path: '/exam'
+      fullPath: '/exam'
+      preLoaderRoute: typeof ExamRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth': {
@@ -759,6 +877,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiTutorTakenSlotsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/teacher/pdf': {
+      id: '/api/teacher/pdf'
+      path: '/api/teacher/pdf'
+      fullPath: '/api/teacher/pdf'
+      preLoaderRoute: typeof ApiTeacherPdfRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/teacher/gradebook': {
+      id: '/api/teacher/gradebook'
+      path: '/api/teacher/gradebook'
+      fullPath: '/api/teacher/gradebook'
+      preLoaderRoute: typeof ApiTeacherGradebookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/teacher/class': {
+      id: '/api/teacher/class'
+      path: '/api/teacher/class'
+      fullPath: '/api/teacher/class'
+      preLoaderRoute: typeof ApiTeacherClassRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/teacher/assignments': {
+      id: '/api/teacher/assignments'
+      path: '/api/teacher/assignments'
+      fullPath: '/api/teacher/assignments'
+      preLoaderRoute: typeof ApiTeacherAssignmentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/membership/mock-access': {
       id: '/api/membership/mock-access'
       path: '/mock-access'
@@ -778,6 +924,20 @@ declare module '@tanstack/react-router' {
       path: '/api/frq/grade'
       fullPath: '/api/frq/grade'
       preLoaderRoute: typeof ApiFrqGradeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/exam/enter': {
+      id: '/api/exam/enter'
+      path: '/api/exam/enter'
+      fullPath: '/api/exam/enter'
+      preLoaderRoute: typeof ApiExamEnterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/exam/attempt': {
+      id: '/api/exam/attempt'
+      path: '/api/exam/attempt'
+      fullPath: '/api/exam/attempt'
+      preLoaderRoute: typeof ApiExamAttemptRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/admin/users': {
@@ -880,12 +1040,14 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRoute,
   AdminTutorRoute: AdminTutorRoute,
   AuthRoute: AuthRoute,
+  ExamRoute: ExamRoute,
   FrqRoute: FrqRouteWithChildren,
   HistoryRoute: HistoryRoute,
   OrdersRoute: OrdersRoute,
   PricingRoute: PricingRoute,
   ProfileRoute: ProfileRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  TeacherRoute: TeacherRoute,
   TermsRoute: TermsRoute,
   TutorRoute: TutorRoute,
   TutorBookingsRoute: TutorBookingsRoute,
@@ -912,8 +1074,14 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAdminReanalyzeRoute: ApiAdminReanalyzeRoute,
   ApiAdminUploadImageRoute: ApiAdminUploadImageRoute,
   ApiAdminUsersRoute: ApiAdminUsersRoute,
+  ApiExamAttemptRoute: ApiExamAttemptRoute,
+  ApiExamEnterRoute: ApiExamEnterRoute,
   ApiFrqGradeRoute: ApiFrqGradeRoute,
   ApiFrqUploadRoute: ApiFrqUploadRoute,
+  ApiTeacherAssignmentsRoute: ApiTeacherAssignmentsRoute,
+  ApiTeacherClassRoute: ApiTeacherClassRoute,
+  ApiTeacherGradebookRoute: ApiTeacherGradebookRoute,
+  ApiTeacherPdfRoute: ApiTeacherPdfRoute,
   ApiTutorTakenSlotsRoute: ApiTutorTakenSlotsRoute,
 }
 export const routeTree = rootRouteImport
