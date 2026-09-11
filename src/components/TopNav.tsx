@@ -57,21 +57,29 @@ export function TopNav() {
   }
 
   if (examLocked && examSession) {
+    const canLeaveExam = examSession.submitted || showAdmin || !isExamLocalEmail(user?.email);
     return (
       <header className="sticky top-0 z-40 px-3 pt-3 sm:px-5">
-        <div className="glass mx-auto flex h-12 max-w-6xl items-center gap-2 rounded-2xl px-3 sm:gap-3">
+        <div className="glass mx-auto flex min-h-12 max-w-6xl flex-wrap items-center gap-2 rounded-2xl px-3 py-2 sm:flex-nowrap sm:gap-3">
           <span className="min-w-0 truncate text-sm font-bold">EasyEcon 考试</span>
           <div className="flex-1" />
-          <Button asChild size="sm" variant="secondary" className="shrink-0">
-            <Link to="/mock/$slug" params={{ slug: examSession.paperSlug }} search={{ assignment: examSession.assignmentId }}>
-              {examSession.submitted ? "交卷状态" : "当前考试"}
-            </Link>
-          </Button>
-          {examSession.submitted && (
-            <Button size="sm" variant="outline" className="shrink-0" onClick={() => void leaveExam()}>
-              退出考场
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            {canLeaveExam && (
+              <Button size="sm" variant="outline" onClick={() => void leaveExam()}>
+                退出考场
+              </Button>
+            )}
+            <Button asChild size="sm" variant="secondary">
+              <Link to="/mock/$slug" params={{ slug: examSession.paperSlug }} search={{ assignment: examSession.assignmentId }}>
+                {examSession.submitted ? "交卷状态" : "当前考试"}
+              </Link>
             </Button>
-          )}
+            {!canLeaveExam && (
+              <Button asChild size="sm" variant="ghost">
+                <Link to="/auth" search={{ redirect: "/" }}>换账号</Link>
+              </Button>
+            )}
+          </div>
         </div>
       </header>
     );

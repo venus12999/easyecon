@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { useSchoolExamLock } from "@/hooks/use-school-exam-lock";
+import { isAdminEmail } from "@/lib/admin-emails";
 import { isExamLocalEmail } from "@/lib/school-exam-session";
 
 export function SchoolExamGuard({ children }: { children: ReactNode }) {
@@ -13,6 +14,7 @@ export function SchoolExamGuard({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (loading || !locked || !session) return;
+    if (isAdminEmail(user?.email)) return;
     const examAccount = isExamLocalEmail(user?.email);
     const allowed =
       path === "/exam" ||

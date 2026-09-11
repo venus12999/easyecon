@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { isAdminEmail } from "@/lib/admin-emails";
 
 export const Route = createFileRoute("/admin-tutor")({
   head: () => ({ meta: [{ title: "教师端｜试课预约管理" }] }),
@@ -55,7 +56,7 @@ function AdminTutorPage() {
         .eq("user_id", user.id)
         .eq("role", "admin")
         .maybeSingle();
-      setIsAdmin(!!data);
+      setIsAdmin(!!data || isAdminEmail(user.email));
     })();
   }, [user, authLoading, navigate]);
 

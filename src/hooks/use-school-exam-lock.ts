@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouterState } from "@tanstack/react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { authFetch } from "@/lib/auth-fetch";
+import { isAdminEmail } from "@/lib/admin-emails";
 import {
   clearSchoolExamSession,
   isExamLocalEmail,
@@ -22,6 +23,12 @@ export function useSchoolExamLock() {
     if (local) setSession(local);
     if (!user) {
       setSession(local);
+      setReady(true);
+      return;
+    }
+    if (isAdminEmail(user.email)) {
+      clearSchoolExamSession();
+      setSession(null);
       setReady(true);
       return;
     }
@@ -81,7 +88,7 @@ export function useSchoolExamLock() {
     };
   }, [session?.endsAt, session?.assignmentId, session?.submitted, session?.resultsPublished, refresh]);
 
-  const locked = !!user && isSchoolExamLocked(session);
+  const locked = !!user && !isAdminEmail(user.email) && isSchoolExamLocked(session);
 
   return { session, locked, loading: authLoading || !ready, refresh };
 }
