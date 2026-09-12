@@ -1233,6 +1233,15 @@ function PaperRunner() {
                   className={cn("select-text space-y-2", highlightActive && "cursor-text")}
                 >
                   <FrqContent content={f.content} />
+                  {f.image_url && (
+                    <a href={f.image_url} target="_blank" rel="noreferrer" className="block pt-2">
+                      <img
+                        src={f.image_url}
+                        alt="本题原页图，点击可放大"
+                        className="max-h-[70vh] max-w-full h-auto rounded border border-slate-300"
+                      />
+                    </a>
+                  )}
                 </div>
                 <FrqAnswerBox
                   paperId={paper.id}
@@ -1482,7 +1491,13 @@ function PaperRunner() {
               {renderStemWithTerms(cur.stem, cur.term_tags ?? [], termDict)}
             </div>
             {cur.image_url && (
-              <img src={cur.image_url} alt="题图" className="mb-6 max-h-80 max-w-full h-auto rounded border border-slate-300" />
+              <a href={cur.image_url} target="_blank" rel="noreferrer" className="mb-6 block">
+                <img
+                  src={cur.image_url}
+                  alt="本题图表，点击可放大"
+                  className="max-h-[70vh] max-w-full h-auto rounded border border-slate-300"
+                />
+              </a>
             )}
 
             {/* Options */}
@@ -1778,6 +1793,15 @@ function PaperRunner() {
                           <span className="ml-2 text-xs text-muted-foreground">满分 {f.max_score} 分</span>
                         </div>
                         <FrqContent content={f.content} />
+                        {f.image_url && (
+                          <a href={f.image_url} target="_blank" rel="noreferrer" className="block">
+                            <img
+                              src={f.image_url}
+                              alt="本题原页图"
+                              className="max-h-80 max-w-full h-auto rounded border border-slate-300"
+                            />
+                          </a>
+                        )}
                         {ans.text && (
                           <details className="text-xs">
                             <summary className="cursor-pointer text-muted-foreground">你的作答</summary>

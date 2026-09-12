@@ -100,6 +100,9 @@ export const Route = createFileRoute("/api/teacher/pdf")({
           import_id?: string;
           items?: PdfItemIn[];
           title?: string;
+          library?: "school" | "mock";
+          slug?: string;
+          promote_requested?: boolean;
         };
         const action = body.action ?? "create";
 
@@ -173,14 +176,18 @@ export const Route = createFileRoute("/api/teacher/pdf")({
             if (!pageMap.get(it.page_number)?.image_url) return jsonErr(`第 ${it.page_number} 页还没有页图`);
           }
 
-          const slug = `school-${crypto.randomUUID().slice(0, 8)}`;
           const title = (body.title ?? fresh.import.filename.replace(/\.pdf$/i, "")).trim().slice(0, 120) || "学校考试卷";
-          const { data: paper, error: pErr } = await supabaseAdmin
+          const promoteRequested = !!body.promote_requested || body.library === "mock";
+          const slug = `school-${crypto.randomUUID().slice(0, 8)}`;
+          const description = promoteRequested
+            ? "【申请列入模拟考试真题库】学校考试 · PDF 导入，等待管理员在后台审核。"
+            : "学校考试 · PDF 整页出图（人工校对后发布）";
+          const inserted = await supabaseAdmin
             .from("mock_papers")
             .insert({
               slug,
               title,
-              description: "学校考试 · PDF 整页出图（人工校对后发布）",
+              description,
               year: new Date().getFullYear(),
               total_seconds: 70 * 60,
               frq_seconds: 60 * 60,
@@ -189,7 +196,8 @@ export const Route = createFileRoute("/api/teacher/pdf")({
             })
             .select("id,slug,title")
             .single();
-          if (pErr || !paper) return jsonErr(pErr?.message ?? "无法创建试卷", 500);
+          if (inserted.error || !inserted.data) return jsonErr(inserted.error?.message ?? "无法创建试卷", 500);
+          const paper = inserted.data;
 
           if (mcqs.length > 0) {
             const rows = mcqs.map((it) => {

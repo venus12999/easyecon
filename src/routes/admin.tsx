@@ -12,6 +12,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { isLifetimeVipEmail } from "@/lib/lifetime-vip";
 import { ManualPaymentsPanel } from "@/components/admin/ManualPaymentsPanel";
+import { TeacherUploadsPanel } from "@/components/admin/TeacherUploadsPanel";
 
 // 判断题干是否提示包含图表（导入时在题干里以「[此题含图…]」「见原 PDF」「见图」等方式标注）
 function hasImageMarker(stem: string): boolean {
@@ -155,15 +156,20 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
   }, []);
 
   const reload = useCallback(async () => {
-    const res = await fetch("/api/admin/questions", { headers: { Authorization: `Bearer ${token}` } });
-    if (res.status === 401) {
-      toast.error("会话过期，请重新登录");
-      onLogout();
-      return;
+    try {
+      const res = await fetch("/api/admin/questions", { headers: { Authorization: `Bearer ${token}` } });
+      if (res.status === 401) {
+        toast.error("会话过期，请重新登录");
+        onLogout();
+        return;
+      }
+      const j = await res.json().catch(() => ({}));
+      setKps(j.knowledge_points ?? []);
+      setQuestions(j.questions ?? []);
+      if (!res.ok) toast.error(j.error ?? "题库接口暂时不可用");
+    } catch {
+      toast.error("题库接口暂时不可用");
     }
-    const j = await res.json();
-    setKps(j.knowledge_points);
-    setQuestions(j.questions);
   }, [token, onLogout]);
 
   useEffect(() => { reload(); }, [reload]);
@@ -221,8 +227,9 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
         </div>
 
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList>
+          <TabsList className="h-auto flex-wrap justify-start">
             <TabsTrigger value="list">题目列表</TabsTrigger>
+            <TabsTrigger value="uploads">教师卷</TabsTrigger>
             <TabsTrigger value="import">批量导入</TabsTrigger>
             <TabsTrigger value="audit">AI 审核</TabsTrigger>
             <TabsTrigger value="feedback">用户反馈</TabsTrigger>
@@ -371,6 +378,10 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
                 </Card>
               ))}
             </div>
+          </TabsContent>
+
+          <TabsContent value="uploads" className="mt-4">
+            <TeacherUploadsPanel token={token} />
           </TabsContent>
 
           <TabsContent value="import" className="mt-4">

@@ -52,6 +52,7 @@ import { Route as ApiExamEnterRouteImport } from './routes/api/exam/enter'
 import { Route as ApiExamAttemptRouteImport } from './routes/api/exam/attempt'
 import { Route as ApiAdminUsersRouteImport } from './routes/api/admin/users'
 import { Route as ApiAdminUploadImageRouteImport } from './routes/api/admin/upload-image'
+import { Route as ApiAdminTeacherUploadsRouteImport } from './routes/api/admin/teacher-uploads'
 import { Route as ApiAdminReanalyzeRouteImport } from './routes/api/admin/reanalyze'
 import { Route as ApiAdminQuestionsRouteImport } from './routes/api/admin/questions'
 import { Route as ApiAdminManualPaymentsRouteImport } from './routes/api/admin/manual-payments'
@@ -276,6 +277,11 @@ const ApiAdminUploadImageRoute = ApiAdminUploadImageRouteImport.update({
   path: '/api/admin/upload-image',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAdminTeacherUploadsRoute = ApiAdminTeacherUploadsRouteImport.update({
+  id: '/api/admin/teacher-uploads',
+  path: '/api/admin/teacher-uploads',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAdminReanalyzeRoute = ApiAdminReanalyzeRouteImport.update({
   id: '/api/admin/reanalyze',
   path: '/api/admin/reanalyze',
@@ -354,6 +360,7 @@ export interface FileRoutesByFullPath {
   '/api/admin/manual-payments': typeof ApiAdminManualPaymentsRoute
   '/api/admin/questions': typeof ApiAdminQuestionsRoute
   '/api/admin/reanalyze': typeof ApiAdminReanalyzeRoute
+  '/api/admin/teacher-uploads': typeof ApiAdminTeacherUploadsRoute
   '/api/admin/upload-image': typeof ApiAdminUploadImageRoute
   '/api/admin/users': typeof ApiAdminUsersRoute
   '/api/exam/attempt': typeof ApiExamAttemptRoute
@@ -407,6 +414,7 @@ export interface FileRoutesByTo {
   '/api/admin/manual-payments': typeof ApiAdminManualPaymentsRoute
   '/api/admin/questions': typeof ApiAdminQuestionsRoute
   '/api/admin/reanalyze': typeof ApiAdminReanalyzeRoute
+  '/api/admin/teacher-uploads': typeof ApiAdminTeacherUploadsRoute
   '/api/admin/upload-image': typeof ApiAdminUploadImageRoute
   '/api/admin/users': typeof ApiAdminUsersRoute
   '/api/exam/attempt': typeof ApiExamAttemptRoute
@@ -461,6 +469,7 @@ export interface FileRoutesById {
   '/api/admin/manual-payments': typeof ApiAdminManualPaymentsRoute
   '/api/admin/questions': typeof ApiAdminQuestionsRoute
   '/api/admin/reanalyze': typeof ApiAdminReanalyzeRoute
+  '/api/admin/teacher-uploads': typeof ApiAdminTeacherUploadsRoute
   '/api/admin/upload-image': typeof ApiAdminUploadImageRoute
   '/api/admin/users': typeof ApiAdminUsersRoute
   '/api/exam/attempt': typeof ApiExamAttemptRoute
@@ -516,6 +525,7 @@ export interface FileRouteTypes {
     | '/api/admin/manual-payments'
     | '/api/admin/questions'
     | '/api/admin/reanalyze'
+    | '/api/admin/teacher-uploads'
     | '/api/admin/upload-image'
     | '/api/admin/users'
     | '/api/exam/attempt'
@@ -569,6 +579,7 @@ export interface FileRouteTypes {
     | '/api/admin/manual-payments'
     | '/api/admin/questions'
     | '/api/admin/reanalyze'
+    | '/api/admin/teacher-uploads'
     | '/api/admin/upload-image'
     | '/api/admin/users'
     | '/api/exam/attempt'
@@ -622,6 +633,7 @@ export interface FileRouteTypes {
     | '/api/admin/manual-payments'
     | '/api/admin/questions'
     | '/api/admin/reanalyze'
+    | '/api/admin/teacher-uploads'
     | '/api/admin/upload-image'
     | '/api/admin/users'
     | '/api/exam/attempt'
@@ -676,6 +688,7 @@ export interface RootRouteChildren {
   ApiAdminManualPaymentsRoute: typeof ApiAdminManualPaymentsRoute
   ApiAdminQuestionsRoute: typeof ApiAdminQuestionsRoute
   ApiAdminReanalyzeRoute: typeof ApiAdminReanalyzeRoute
+  ApiAdminTeacherUploadsRoute: typeof ApiAdminTeacherUploadsRoute
   ApiAdminUploadImageRoute: typeof ApiAdminUploadImageRoute
   ApiAdminUsersRoute: typeof ApiAdminUsersRoute
   ApiExamAttemptRoute: typeof ApiExamAttemptRoute
@@ -994,6 +1007,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAdminUploadImageRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/admin/teacher-uploads': {
+      id: '/api/admin/teacher-uploads'
+      path: '/api/admin/teacher-uploads'
+      fullPath: '/api/admin/teacher-uploads'
+      preLoaderRoute: typeof ApiAdminTeacherUploadsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/admin/reanalyze': {
       id: '/api/admin/reanalyze'
       path: '/api/admin/reanalyze'
@@ -1112,6 +1132,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAdminManualPaymentsRoute: ApiAdminManualPaymentsRoute,
   ApiAdminQuestionsRoute: ApiAdminQuestionsRoute,
   ApiAdminReanalyzeRoute: ApiAdminReanalyzeRoute,
+  ApiAdminTeacherUploadsRoute: ApiAdminTeacherUploadsRoute,
   ApiAdminUploadImageRoute: ApiAdminUploadImageRoute,
   ApiAdminUsersRoute: ApiAdminUsersRoute,
   ApiExamAttemptRoute: ApiExamAttemptRoute,

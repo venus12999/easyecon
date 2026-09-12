@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { authFetch } from "@/lib/auth-fetch";
+import { examSlugFromFilename, parseApExamPages } from "@/lib/ap-exam-parse";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/teacher")({
@@ -179,6 +180,7 @@ function TeacherHome() {
   const [items, setItems] = useState<PdfItem[]>([]);
   const [pdfBusy, setPdfBusy] = useState("");
   const [pdfTitle, setPdfTitle] = useState("");
+  const [pdfToMock, setPdfToMock] = useState(false);
   const [tab, setTab] = useState("roster");
   const [copied, setCopied] = useState("");
 
@@ -345,7 +347,56 @@ function TeacherHome() {
       }
       await openImport(importId);
       await loadPdfs();
-      toast.success("页图已生成，请按页切题并校对后再发布");
+      const parsed = parseApExamPages(
+        raster.map((page) => ({ page_number: page.page_number, extracted_text: page.extracted_text })),
+      );
+      if (parsed.length > 0) {
+        setItems(
+          parsed.map((it) => ({
+            kind: it.kind,
+            sort_order: it.sort_order,
+            page_number: it.page_number,
+            stem: it.stem,
+            option_a: it.option_a,
+            option_b: it.option_b,
+            option_c: it.option_c,
+            option_d: it.option_d,
+            option_e: it.option_e,
+            correct_answer: it.correct_answer || "A",
+            content: it.content,
+            max_score: it.max_score,
+            reviewed: false,
+          })),
+        );
+        const mcq = parsed.filter((it) => it.kind === "mcq").length;
+        const frq = parsed.filter((it) => it.kind === "frq").length;
+        toast.success(`硬编程已切出 ${mcq} 道选择题、${frq} 道大题。图表题会挂上整页图，请核对答案后再发布`);
+        setPdfBusy("保存切题结果…");
+        await authFetch("/api/teacher/pdf", {
+          method: "POST",
+          body: JSON.stringify({
+            action: "save-items",
+            import_id: importId,
+            items: parsed.map((it) => ({
+              kind: it.kind,
+              sort_order: it.sort_order,
+              page_number: it.page_number,
+              stem: it.stem,
+              option_a: it.option_a,
+              option_b: it.option_b,
+              option_c: it.option_c,
+              option_d: it.option_d,
+              option_e: it.option_e,
+              correct_answer: it.correct_answer || null,
+              content: it.content,
+              max_score: it.max_score,
+              reviewed: false,
+            })),
+          }),
+        });
+      } else {
+        toast.success("页图已生成，未能自动切题，请按页手工切题后再发布");
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "PDF 处理失败");
     } finally {
@@ -402,14 +453,21 @@ function TeacherHome() {
     }
     const r = await authFetch("/api/teacher/pdf", {
       method: "POST",
-      body: JSON.stringify({ action: "publish", import_id: activeImport, title: pdfTitle }),
+      body: JSON.stringify({
+        action: "publish",
+        import_id: activeImport,
+        title: pdfTitle,
+        promote_requested: pdfToMock,
+      }),
     });
     const j = await r.json();
     if (!r.ok) {
-      toast.error(j.error ?? "发布失败");
+      toast.error(j.error ?? "提交失败");
       return;
     }
-    toast.success(`已发布试卷 ${j.paper.title}，可去「布置考试」选题`);
+    toast.success(pdfToMock
+      ? `已提交「${j.paper.title}」。班级可布置这场考试；是否进入模拟考试真题库，由管理员在后台审核。`
+      : `已发布「${j.paper.title}」，可去「布置考试」选题。日常选择题/大题库不会出现这些题。`);
     await Promise.all([loadPdfs(), loadAssignments()]);
     setPaperId(j.paper.id);
     setSource("existing");
@@ -772,7 +830,7 @@ function TeacherHome() {
           <Card className="glass rounded-2xl border-white/60 shadow-none">
             <CardContent className="space-y-3 p-5">
               <p className="text-sm text-muted-foreground">
-                上传 PDF 后会把每一页渲染成图。请按页切题、校对选项和答案，全部勾选「已校对」才能发布。未发布的卷不能开考。
+                上传 PDF 后会把每一页渲染成图，并按题号切开选择题/大题（图表题挂整页图，不靠 AI）。校对后提交到管理员后台：默认只给你布置学校考试用，学生在模拟考试、选择题、大题练习里都看不到。若要进入真题库，勾选申请，由管理员决定是否上架。
               </p>
               <label className={cn(
                 "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-primary/30 bg-primary/5 px-4 py-8 text-center transition hover:bg-primary/10",
@@ -780,7 +838,7 @@ function TeacherHome() {
               )}>
                 <FileUp className="h-6 w-6 text-primary" />
                 <span className="text-sm font-medium">{pdfBusy || "点击选择 PDF"}</span>
-                <span className="text-xs text-muted-foreground">建议先用少量页试跑，校对完成后再布置考试</span>
+                <span className="text-xs text-muted-foreground">建议先用少量页试跑，校对完成后再提交</span>
                 <input
                   type="file"
                   accept="application/pdf"
@@ -813,11 +871,19 @@ function TeacherHome() {
                   <Field label="发布后的试卷标题">
                     <Input placeholder="例如：校本练习 1" value={pdfTitle} onChange={(e) => setPdfTitle(e.target.value)} />
                   </Field>
+                  <label className="flex items-start gap-2 text-sm">
+                    <input type="checkbox" className="mt-1" checked={pdfToMock} onChange={(e) => setPdfToMock(e.target.checked)} />
+                    <span>
+                      申请列入模拟考试真题库（提交后由管理员在后台决定，不会自动进入选择题/大题练习库）。
+                      {pdfToMock && pdfTitle ? ` 建议卷号 ${examSlugFromFilename(pdfTitle)}` : ""}
+                    </span>
+                  </label>
                   <div className="flex flex-wrap gap-2">
                     <Button size="sm" className="w-full sm:w-auto" onClick={() => setItems((xs) => [...xs, emptyItem(pages[0]?.page_number ?? 1, xs.length + 1, "mcq")])}>加选择题</Button>
                     <Button size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => setItems((xs) => [...xs, emptyItem(pages[0]?.page_number ?? 1, xs.length + 1, "frq")])}>加大题</Button>
+                    <Button size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => setItems((xs) => xs.map((x) => ({ ...x, reviewed: true })))}>全部标为已校对</Button>
                     <Button size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => void saveItems()}>保存切题</Button>
-                    <Button size="sm" className="w-full sm:w-auto" onClick={() => void publishPdf()}>校对完成，发布试卷</Button>
+                    <Button size="sm" className="w-full sm:w-auto" onClick={() => void publishPdf()}>校对完成，提交到后台</Button>
                   </div>
                 </CardContent>
               </Card>
