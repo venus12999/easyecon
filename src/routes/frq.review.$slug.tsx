@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { FrqGradeCard, type GradeResult } from "@/components/frq/FrqGradeCard";
-import { FrqContent } from "@/components/frq/FrqContent";
+import { FrqContent, shortFrqTitle } from "@/components/frq/FrqContent";
 
 export const Route = createFileRoute("/frq/review/$slug")({
   head: () => ({ meta: [{ title: "大题合集 · 评分回放" }] }),
@@ -185,7 +185,7 @@ function FrqReviewPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="font-semibold">
                     第 {i + 1} 题
-                    {f.title ? ` · ${f.title}` : ""}
+                    {shortFrqTitle(f.title, f.content) ? ` · ${shortFrqTitle(f.title, f.content)}` : ""}
                     <span className="ml-2 text-xs text-muted-foreground">满分 {f.max_score} 分</span>
                   </div>
                   {grade ? (

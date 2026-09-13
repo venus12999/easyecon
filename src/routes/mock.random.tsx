@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { FrqAnswerBox, EMPTY_ANSWER, type FrqAnswerState } from "@/components/frq/FrqAnswerBox";
 import { FrqGradeCard, type GradeResult } from "@/components/frq/FrqGradeCard";
-import { FrqContent } from "@/components/frq/FrqContent";
+import { FrqContent, shortFrqTitle } from "@/components/frq/FrqContent";
 import { McqResultGrid } from "@/components/mock/McqResultGrid";
 import {
   CalculatorModal,
@@ -585,7 +585,7 @@ function Mock() {
                 <CardContent className="space-y-4 p-5">
                   <div className="font-semibold">
                     Question {i + 1}
-                    {f.title ? ` · ${f.title}` : ""}
+                    {shortFrqTitle(f.title, f.content) ? ` · ${shortFrqTitle(f.title, f.content)}` : ""}
                     <span className="ml-2 text-xs text-muted-foreground">
                       满分 {f.max_score} 分
                     </span>
@@ -830,7 +830,7 @@ function Mock() {
                     <CardContent className="p-5 space-y-3">
                       <div className="font-semibold text-sm">
                         Question {i + 1}
-                        {f.title ? ` · ${f.title}` : ""}
+                        {shortFrqTitle(f.title, f.content) ? ` · ${shortFrqTitle(f.title, f.content)}` : ""}
                         <span className="ml-2 text-xs text-muted-foreground">
                           满分 {f.max_score} 分
                         </span>

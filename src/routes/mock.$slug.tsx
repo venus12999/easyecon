@@ -11,7 +11,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { FrqAnswerBox, EMPTY_ANSWER, type FrqAnswerState } from "@/components/frq/FrqAnswerBox";
 import { FrqGradeCard, type GradeResult } from "@/components/frq/FrqGradeCard";
-import { FrqContent } from "@/components/frq/FrqContent";
+import { FrqContent, shortFrqTitle } from "@/components/frq/FrqContent";
 import { McqResultGrid } from "@/components/mock/McqResultGrid";
 import {
   CalculatorModal,
@@ -1209,7 +1209,7 @@ function PaperRunner() {
               <CardContent className="p-5 space-y-4">
                 <div className="font-semibold">
                   Question {i + 1}
-                  {f.title ? ` · ${f.title}` : ""}
+                  {shortFrqTitle(f.title, f.content) ? ` · ${shortFrqTitle(f.title, f.content)}` : ""}
                   <span className="ml-2 text-xs text-muted-foreground">满分 {f.max_score} 分</span>
                   {user && !grade && (
                     <span className="ml-2 text-[11px] text-muted-foreground font-normal">
@@ -1781,7 +1781,7 @@ function PaperRunner() {
                       <CardContent className="p-5 space-y-3">
                         <div className="font-semibold">
                           Question {i + 1}
-                          {f.title ? ` · ${f.title}` : ""}
+                          {shortFrqTitle(f.title, f.content) ? ` · ${shortFrqTitle(f.title, f.content)}` : ""}
                           <span className="ml-2 text-xs text-muted-foreground">满分 {f.max_score} 分</span>
                         </div>
                         <FrqContent content={f.content} />
