@@ -875,7 +875,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          correct_answer: string
+          correct_answer?: string | null
           created_at?: string
           difficulty?: number
           exclude_from_pool?: boolean

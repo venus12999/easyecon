@@ -24,7 +24,7 @@ export function createUserScopedClient(jwt: string) {
   const anon = process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
   if (!url || !anon) throw new Error("Missing Supabase URL or anon key");
   return createClient(url, anon, {
-    auth: { persistSession: false, autoRefreshToken: false },
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
     global: { headers: { Authorization: `Bearer ${jwt}` } },
   });
 }

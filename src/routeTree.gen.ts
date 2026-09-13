@@ -57,7 +57,6 @@ import { Route as ApiAdminReanalyzeRouteImport } from './routes/api/admin/reanal
 import { Route as ApiAdminQuestionsRouteImport } from './routes/api/admin/questions'
 import { Route as ApiAdminManualPaymentsRouteImport } from './routes/api/admin/manual-payments'
 import { Route as ApiAdminLoginRouteImport } from './routes/api/admin/login'
-import { Route as ApiAdminImportRouteImport } from './routes/api/admin/import'
 import { Route as ApiAdminFrqsRouteImport } from './routes/api/admin/frqs'
 import { Route as ApiAdminFeedbackRouteImport } from './routes/api/admin/feedback'
 import { Route as ApiAdminAuditRouteImport } from './routes/api/admin/audit'
@@ -302,11 +301,6 @@ const ApiAdminLoginRoute = ApiAdminLoginRouteImport.update({
   path: '/api/admin/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAdminImportRoute = ApiAdminImportRouteImport.update({
-  id: '/api/admin/import',
-  path: '/api/admin/import',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiAdminFrqsRoute = ApiAdminFrqsRouteImport.update({
   id: '/api/admin/frqs',
   path: '/api/admin/frqs',
@@ -355,7 +349,6 @@ export interface FileRoutesByFullPath {
   '/api/admin/audit': typeof ApiAdminAuditRoute
   '/api/admin/feedback': typeof ApiAdminFeedbackRoute
   '/api/admin/frqs': typeof ApiAdminFrqsRoute
-  '/api/admin/import': typeof ApiAdminImportRoute
   '/api/admin/login': typeof ApiAdminLoginRoute
   '/api/admin/manual-payments': typeof ApiAdminManualPaymentsRoute
   '/api/admin/questions': typeof ApiAdminQuestionsRoute
@@ -409,7 +402,6 @@ export interface FileRoutesByTo {
   '/api/admin/audit': typeof ApiAdminAuditRoute
   '/api/admin/feedback': typeof ApiAdminFeedbackRoute
   '/api/admin/frqs': typeof ApiAdminFrqsRoute
-  '/api/admin/import': typeof ApiAdminImportRoute
   '/api/admin/login': typeof ApiAdminLoginRoute
   '/api/admin/manual-payments': typeof ApiAdminManualPaymentsRoute
   '/api/admin/questions': typeof ApiAdminQuestionsRoute
@@ -464,7 +456,6 @@ export interface FileRoutesById {
   '/api/admin/audit': typeof ApiAdminAuditRoute
   '/api/admin/feedback': typeof ApiAdminFeedbackRoute
   '/api/admin/frqs': typeof ApiAdminFrqsRoute
-  '/api/admin/import': typeof ApiAdminImportRoute
   '/api/admin/login': typeof ApiAdminLoginRoute
   '/api/admin/manual-payments': typeof ApiAdminManualPaymentsRoute
   '/api/admin/questions': typeof ApiAdminQuestionsRoute
@@ -520,7 +511,6 @@ export interface FileRouteTypes {
     | '/api/admin/audit'
     | '/api/admin/feedback'
     | '/api/admin/frqs'
-    | '/api/admin/import'
     | '/api/admin/login'
     | '/api/admin/manual-payments'
     | '/api/admin/questions'
@@ -574,7 +564,6 @@ export interface FileRouteTypes {
     | '/api/admin/audit'
     | '/api/admin/feedback'
     | '/api/admin/frqs'
-    | '/api/admin/import'
     | '/api/admin/login'
     | '/api/admin/manual-payments'
     | '/api/admin/questions'
@@ -628,7 +617,6 @@ export interface FileRouteTypes {
     | '/api/admin/audit'
     | '/api/admin/feedback'
     | '/api/admin/frqs'
-    | '/api/admin/import'
     | '/api/admin/login'
     | '/api/admin/manual-payments'
     | '/api/admin/questions'
@@ -683,7 +671,6 @@ export interface RootRouteChildren {
   ApiAdminAuditRoute: typeof ApiAdminAuditRoute
   ApiAdminFeedbackRoute: typeof ApiAdminFeedbackRoute
   ApiAdminFrqsRoute: typeof ApiAdminFrqsRoute
-  ApiAdminImportRoute: typeof ApiAdminImportRoute
   ApiAdminLoginRoute: typeof ApiAdminLoginRoute
   ApiAdminManualPaymentsRoute: typeof ApiAdminManualPaymentsRoute
   ApiAdminQuestionsRoute: typeof ApiAdminQuestionsRoute
@@ -1042,13 +1029,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAdminLoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/admin/import': {
-      id: '/api/admin/import'
-      path: '/api/admin/import'
-      fullPath: '/api/admin/import'
-      preLoaderRoute: typeof ApiAdminImportRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/admin/frqs': {
       id: '/api/admin/frqs'
       path: '/api/admin/frqs'
@@ -1127,7 +1107,6 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAdminAuditRoute: ApiAdminAuditRoute,
   ApiAdminFeedbackRoute: ApiAdminFeedbackRoute,
   ApiAdminFrqsRoute: ApiAdminFrqsRoute,
-  ApiAdminImportRoute: ApiAdminImportRoute,
   ApiAdminLoginRoute: ApiAdminLoginRoute,
   ApiAdminManualPaymentsRoute: ApiAdminManualPaymentsRoute,
   ApiAdminQuestionsRoute: ApiAdminQuestionsRoute,

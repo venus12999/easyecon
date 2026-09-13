@@ -16,12 +16,37 @@ import {
   Copy,
   FileUp,
   Loader2,
+  Sparkles,
+  Trash2,
   Users,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { authFetch } from "@/lib/auth-fetch";
-import { examSlugFromFilename, parseApExamPages } from "@/lib/ap-exam-parse";
+import { applyKnownApAnswerKey, looksLikeProvidedFigure, parseApExamPages } from "@/lib/ap-exam-parse";
+import { cropFigureFromExamPage, cropImageBlob, cropRectsForQuestions, cropUrlFromPage, refineFigureBlob } from "@/lib/exam-page-crop";
+import { PdfQuestionList, type PdfAiFinding, type TeacherPdfItem } from "@/components/teacher/PdfQuestionList";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+
+async function putAssignmentPng(classId: string, importId: string, filename: string, blob: Blob) {
+  const path = `assignments/${classId}/${importId}/${filename}`;
+  const { error } = await supabase.storage.from("question-images").upload(path, blob, {
+    contentType: "image/png",
+    upsert: true,
+  });
+  if (!error) return supabase.storage.from("question-images").getPublicUrl(path).data.publicUrl;
+  const crop = filename.match(/^(mcq|frq)-(\d+)\.png$/i);
+  if (!crop) throw new Error(error.message);
+  const fd = new FormData();
+  fd.append("file", new File([blob], filename, { type: "image/png" }));
+  fd.append("import_id", importId);
+  fd.append("crop_kind", crop[1].toLowerCase());
+  fd.append("sort_order", crop[2]);
+  const up = await authFetch("/api/teacher/pdf", { method: "POST", body: fd });
+  const uj = await up.json().catch(() => ({}));
+  if (!up.ok || !uj.image_url) throw new Error(uj.error ?? error.message);
+  return uj.image_url as string;
+}
 
 export const Route = createFileRoute("/teacher")({
   head: () => ({ meta: [{ title: "教师端 · 学校考试" }, { name: "robots", content: "noindex" }] }),
@@ -29,7 +54,7 @@ export const Route = createFileRoute("/teacher")({
 });
 
 type RosterRow = { id: string; student_id: string; student_name: string; user_id: string | null };
-type Paper = { id: string; slug: string; title: string; year: number | null };
+type Paper = { id: string; slug: string; title: string; year: number | null; created_at?: string | null };
 type Assignment = {
   id: string;
   title: string;
@@ -51,22 +76,7 @@ type GradeRow = {
 };
 type PdfImport = { id: string; filename: string; page_count: number; status: string; paper_id: string | null; created_at: string };
 type PdfPage = { id: string; page_number: number; image_url: string; extracted_text: string | null };
-type PdfItem = {
-  id?: string;
-  kind: "mcq" | "frq";
-  sort_order: number;
-  page_number: number;
-  stem: string;
-  option_a: string;
-  option_b: string;
-  option_c: string;
-  option_d: string;
-  option_e: string;
-  correct_answer: string;
-  content: string;
-  max_score: number;
-  reviewed: boolean;
-};
+type PdfItem = TeacherPdfItem;
 
 function toLocalInput(d: Date) {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -139,6 +149,35 @@ function EmptyState({ icon: Icon, title, hint }: { icon: typeof Users; title: st
   );
 }
 
+function isPageShot(url: string | null | undefined) {
+  return !!url && /\/page-\d+\.(png|jpe?g|webp)$/i.test(url);
+}
+
+function sortPdfItems(items: PdfItem[]) {
+  return [...items].sort((a, b) => {
+    if (a.kind !== b.kind) return a.kind === "mcq" ? -1 : 1;
+    return a.sort_order - b.sort_order;
+  });
+}
+
+function paperPickerLabel(p: Paper) {
+  if (p.slug.startsWith("school-")) {
+    const day = p.created_at
+      ? new Date(p.created_at).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })
+      : "";
+    return `${p.title} · 本校导入${day ? ` ${day}` : ""}`;
+  }
+  return p.year ? `${p.title} · ${p.year}` : p.title;
+}
+
+function importChipLabel(imp: PdfImport) {
+  const day = imp.created_at
+    ? new Date(imp.created_at).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })
+    : "";
+  const status = imp.status === "published" ? "已提交" : imp.status === "rendered" ? "未提交" : imp.status;
+  return `${imp.filename.replace(/\.pdf$/i, "")} · ${status}${day ? ` · ${day}` : ""}`;
+}
+
 function emptyItem(page: number, order: number, kind: "mcq" | "frq"): PdfItem {
   return {
     kind,
@@ -150,7 +189,7 @@ function emptyItem(page: number, order: number, kind: "mcq" | "frq"): PdfItem {
     option_c: "",
     option_d: "",
     option_e: "",
-    correct_answer: "A",
+    correct_answer: "",
     content: "",
     max_score: 9,
     reviewed: false,
@@ -178,9 +217,12 @@ function TeacherHome() {
   const [activeImport, setActiveImport] = useState<string>("");
   const [pages, setPages] = useState<PdfPage[]>([]);
   const [items, setItems] = useState<PdfItem[]>([]);
-  const [pdfBusy, setPdfBusy] = useState("");
   const [pdfTitle, setPdfTitle] = useState("");
-  const [pdfToMock, setPdfToMock] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState("");
+  const [pdfFindings, setPdfFindings] = useState<PdfAiFinding[]>([]);
+  const [pdfAiRan, setPdfAiRan] = useState(false);
+  const [pdfAiDone, setPdfAiDone] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
   const [tab, setTab] = useState("roster");
   const [copied, setCopied] = useState("");
 
@@ -319,8 +361,52 @@ function TeacherHome() {
     downloadText(`${gradeMeta?.title ?? "gradebook"}.csv`, [header, ...lines].join("\n"));
   }
 
+  async function runPdfAi(importId: string, current: PdfItem[]) {
+    setAiBusy(true);
+    try {
+      const r = await authFetch("/api/teacher/pdf", {
+        method: "POST",
+        body: JSON.stringify({ action: "ai-review", import_id: importId, items: current }),
+        signal: AbortSignal.timeout(20000),
+      });
+      const j = await r.json();
+      if (!r.ok) {
+        toast.error(j.error ?? "AI 审核失败，请再跑一遍后再提交");
+        setPdfFindings([]);
+        setPdfAiDone(false);
+        return;
+      }
+      if (j.skipped) {
+        setPdfFindings([]);
+        setPdfAiRan(false);
+        setPdfAiDone(true);
+        toast.message("AI 未配置，切题结果可直接查看；有问题再点编辑。");
+        return;
+      }
+      const findings = (j.findings ?? []) as PdfAiFinding[];
+      setPdfFindings(findings);
+      setPdfAiRan(true);
+      setPdfAiDone(true);
+      if (findings.length === 0) {
+        toast.success("AI 没有发现明显切题问题，可以直接提交。有需要再点编辑。");
+      } else {
+        toast.message(`AI 标出 ${findings.length} 道需要看一眼的题，其余不用逐题勾选。`);
+      }
+    } catch {
+      setPdfFindings([]);
+      setPdfAiRan(false);
+      setPdfAiDone(true);
+      toast.message("AI 审核超时或失败，题目仍可直接提交。");
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
   async function onPdfFile(file: File) {
     setPdfBusy("正在把每一页渲染成图片…");
+    setPdfAiDone(false);
+    setPdfAiRan(false);
+    setPdfFindings([]);
     try {
       const { rasterizePdf } = await import("@/lib/pdf-rasterize");
       const raster = await rasterizePdf(file, (d, t) => setPdfBusy(`渲染页图 ${d}/${t}`));
@@ -332,27 +418,105 @@ function TeacherHome() {
       const cj = await created.json();
       if (!created.ok) throw new Error(cj.error ?? "创建失败");
       const importId = cj.import.id as string;
+      const classId = String(cj.import.class_id ?? "");
       for (const page of raster) {
         setPdfBusy(`上传第 ${page.page_number} 页…`);
-        const fd = new FormData();
-        fd.append("file", new File([page.blob], `page-${page.page_number}.png`, { type: "image/png" }));
-        fd.append("import_id", importId);
-        fd.append("page_number", String(page.page_number));
-        fd.append("extracted_text", page.extracted_text);
-        const up = await authFetch("/api/teacher/pdf", { method: "POST", body: fd });
-        if (!up.ok) {
-          const uj = await up.json().catch(() => ({}));
-          throw new Error(uj.error ?? `第 ${page.page_number} 页上传失败`);
+        let imageUrl = "";
+        let clientErr = "";
+        if (classId) {
+          try {
+            imageUrl = await putAssignmentPng(classId, importId, `page-${page.page_number}.png`, page.blob);
+          } catch (e) {
+            clientErr = e instanceof Error ? e.message : "存储失败";
+          }
+        }
+        if (imageUrl) {
+          const rec = await authFetch("/api/teacher/pdf", {
+            method: "POST",
+            body: JSON.stringify({
+              action: "record-page",
+              import_id: importId,
+              page_number: page.page_number,
+              image_url: imageUrl,
+              extracted_text: page.extracted_text,
+            }),
+          });
+          if (!rec.ok) {
+            const rj = await rec.json().catch(() => ({}));
+            throw new Error(rj.error ?? `第 ${page.page_number} 页记录失败`);
+          }
+        } else {
+          const fd = new FormData();
+          fd.append("file", new File([page.blob], `page-${page.page_number}.png`, { type: "image/png" }));
+          fd.append("import_id", importId);
+          fd.append("page_number", String(page.page_number));
+          fd.append("extracted_text", page.extracted_text);
+          const up = await authFetch("/api/teacher/pdf", { method: "POST", body: fd });
+          if (!up.ok) {
+            const uj = await up.json().catch(() => ({}));
+            throw new Error(uj.error ?? clientErr ?? `第 ${page.page_number} 页上传失败`);
+          }
         }
       }
-      await openImport(importId);
+      const opened = await openImport(importId);
       await loadPdfs();
-      const parsed = parseApExamPages(
-        raster.map((page) => ({ page_number: page.page_number, extracted_text: page.extracted_text })),
+      const parsed = applyKnownApAnswerKey(
+        parseApExamPages(
+          raster.map((page) => ({ page_number: page.page_number, extracted_text: page.extracted_text })),
+        ),
+        file.name,
       );
       if (parsed.length > 0) {
-        setItems(
-          parsed.map((it) => ({
+        const rects = cropRectsForQuestions(raster, parsed);
+        const imageByKey: Record<string, string> = {};
+        let cropFails = 0;
+        let figures = 0;
+        for (const it of parsed) {
+          if (!it.needs_image) continue;
+          const key = `${it.kind}-${it.sort_order}`;
+          const plan = rects.get(key);
+          const page = raster.find((p) => p.page_number === it.page_number);
+          if (!plan || !page) {
+            cropFails++;
+            continue;
+          }
+          setPdfBusy(`从整页截取第 ${it.sort_order} 题图表…`);
+          try {
+            const crop = await cropImageBlob(page.blob, { ...plan, mode: "figure" });
+            figures++;
+            imageByKey[key] = URL.createObjectURL(crop);
+            if (classId) {
+              try {
+                imageByKey[key] = await putAssignmentPng(classId, importId, `${it.kind}-${it.sort_order}.png`, crop);
+              } catch {
+                const fd = new FormData();
+                fd.append("file", new File([crop], `${it.kind}-${it.sort_order}.png`, { type: "image/png" }));
+                fd.append("import_id", importId);
+                fd.append("crop_kind", it.kind);
+                fd.append("sort_order", String(it.sort_order));
+                const up = await authFetch("/api/teacher/pdf", { method: "POST", body: fd });
+                const uj = await up.json().catch(() => ({}));
+                if (up.ok && uj.image_url) imageByKey[key] = uj.image_url;
+              }
+            } else {
+              const fd = new FormData();
+              fd.append("file", new File([crop], `${it.kind}-${it.sort_order}.png`, { type: "image/png" }));
+              fd.append("import_id", importId);
+              fd.append("crop_kind", it.kind);
+              fd.append("sort_order", String(it.sort_order));
+              const up = await authFetch("/api/teacher/pdf", { method: "POST", body: fd });
+              const uj = await up.json().catch(() => ({}));
+              if (up.ok && uj.image_url) imageByKey[key] = uj.image_url;
+              else cropFails++;
+            }
+          } catch {
+            cropFails++;
+          }
+        }
+        const nextItems: PdfItem[] = parsed.map((it) => {
+          const pageUrl = opened?.pages.find((p) => p.page_number === it.page_number)?.image_url ?? null;
+          const crop = imageByKey[`${it.kind}-${it.sort_order}`] ?? null;
+          return {
             kind: it.kind,
             sort_order: it.sort_order,
             page_number: it.page_number,
@@ -362,40 +526,35 @@ function TeacherHome() {
             option_c: it.option_c,
             option_d: it.option_d,
             option_e: it.option_e,
-            correct_answer: it.correct_answer || "A",
+            correct_answer: it.correct_answer || "",
             content: it.content,
             max_score: it.max_score,
-            reviewed: false,
-          })),
-        );
+            reviewed: true,
+            needs_image: it.needs_image,
+            image_url: crop,
+            page_image_url: pageUrl,
+          };
+        });
+        setItems(nextItems);
         const mcq = parsed.filter((it) => it.kind === "mcq").length;
         const frq = parsed.filter((it) => it.kind === "frq").length;
-        toast.success(`硬编程已切出 ${mcq} 道选择题、${frq} 道大题。图表题会挂上整页图，请核对答案后再发布`);
+        if (cropFails > 0) {
+          toast.message(`已切出 ${mcq} 道选择题、${frq} 道大题，截到 ${figures} 张图表。${cropFails} 道带图题没截到，请手工补。`);
+        } else {
+          toast.success(`已切出 ${mcq} 道选择题、${frq} 道大题，并从整页截出 ${figures} 张对应图表。AI 正在扫一眼切题质量。`);
+        }
         setPdfBusy("保存切题结果…");
         await authFetch("/api/teacher/pdf", {
           method: "POST",
           body: JSON.stringify({
             action: "save-items",
             import_id: importId,
-            items: parsed.map((it) => ({
-              kind: it.kind,
-              sort_order: it.sort_order,
-              page_number: it.page_number,
-              stem: it.stem,
-              option_a: it.option_a,
-              option_b: it.option_b,
-              option_c: it.option_c,
-              option_d: it.option_d,
-              option_e: it.option_e,
-              correct_answer: it.correct_answer || null,
-              content: it.content,
-              max_score: it.max_score,
-              reviewed: false,
-            })),
+            items: nextItems,
           }),
         });
+        await runPdfAi(importId, nextItems);
       } else {
-        toast.success("页图已生成，未能自动切题，请按页手工切题后再发布");
+        toast.success("未能自动切题，请手工加题后再提交");
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "PDF 处理失败");
@@ -404,81 +563,202 @@ function TeacherHome() {
     }
   }
 
-  async function openImport(id: string) {
+  async function openImport(id: string): Promise<{ pages: PdfPage[] } | null> {
     setActiveImport(id);
     const r = await authFetch(`/api/teacher/pdf?id=${id}`);
     const j = await r.json();
     if (!r.ok) {
       toast.error(j.error ?? "无法打开");
-      return;
+      return null;
     }
     setPages(j.pages ?? []);
-    setItems(
-      (j.items ?? []).map((it: PdfItem & { stem?: string | null }) => ({
-        ...emptyItem(it.page_number, it.sort_order, it.kind),
-        ...it,
-        stem: it.stem ?? "",
-        option_a: it.option_a ?? "",
-        option_b: it.option_b ?? "",
-        option_c: it.option_c ?? "",
-        option_d: it.option_d ?? "",
-        option_e: it.option_e ?? "",
-        correct_answer: it.correct_answer ?? "A",
-        content: it.content ?? "",
-      })),
-    );
+    const loadedPages = (j.pages ?? []) as PdfPage[];
+    const nextItems: PdfItem[] = (j.items ?? []).map((it: PdfItem & { stem?: string | null }) => {
+        const page = loadedPages.find((p) => p.page_number === it.page_number);
+        const blob = `${it.stem ?? ""} ${it.content ?? ""}`;
+        const needs = it.needs_image ?? looksLikeProvidedFigure(blob);
+        const stored = it.image_url && !isPageShot(it.image_url) ? it.image_url : null;
+        const guessed = needs && page ? cropUrlFromPage(page.image_url, it.kind, it.sort_order) : null;
+        return {
+          ...emptyItem(it.page_number, it.sort_order, it.kind),
+          ...it,
+          stem: it.stem ?? "",
+          option_a: it.option_a ?? "",
+          option_b: it.option_b ?? "",
+          option_c: it.option_c ?? "",
+          option_d: it.option_d ?? "",
+          option_e: it.option_e ?? "",
+          correct_answer: it.correct_answer ?? "",
+          content: it.content ?? "",
+          image_url: stored || guessed,
+          page_image_url: page?.image_url ?? null,
+          needs_image: needs,
+        };
+      });
+    const keyed = applyKnownApAnswerKey(nextItems, j.import?.filename ?? "");
+    const applied = sortPdfItems(keyed.map((it) => {
+      if (it.image_url || !it.needs_image) return it;
+      const page = loadedPages.find((p) => p.page_number === it.page_number);
+      return { ...it, image_url: page ? cropUrlFromPage(page.image_url, it.kind, it.sort_order) : null };
+    }));
+    const classId = String(j.import?.class_id ?? "");
+    const published = j.import?.status === "published";
+    const withFigures = applied.filter((it) => it.needs_image && (it.page_image_url || it.image_url) && !(it.image_url ?? "").startsWith("blob:") && !(it.image_url ?? "").startsWith("data:"));
+    if (withFigures.length > 0) setPdfBusy("从整页重新截出图表（不含题干）…");
+    const pageBlobs = new Map<number, Blob>();
+    const tightened = await Promise.all(applied.map(async (it) => {
+      if (!it.needs_image) return it;
+      const page = loadedPages.find((p) => p.page_number === it.page_number);
+      const hint = it.kind === "frq"
+        ? "frq"
+        : /graph provided|the graph|figure provided/i.test(`${it.stem} ${it.content}`)
+          ? "graph"
+          : /table provided|the table|payoff|RKB|JCM/i.test(`${it.stem} ${it.content}`)
+            ? "table"
+            : "any";
+      try {
+        let next: Blob | null = null;
+        if (page?.image_url) {
+          let pageBlob = pageBlobs.get(it.page_number);
+          if (!pageBlob) {
+            const pageRes = await fetch(page.image_url);
+            if (pageRes.ok) {
+              pageBlob = await pageRes.blob();
+              pageBlobs.set(it.page_number, pageBlob);
+            }
+          }
+          if (pageBlob) next = await cropFigureFromExamPage(pageBlob, hint);
+        }
+        if (!next && it.image_url && !it.image_url.startsWith("blob:") && !it.image_url.startsWith("data:")) {
+          const res = await fetch(it.image_url);
+          if (res.ok) next = await refineFigureBlob(await res.blob());
+        }
+        if (!next) return it;
+        if (classId) {
+          try {
+            const uploaded = await putAssignmentPng(classId, id, `${it.kind}-${it.sort_order}.png`, next);
+            return { ...it, image_url: `${uploaded.split("?")[0]}?v=${Date.now()}` };
+          } catch {
+            /* keep local preview */
+          }
+        }
+        return { ...it, image_url: URL.createObjectURL(next) };
+      } catch {
+        return it;
+      }
+    }));
+    setItems(tightened);
+    setPdfFindings([]);
+    setPdfAiRan(false);
+    setPdfAiDone(published);
     setPdfTitle(j.import?.filename?.replace(/\.pdf$/i, "") ?? "");
+    if (withFigures.length > 0) setPdfBusy("");
+    if (tightened.length > 0 && !published) {
+      void runPdfAi(id, tightened);
+    }
+    return { pages: loadedPages };
   }
 
-  async function saveItems() {
-    if (!activeImport) return;
+  async function deleteImport(id: string, status: string) {
+    if (!window.confirm(status === "published" ? "从列表里去掉这份导入记录？已提交的学校卷不会自动删。" : "删除这份未提交的导入？")) return;
     const r = await authFetch("/api/teacher/pdf", {
       method: "POST",
-      body: JSON.stringify({ action: "save-items", import_id: activeImport, items }),
+      body: JSON.stringify({ action: "delete", import_id: id }),
     });
-    const j = await r.json();
+    const j = await r.json().catch(() => ({}));
     if (!r.ok) {
-      toast.error(j.error ?? "保存失败");
+      toast.error(j.error ?? "删除失败");
       return;
     }
-    toast.success("已保存切题");
+    if (activeImport === id) {
+      setActiveImport("");
+      setItems([]);
+      setPages([]);
+    }
     await loadPdfs();
+    toast.success("已删除");
   }
 
-  async function publishPdf() {
-    if (!activeImport) return;
-    if (items.some((it) => !it.reviewed)) {
-      toast.error("请先勾选「已校对」再发布");
+  async function deleteDraftImports() {
+    const n = imports.filter((imp) => imp.status !== "published").length;
+    if (n === 0) {
+      toast.message("没有未提交的导入");
       return;
     }
+    if (!window.confirm(`删除 ${n} 份未提交的 PDF 导入？`)) return;
     const r = await authFetch("/api/teacher/pdf", {
       method: "POST",
-      body: JSON.stringify({
-        action: "publish",
-        import_id: activeImport,
-        title: pdfTitle,
-        promote_requested: pdfToMock,
-      }),
+      body: JSON.stringify({ action: "delete-drafts" }),
     });
-    const j = await r.json();
+    const j = await r.json().catch(() => ({}));
     if (!r.ok) {
-      toast.error(j.error ?? "提交失败");
+      toast.error(j.error ?? "清理失败");
       return;
     }
-    toast.success(pdfToMock
-      ? `已提交「${j.paper.title}」。班级可布置这场考试；是否进入模拟考试真题库，由管理员在后台审核。`
-      : `已发布「${j.paper.title}」，可去「布置考试」选题。日常选择题/大题库不会出现这些题。`);
-    await Promise.all([loadPdfs(), loadAssignments()]);
-    setPaperId(j.paper.id);
-    setSource("existing");
-    setTab("assign");
+    const still = imports.find((imp) => imp.id === activeImport && imp.status === "published");
+    if (!still) {
+      setActiveImport("");
+      setItems([]);
+      setPages([]);
+    }
+    await loadPdfs();
+    toast.success("未提交的导入已清理");
+  }
+
+  async function saveAndPublish() {
+    if (!activeImport) return;
+    if (aiBusy || !pdfAiDone) {
+      toast.error("请等 AI 审完这一遍再提交");
+      return;
+    }
+    if (pdfFindings.length > 0 && !window.confirm(`AI 还标了 ${pdfFindings.length} 道题。确认已经看过，仍然提交？`)) {
+      return;
+    }
+    setPdfBusy("保存并提交到后台…");
+    try {
+      const ready = applyKnownApAnswerKey(items, pdfTitle || "2022");
+      const saved = await authFetch("/api/teacher/pdf", {
+        method: "POST",
+        body: JSON.stringify({ action: "save-items", import_id: activeImport, items: ready }),
+      });
+      const sj = await saved.json();
+      if (!saved.ok) throw new Error(sj.error ?? "保存失败");
+      const item_images: Record<string, string> = {};
+      for (const it of ready) {
+        const crop = it.image_url && !it.image_url.startsWith("blob:") && !/\/page-\d+\.(png|jpe?g|webp)$/i.test(it.image_url)
+          ? it.image_url
+          : null;
+        if (it.needs_image && crop) item_images[`${it.kind}-${it.sort_order}`] = crop;
+      }
+      const r = await authFetch("/api/teacher/pdf", {
+        method: "POST",
+        body: JSON.stringify({
+          action: "publish",
+          import_id: activeImport,
+          title: pdfTitle,
+          item_images,
+        }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? "提交失败");
+      toast.success(`已提交「${j.paper.title}」。班级可布置这场考试；是否进入题库由管理员在后台决定。`);
+      await Promise.all([loadPdfs(), loadAssignments()]);
+      setPaperId(j.paper.id);
+      setSource("existing");
+      setTab("assign");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "提交失败");
+    } finally {
+      setPdfBusy("");
+    }
   }
 
   const libraryPapers = useMemo(
-    () => papers.filter((p) => !p.slug.startsWith("frq-")),
+    () => papers.filter((p) => !p.slug.startsWith("frq-") && !p.slug.startsWith("school-retired")),
     [papers],
   );
   const selectedPaper = libraryPapers.find((p) => p.id === paperId);
+  const alreadyPublished = imports.find((imp) => imp.id === activeImport)?.status === "published";
 
   useEffect(() => {
     if (paperId) return;
@@ -659,7 +939,7 @@ function TeacherHome() {
                     <SelectContent>
                       {libraryPapers.map((p) => (
                         <SelectItem key={p.id} value={p.id}>
-                          {p.title}{p.slug.startsWith("school-") ? " · 学校卷" : p.year ? ` · ${p.year}` : ""}
+                          {paperPickerLabel(p)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -830,7 +1110,7 @@ function TeacherHome() {
           <Card className="glass rounded-2xl border-white/60 shadow-none">
             <CardContent className="space-y-3 p-5">
               <p className="text-sm text-muted-foreground">
-                上传 PDF 后会把每一页渲染成图，并按题号切开选择题/大题（图表题挂整页图，不靠 AI）。校对后提交到管理员后台：默认只给你布置学校考试用，学生在模拟考试、选择题、大题练习里都看不到。若要进入真题库，勾选申请，由管理员决定是否上架。
+                上传 PDF 后会自动切题，并强制让 AI 先审一遍。你只需改被标出来的题，然后保存并提交到后台。是否进入模拟考试或练习库，由管理员决定。
               </p>
               <label className={cn(
                 "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-primary/30 bg-primary/5 px-4 py-8 text-center transition hover:bg-primary/10",
@@ -838,7 +1118,7 @@ function TeacherHome() {
               )}>
                 <FileUp className="h-6 w-6 text-primary" />
                 <span className="text-sm font-medium">{pdfBusy || "点击选择 PDF"}</span>
-                <span className="text-xs text-muted-foreground">建议先用少量页试跑，校对完成后再提交</span>
+                <span className="text-xs text-muted-foreground">支持官方试卷 PDF，上传后直接看切好的题目</span>
                 <input
                   type="file"
                   accept="application/pdf"
@@ -856,91 +1136,80 @@ function TeacherHome() {
           {imports.length === 0 && !activeImport ? (
             <EmptyState icon={FileUp} title="还没有 PDF 导入" hint="现有卷库不够用时再上传。日常考试可直接用「布置考试」里的卷库。" />
           ) : (
-            <div className="flex flex-wrap gap-2">
-              {imports.map((imp) => (
-                <Button key={imp.id} size="sm" variant={activeImport === imp.id ? "default" : "outline"} onClick={() => void openImport(imp.id)}>
-                  {imp.filename} · {imp.status}
-                </Button>
-              ))}
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">点开一份导入查看切题。未提交的草稿可以清掉。</p>
+                {imports.some((imp) => imp.status !== "published") && (
+                  <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => void deleteDraftImports()}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                    清理未提交
+                  </Button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {imports.map((imp) => (
+                  <div key={imp.id} className="flex items-center">
+                    <Button size="sm" variant={activeImport === imp.id ? "default" : "outline"} onClick={() => void openImport(imp.id)}>
+                      {importChipLabel(imp)}
+                    </Button>
+                    <button
+                      type="button"
+                      className="ml-0.5 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                      aria-label={`删除 ${importChipLabel(imp)}`}
+                      onClick={() => void deleteImport(imp.id, imp.status)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
           {activeImport && (
             <div className="space-y-4">
               <Card className="glass rounded-2xl border-white/60 shadow-none">
                 <CardContent className="space-y-3 p-5">
-                  <Field label="发布后的试卷标题">
-                    <Input placeholder="例如：校本练习 1" value={pdfTitle} onChange={(e) => setPdfTitle(e.target.value)} />
+                  <Field label="试卷标题">
+                    <Input placeholder="例如：2022 AP Micro" value={pdfTitle} onChange={(e) => setPdfTitle(e.target.value)} />
                   </Field>
-                  <label className="flex items-start gap-2 text-sm">
-                    <input type="checkbox" className="mt-1" checked={pdfToMock} onChange={(e) => setPdfToMock(e.target.checked)} />
-                    <span>
-                      申请列入模拟考试真题库（提交后由管理员在后台决定，不会自动进入选择题/大题练习库）。
-                      {pdfToMock && pdfTitle ? ` 建议卷号 ${examSlugFromFilename(pdfTitle)}` : ""}
-                    </span>
-                  </label>
                   <div className="flex flex-wrap gap-2">
                     <Button size="sm" className="w-full sm:w-auto" onClick={() => setItems((xs) => [...xs, emptyItem(pages[0]?.page_number ?? 1, xs.length + 1, "mcq")])}>加选择题</Button>
                     <Button size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => setItems((xs) => [...xs, emptyItem(pages[0]?.page_number ?? 1, xs.length + 1, "frq")])}>加大题</Button>
-                    <Button size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => setItems((xs) => xs.map((x) => ({ ...x, reviewed: true })))}>全部标为已校对</Button>
-                    <Button size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => void saveItems()}>保存切题</Button>
-                    <Button size="sm" className="w-full sm:w-auto" onClick={() => void publishPdf()}>校对完成，提交到后台</Button>
+                    <Button size="sm" variant="outline" className="w-full sm:w-auto" disabled={aiBusy || !items.length} onClick={() => void runPdfAi(activeImport, items)}>
+                      {aiBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                      {aiBusy ? "AI 审核中…" : "再跑一遍 AI 审核"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="w-full sm:w-auto"
+                      disabled={!!pdfBusy || aiBusy || !items.length || !pdfAiDone || alreadyPublished}
+                      onClick={() => void saveAndPublish()}
+                    >
+                      {pdfBusy === "保存并提交到后台…" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                      {pdfBusy === "保存并提交到后台…" ? "提交中…" : alreadyPublished ? "已提交到后台" : "保存并提交到后台"}
+                    </Button>
                   </div>
+                  {alreadyPublished && (
+                    <p className="text-xs text-muted-foreground">这份卷已经提交。改题请重新上传 PDF，不要在这里再点提交，以免卷库里出现重复的学校卷。</p>
+                  )}
+                  {aiBusy && (
+                    <p className="text-xs text-muted-foreground">AI 正在审核切题，审完后即可提交。</p>
+                  )}
+                  {!pdfAiDone && items.length > 0 && !aiBusy && !alreadyPublished && (
+                    <p className="text-xs text-muted-foreground">请等 AI 审完，或点「再跑一遍 AI 审核」后再提交。</p>
+                  )}
+                  {pdfFindings.length > 0 && (
+                    <p className="text-xs text-amber-800">AI 标出 {pdfFindings.length} 道题需要看一眼，其余题目可以直接用。</p>
+                  )}
                 </CardContent>
               </Card>
-              {pages.map((p) => (
-                <Card key={p.id} className="glass rounded-2xl border-white/60 shadow-none">
-                  <CardContent className="space-y-2 p-4">
-                    <div className="text-sm font-medium">第 {p.page_number} 页</div>
-                    <img src={p.image_url} alt={`page ${p.page_number}`} className="w-full rounded-xl border" />
-                    {p.extracted_text && <p className="whitespace-pre-wrap text-[11px] text-muted-foreground">{p.extracted_text.slice(0, 400)}</p>}
-                  </CardContent>
-                </Card>
-              ))}
-              {items.map((it, idx) => (
-                <Card key={idx} className="glass rounded-2xl border-white/60 shadow-none">
-                  <CardContent className="space-y-2 p-4">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Select value={it.kind} onValueChange={(v) => setItems((xs) => xs.map((x, i) => i === idx ? { ...x, kind: v as "mcq" | "frq" } : x))}>
-                        <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="mcq">选择题</SelectItem>
-                          <SelectItem value="frq">大题</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        className="w-24"
-                        type="number"
-                        aria-label="页码"
-                        value={it.page_number}
-                        onChange={(e) => setItems((xs) => xs.map((x, i) => i === idx ? { ...x, page_number: Number(e.target.value) } : x))}
-                      />
-                      <label className="flex items-center gap-1 text-xs">
-                        <input
-                          type="checkbox"
-                          checked={it.reviewed}
-                          onChange={(e) => setItems((xs) => xs.map((x, i) => i === idx ? { ...x, reviewed: e.target.checked } : x))}
-                        />
-                        已校对
-                      </label>
-                      <Button size="sm" variant="ghost" onClick={() => setItems((xs) => xs.filter((_, i) => i !== idx))}>删除</Button>
-                    </div>
-                    <Input placeholder="题干（可短，页图会挂到本题）" value={it.stem} onChange={(e) => setItems((xs) => xs.map((x, i) => i === idx ? { ...x, stem: e.target.value } : x))} />
-                    {it.kind === "mcq" ? (
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        {(["option_a", "option_b", "option_c", "option_d", "option_e"] as const).map((k, n) => (
-                          <Input key={k} placeholder={`选项 ${"ABCDE"[n]}`} value={it[k]} onChange={(e) => setItems((xs) => xs.map((x, i) => i === idx ? { ...x, [k]: e.target.value } : x))} />
-                        ))}
-                        <Input placeholder="正确答案 A-E" value={it.correct_answer} onChange={(e) => setItems((xs) => xs.map((x, i) => i === idx ? { ...x, correct_answer: e.target.value.toUpperCase() } : x))} />
-                      </div>
-                    ) : (
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        <Textarea placeholder="大题文字（可与页图互补）" value={it.content} onChange={(e) => setItems((xs) => xs.map((x, i) => i === idx ? { ...x, content: e.target.value } : x))} />
-                        <Input type="number" placeholder="满分" value={it.max_score} onChange={(e) => setItems((xs) => xs.map((x, i) => i === idx ? { ...x, max_score: Number(e.target.value) } : x))} />
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
+              <PdfQuestionList
+                items={items}
+                findings={pdfFindings}
+                aiRan={pdfAiRan}
+                onChange={(idx, patch) => setItems((xs) => xs.map((x, i) => i === idx ? { ...x, ...patch } : x))}
+                onRemove={(idx) => setItems((xs) => xs.filter((_, i) => i !== idx))}
+              />
             </div>
           )}
         </TabsContent>

@@ -4,7 +4,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { renderStemWithTerms, type TermInfo } from "@/lib/term-render";
 import { optionStyles, type OptKey } from "@/lib/option-colors";
 import { recordAnswer } from "@/lib/storage";
 import { recordAnswer as recordMascotAnswer, recordFrqSubmission, recordMockAttempt } from "@/lib/mascot-memory";
@@ -83,7 +82,6 @@ function Mock() {
   const [idx, setIdx] = useState(0);
   const [seconds, setSeconds] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [termDict, setTermDict] = useState<Record<string, TermInfo>>({});
   const [shortageNote, setShortageNote] = useState<string | null>(null);
   const [frqs, setFrqs] = useState<FrqItem[]>([]);
   const [frqAnswers, setFrqAnswers] = useState<Record<string, FrqAnswerState>>({});
@@ -118,17 +116,6 @@ function Mock() {
   };
   const remainingSeconds = Math.max(0, TIME_LIMIT_SECONDS - seconds);
   const timeUp = phase === "running" && remainingSeconds === 0;
-
-  useEffect(() => {
-    supabase
-      .from("terms")
-      .select("term_en,term_zh,definition,confusable_with")
-      .then(({ data }) => {
-        const d: Record<string, TermInfo> = {};
-        (data ?? []).forEach((t) => (d[t.term_en.toLowerCase()] = t as TermInfo));
-        setTermDict(d);
-      });
-  }, []);
 
   useEffect(() => {
     if (pendingRestoredRef.current) return;
@@ -723,7 +710,7 @@ function Mock() {
                 onClick={onHighlightClick}
                 className={cn("text-base leading-relaxed select-text", highlightActive && "cursor-text")}
               >
-                {renderStemWithTerms(cur.stem, cur.term_tags ?? [], termDict)}
+                {cur.stem}
               </div>
               {cur.image_url && (
                 <img
@@ -764,7 +751,7 @@ function Mock() {
                         className={cn("min-w-0 flex-1 text-sm pt-1 break-words select-text", highlightActive && "cursor-text")}
                         style={{ color: s.ink }}
                       >
-                        {renderStemWithTerms(o.v, cur.term_tags ?? [], termDict)}
+                        {o.v}
                       </span>
                     </button>
                   );
@@ -828,7 +815,7 @@ function Mock() {
 
         <h2 className="mb-3 font-semibold">选择题 {stats.correct} / {stats.total}</h2>
         <div className="mb-8">
-          <McqResultGrid questions={questions} answers={answers} termDict={termDict} />
+          <McqResultGrid questions={questions} answers={answers} />
         </div>
 
         {frqs.length > 0 && (

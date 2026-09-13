@@ -3,7 +3,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { renderStemWithTerms, type TermInfo } from "@/lib/term-render";
 import { optionStyles, type OptKey } from "@/lib/option-colors";
 import { recordAnswer } from "@/lib/storage";
 import { recordAnswer as recordMascotAnswer, recordFrqSubmission, recordMockAttempt } from "@/lib/mascot-memory";
@@ -104,7 +103,6 @@ function PaperRunner() {
   const [paper, setPaper] = useState<Paper | null>(null);
   const [questions, setQuestions] = useState<Q[]>([]);
   const [frqs, setFrqs] = useState<Frq[]>([]);
-  const [termDict, setTermDict] = useState<Record<string, TermInfo>>({});
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
@@ -183,7 +181,7 @@ function PaperRunner() {
         return;
       }
       setPaper(p as Paper);
-      const [{ data: pqs }, { data: fr }, { data: terms }] = await Promise.all([
+      const [{ data: pqs }, { data: fr }] = await Promise.all([
         supabase
           .from("paper_questions")
           .select(
@@ -196,7 +194,6 @@ function PaperRunner() {
           .select("id,title,content,image_url,image_text,max_score,sort_order")
           .eq("paper_id", p.id)
           .order("sort_order", { ascending: true }),
-        supabase.from("terms").select("term_en,term_zh,definition,confusable_with"),
       ]);
       const qs = ((pqs ?? []) as unknown as Array<{ questions: Q }>).map((row) => row.questions);
       setQuestions(qs);
@@ -206,9 +203,6 @@ function PaperRunner() {
             selectedFrqId ? item.id === selectedFrqId : !selectedFrqUnit || getFrqUnit(item.title) === selectedFrqUnit,
           )
         : loadedFrqs);
-      const d: Record<string, TermInfo> = {};
-      (terms ?? []).forEach((t) => (d[t.term_en.toLowerCase()] = t as TermInfo));
-      setTermDict(d);
       setLoading(false);
     })();
   }, [assignmentId, selectedFrqId, selectedFrqUnit, slug]);
@@ -273,10 +267,6 @@ function PaperRunner() {
       });
       setQuestions((j.questions ?? []) as Q[]);
       setFrqs((j.frqs ?? []) as Frq[]);
-      const { data: terms } = await supabase.from("terms").select("term_en,term_zh,definition,confusable_with");
-      const d: Record<string, TermInfo> = {};
-      (terms ?? []).forEach((t) => (d[t.term_en.toLowerCase()] = t as TermInfo));
-      setTermDict(d);
       setSchoolTitle(j.assignment?.title ?? "");
       setSchoolEndsAt(j.assignment?.ends_at ?? "");
       setSchoolPublished(!!j.assignment?.results_published);
@@ -1237,7 +1227,7 @@ function PaperRunner() {
                     <a href={f.image_url} target="_blank" rel="noreferrer" className="block pt-2">
                       <img
                         src={f.image_url}
-                        alt="本题原页图，点击可放大"
+                        alt="本题图表，点击可放大"
                         className="max-h-[70vh] max-w-full h-auto rounded border border-slate-300"
                       />
                     </a>
@@ -1387,15 +1377,17 @@ function PaperRunner() {
               </button>
             </div>
             <div className="flex shrink-0 flex-col items-center">
-              <div className={cn("font-mono text-base tabular-nums sm:text-lg", lowTime && !hideTime && "text-red-600 font-bold")}>
-                {hideTime ? "—:—" : `${mm}:${ss}`}
+              <div className={cn("font-mono text-base tabular-nums sm:text-lg", mode !== "practice" && lowTime && !hideTime && "text-red-600 font-bold")}>
+                {mode === "practice" ? "练习" : hideTime ? "—:—" : `${mm}:${ss}`}
               </div>
-              <button
-                onClick={() => setHideTime((v) => !v)}
-                className="text-[10px] px-2 py-0.5 rounded-full border border-slate-400 hover:bg-slate-100 sm:text-xs sm:px-3"
-              >
-                {hideTime ? "Show" : "Hide"}
-              </button>
+              {mode !== "practice" && (
+                <button
+                  onClick={() => setHideTime((v) => !v)}
+                  className="text-[10px] px-2 py-0.5 rounded-full border border-slate-400 hover:bg-slate-100 sm:text-xs sm:px-3"
+                >
+                  {hideTime ? "Show" : "Hide"}
+                </button>
+              )}
             </div>
             <div className="flex min-w-0 flex-1 items-center justify-end gap-2 text-[10px] sm:gap-5 sm:text-[11px]">
               <button
@@ -1488,7 +1480,7 @@ function PaperRunner() {
               onClick={onHighlightClick}
               className={cn("text-[16px] leading-relaxed mb-6 select-text break-words sm:text-[17px]", highlightActive && "cursor-text")}
             >
-              {renderStemWithTerms(cur.stem, cur.term_tags ?? [], termDict)}
+              {cur.stem}
             </div>
             {cur.image_url && (
               <a href={cur.image_url} target="_blank" rel="noreferrer" className="mb-6 block">
@@ -1544,7 +1536,7 @@ function PaperRunner() {
                           isCrossed && "text-slate-500",
                         )}
                       >
-                        {renderStemWithTerms(o.v, cur.term_tags ?? [], termDict)}
+                        {o.v}
                       </span>
                       {isCrossed && (
                         <span
@@ -1774,7 +1766,7 @@ function PaperRunner() {
       {frqSubmitted ? (
         <>
           <h2 className="font-semibold mb-3">选择题 {stats.correct} / {stats.total}</h2>
-          <McqResultGrid questions={questions} answers={answers} termDict={termDict} />
+          <McqResultGrid questions={questions} answers={answers} />
           <div className="mb-8" />
 
           {frqs.length > 0 && (
@@ -1797,7 +1789,7 @@ function PaperRunner() {
                           <a href={f.image_url} target="_blank" rel="noreferrer" className="block">
                             <img
                               src={f.image_url}
-                              alt="本题原页图"
+                              alt="本题图表"
                               className="max-h-80 max-w-full h-auto rounded border border-slate-300"
                             />
                           </a>

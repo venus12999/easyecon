@@ -1,7 +1,5 @@
 import { useState } from "react";
-import { AskAi } from "@/components/AskAi";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { renderStemWithTerms, highlightTermsInNodes, type TermInfo } from "@/lib/term-render";
 import { colorizeExplanation, optionStyles, type OptKey } from "@/lib/option-colors";
 import { cn } from "@/lib/utils";
 
@@ -16,17 +14,14 @@ export type McqResultQuestion = {
   correct_answer: OptKey;
   explanation: string;
   image_url: string | null;
-  term_tags: string[] | null;
 };
 
 export function McqResultGrid({
   questions,
   answers,
-  termDict,
 }: {
   questions: McqResultQuestion[];
   answers: Record<string, OptKey>;
-  termDict: Record<string, TermInfo>;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const current = questions.find((q) => q.id === openId) ?? null;
@@ -43,7 +38,7 @@ export function McqResultGrid({
         <span className="inline-flex items-center gap-1.5">
           <span className="h-4 w-4 rounded-sm bg-red-500/20 ring-1 ring-red-500" /> 错误 / 未作答
         </span>
-        <span>点击格子查看标准答案与 AI 答疑</span>
+        <span>点击格子查看标准答案与解析</span>
       </div>
       <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-10 sm:gap-2">
         {questions.map((q, i) => {
@@ -88,9 +83,7 @@ export function McqResultGrid({
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 text-sm">
-                <div className="leading-relaxed">
-                  {renderStemWithTerms(current.stem, current.term_tags ?? [], termDict)}
-                </div>
+                <div className="leading-relaxed">{current.stem}</div>
                 {current.image_url && (
                   <img src={current.image_url} alt="题图" className="max-h-64 max-w-full h-auto rounded border" />
                 )}
@@ -124,7 +117,7 @@ export function McqResultGrid({
                           {k}
                         </span>
                         <span className="flex-1 pt-0.5" style={{ color: s.ink }}>
-                          {renderStemWithTerms(v, current.term_tags ?? [], termDict)}
+                          {v}
                         </span>
                         {isCorrect && <span className="shrink-0 text-[11px] font-medium text-emerald-700">标准答案</span>}
                         {isPicked && !isCorrect && (
@@ -137,10 +130,9 @@ export function McqResultGrid({
                 <div className="rounded-lg border bg-muted/50 p-3">
                   <div className="mb-1 text-xs font-medium text-muted-foreground">官方解析</div>
                   <div className="whitespace-pre-wrap leading-relaxed">
-                    {highlightTermsInNodes(colorizeExplanation(current.explanation), termDict)}
+                    {colorizeExplanation(current.explanation)}
                   </div>
                 </div>
-                <AskAi key={current.id} q={current} />
               </div>
             </>
           )}

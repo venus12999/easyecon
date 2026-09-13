@@ -22,7 +22,12 @@ export type ParsedExamItem = {
 };
 
 const IMAGE_HINT =
-  /graph provided|table provided|payoff matrix|shown in the graph|the graph shows|the graph provided|figure provided|combinations of donuts|based on the (table|graph|figure|payoff)|the table shows/i;
+  /graph provided|table provided|payoff matrix|shown in the graph|the graph shows|the graph provided|figure provided|combinations of donuts|based on the (table|graph|figure|payoff)|the table shows|refer to the (graph|table|figure)|the figure shows|diagram provided|见(上|下)?(图|表)|如图|如表|下图|下表|上图|上表|图示|示意图/i;
+
+/** True when the stem/content refers to a printed table/graph, not “draw a graph”. */
+export function looksLikeProvidedFigure(text: string) {
+  return IMAGE_HINT.test(text);
+}
 
 function clean(s: string) {
   return s
@@ -160,9 +165,50 @@ function parseFrqs(frqText: string): ParsedExamItem[] {
       correct_answer: "",
       content,
       max_score: n === 1 ? 10 : 5,
-      needs_image: true,
+      needs_image: IMAGE_HINT.test(content),
     });
     from = start + String(n).length + 1;
+  }
+  return items;
+}
+
+export function parseAnswerKey(text: string): Record<number, string> {
+  const hit = text.search(/answer\s*key|scoring\s+worksheet|answers?\s+to\s+(the\s+)?(section|multiple)|参考答案|正确答案|答案速查/i);
+  if (hit < 0) return {};
+  const slice = text.slice(hit, hit + 5000);
+  const out: Record<number, string> = {};
+  const re = /(?:^|[^\d])(\d{1,2})\s*[.．)、:\-]\s*\(?([A-Ea-e])\)?/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(slice))) {
+    const n = Number(m[1]);
+    if (n >= 1 && n <= 60 && !out[n]) out[n] = m[2].toUpperCase();
+  }
+  return out;
+}
+
+/** Official 2022 AP Micro Section I key. The public exam PDF has no answer sheet. */
+export const AP_MICRO_2022_MCQ_KEY: Record<number, string> = {
+  1: "C", 2: "D", 3: "A", 4: "C", 5: "B", 6: "C", 7: "B", 8: "A", 9: "C", 10: "C",
+  11: "D", 12: "B", 13: "D", 14: "D", 15: "C", 16: "B", 17: "D", 18: "A", 19: "B", 20: "D",
+  21: "B", 22: "D", 23: "A", 24: "C", 25: "C", 26: "B", 27: "E", 28: "C", 29: "B", 30: "C",
+  31: "B", 32: "C", 33: "E", 34: "E", 35: "D", 36: "A", 37: "C", 38: "E", 39: "D", 40: "B",
+  41: "A", 42: "C", 43: "C", 44: "A", 45: "A", 46: "A", 47: "B", 48: "B", 49: "D", 50: "C",
+  51: "B", 52: "D", 53: "E", 54: "B", 55: "D", 56: "D", 57: "D", 58: "D", 59: "B", 60: "D",
+};
+
+/** MCQs that share a graph/table page on the 2022 paper (same set as the 2025-style page images). */
+export const AP_MICRO_2022_IMAGE_MCQS = new Set([7, 8, 9, 17, 24, 28, 29, 31, 36, 40, 42, 43, 50, 58]);
+
+export function applyKnownApAnswerKey<T extends { kind: string; sort_order: number; correct_answer: string; needs_image?: boolean }>(
+  items: T[],
+  filenameOrTitle: string,
+) {
+  if (!/2022/.test(filenameOrTitle)) return items;
+  for (const it of items) {
+    if (it.kind === "mcq" && !it.correct_answer && AP_MICRO_2022_MCQ_KEY[it.sort_order]) {
+      it.correct_answer = AP_MICRO_2022_MCQ_KEY[it.sort_order];
+    }
+    if (it.kind === "mcq" && AP_MICRO_2022_IMAGE_MCQS.has(it.sort_order)) it.needs_image = true;
   }
   return items;
 }
@@ -172,7 +218,15 @@ export function parseApExamPages(pages: ExamPageText[]): ParsedExamItem[] {
     .map((p) => `<<<P${p.page_number}>>> ${p.extracted_text ?? ""}`)
     .join(" ");
   const { mcq, frq } = splitSection(marked);
-  return [...parseMcqs(mcq), ...parseFrqs(frq)];
+  const items = [...parseMcqs(mcq), ...parseFrqs(frq)];
+  const keys = parseAnswerKey(marked);
+  const filled = Object.keys(keys).length;
+  if (filled >= 3) {
+    for (const it of items) {
+      if (it.kind === "mcq" && keys[it.sort_order]) it.correct_answer = keys[it.sort_order];
+    }
+  }
+  return items;
 }
 
 export function examSlugFromFilename(filename: string) {

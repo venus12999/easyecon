@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { jsonErr } from "@/lib/json-api";
-import { ensureTeacherClass, verifyTeacherRequest } from "@/lib/teacher-auth.server";
+import { ensureTeacherClass, getTeacherDb, verifyTeacherRequest } from "@/lib/teacher-auth.server";
 import { normalizeStudentName } from "@/lib/school-exam-session";
 
 export const Route = createFileRoute("/api/teacher/class")({
@@ -10,8 +9,9 @@ export const Route = createFileRoute("/api/teacher/class")({
       GET: async ({ request }) => {
         const u = await verifyTeacherRequest(request);
         if (!u) return jsonErr("unauthorized", 401);
-        const cls = await ensureTeacherClass(u.userId);
-        const { data: roster } = await supabaseAdmin
+        const db = await getTeacherDb(u.jwt);
+        const cls = await ensureTeacherClass(u.userId, db);
+        const { data: roster } = await db
           .from("school_roster")
           .select("id,student_id,student_name,user_id,created_at")
           .eq("class_id", cls.id)
@@ -21,7 +21,8 @@ export const Route = createFileRoute("/api/teacher/class")({
       POST: async ({ request }) => {
         const u = await verifyTeacherRequest(request);
         if (!u) return jsonErr("unauthorized", 401);
-        const cls = await ensureTeacherClass(u.userId);
+        const db = await getTeacherDb(u.jwt);
+        const cls = await ensureTeacherClass(u.userId, db);
         const body = (await request.json()) as { rows?: { student_id: string; student_name: string }[]; replace?: boolean };
         const rows = Array.isArray(body.rows) ? body.rows : [];
         if (rows.length === 0) return jsonErr("花名册不能为空");
@@ -34,7 +35,7 @@ export const Route = createFileRoute("/api/teacher/class")({
           .filter((r) => r.student_id && r.student_name);
         if (cleaned.length === 0) return jsonErr("没有有效的学号/姓名");
         if (body.replace) {
-          const { data: live } = await supabaseAdmin
+          const { data: live } = await db
             .from("school_assignments")
             .select("id")
             .eq("class_id", cls.id)
@@ -42,9 +43,9 @@ export const Route = createFileRoute("/api/teacher/class")({
           if (live && live.length > 0) {
             return jsonErr("有未结束的考试，不能覆盖花名册。请用追加导入，或等考试截止后再覆盖。");
           }
-          await supabaseAdmin.from("school_roster").delete().eq("class_id", cls.id);
+          await db.from("school_roster").delete().eq("class_id", cls.id);
         }
-        const { error } = await supabaseAdmin.from("school_roster").upsert(
+        const { error } = await db.from("school_roster").upsert(
           cleaned.map((r) => ({
             class_id: cls.id,
             student_id: r.student_id,
@@ -54,7 +55,7 @@ export const Route = createFileRoute("/api/teacher/class")({
           { onConflict: "class_id,student_id" },
         );
         if (error) return jsonErr(error.message, 500);
-        const { data: roster } = await supabaseAdmin
+        const { data: roster } = await db
           .from("school_roster")
           .select("id,student_id,student_name,user_id,created_at")
           .eq("class_id", cls.id)

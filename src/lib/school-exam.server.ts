@@ -126,18 +126,20 @@ export async function scorePaperMcq(paperId: string, picks: McqPick[]) {
     questions: { id: string; knowledge_point_id: string; correct_answer: string };
   }>).map((row) => {
     const picked = pickMap.get(row.question_id) ?? null;
-    const correct = row.questions.correct_answer;
+    const correct = (row.questions.correct_answer ?? "").trim().toUpperCase();
+    const hasKey = ["A", "B", "C", "D", "E"].includes(correct);
     return {
       question_id: row.question_id,
       knowledge_point_id: row.questions.knowledge_point_id,
       picked,
-      correct,
-      is_correct: picked === correct,
+      correct: hasKey ? correct : "",
+      is_correct: hasKey && picked === correct,
     };
   });
+  const keyed = detail.filter((d) => d.correct);
   return {
-    total: detail.length,
-    correct: detail.filter((d) => d.is_correct).length,
+    total: keyed.length,
+    correct: keyed.filter((d) => d.is_correct).length,
     detail,
   };
 }

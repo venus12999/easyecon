@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { jsonErr } from "@/lib/json-api";
-import { ensureTeacherClass, verifyTeacherRequest } from "@/lib/teacher-auth.server";
+import { ensureTeacherClass, getTeacherDb, verifyTeacherRequest } from "@/lib/teacher-auth.server";
 import { isUuid } from "@/lib/school-exam-session";
 import { parseFrqAnswers } from "@/lib/school-exam.server";
 
@@ -11,10 +10,11 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
       GET: async ({ request }) => {
         const u = await verifyTeacherRequest(request);
         if (!u) return jsonErr("unauthorized", 401);
-        const cls = await ensureTeacherClass(u.userId);
+        const db = await getTeacherDb(u.jwt);
+        const cls = await ensureTeacherClass(u.userId, db);
         const assignmentId = new URL(request.url).searchParams.get("assignment_id") ?? "";
         if (!isUuid(assignmentId)) return jsonErr("missing assignment_id");
-        const { data: assignment } = await supabaseAdmin
+        const { data: assignment } = await db
           .from("school_assignments")
           .select("id,title,exam_code,starts_at,ends_at,results_published,paper_id")
           .eq("id", assignmentId)
@@ -22,16 +22,16 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
           .maybeSingle();
         if (!assignment) return jsonErr("not found", 404);
         const [{ data: roster }, { data: attempts }, { data: paper }] = await Promise.all([
-          supabaseAdmin
+          db
             .from("school_roster")
             .select("id,student_id,student_name")
             .eq("class_id", cls.id)
             .order("student_id"),
-          supabaseAdmin
+          db
             .from("school_attempts")
             .select("id,roster_id,started_at,submitted_at,mcq_total,mcq_correct,duration_seconds,frq_answers")
             .eq("assignment_id", assignmentId),
-          supabaseAdmin.from("mock_papers").select("id,slug,title").eq("id", assignment.paper_id).maybeSingle(),
+          db.from("mock_papers").select("id,slug,title").eq("id", assignment.paper_id).maybeSingle(),
         ]);
         const attemptMap = new Map((attempts ?? []).map((a) => [a.roster_id, a]));
         const rows = (roster ?? []).map((r) => {

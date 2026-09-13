@@ -1,5 +1,6 @@
 import * as pdfjs from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import type { TextBox } from "@/lib/exam-page-crop";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -7,6 +8,9 @@ export type RasterPage = {
   page_number: number;
   blob: Blob;
   extracted_text: string;
+  width: number;
+  height: number;
+  boxes: TextBox[];
 };
 
 export async function rasterizePdf(
@@ -31,12 +35,26 @@ export async function rasterizePdf(
       canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("页图导出失败"))), "image/png");
     });
     const textContent = await page.getTextContent();
-    const extracted_text = textContent.items
-      .map((it) => ("str" in it ? String(it.str) : ""))
-      .join(" ")
-      .replace(/\s+/g, " ")
-      .trim();
-    pages.push({ page_number: i, blob, extracted_text });
+    const boxes: TextBox[] = [];
+    const parts: string[] = [];
+    for (const raw of textContent.items) {
+      if (!raw || typeof raw !== "object" || !("str" in raw)) continue;
+      const item = raw as { str: string; transform: number[]; width: number; height: number };
+      const str = String(item.str ?? "");
+      parts.push(str);
+      const [x, y] = viewport.convertToViewportPoint(item.transform[4], item.transform[5]);
+      const h = Math.abs((item.transform[3] || item.height || 12) * (viewport.scale ?? scale));
+      const w = Math.max(item.width * (viewport.scale ?? scale), str.length * 4);
+      boxes.push({ str, x, y: y - h, w, h });
+    }
+    pages.push({
+      page_number: i,
+      blob,
+      extracted_text: parts.join(" ").replace(/\s+/g, " ").trim(),
+      width: canvas.width,
+      height: canvas.height,
+      boxes,
+    });
     onProgress?.(i, doc.numPages);
   }
   return pages;

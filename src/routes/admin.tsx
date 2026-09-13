@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Loader2, Plus, Trash2, Upload, Image as ImageIcon, Sparkles, Inbox } from "lucide-react";
+import { Loader2, Plus, Trash2, Image as ImageIcon, Sparkles, Inbox } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { isLifetimeVipEmail } from "@/lib/lifetime-vip";
@@ -230,7 +230,6 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
           <TabsList className="h-auto flex-wrap justify-start">
             <TabsTrigger value="list">题目列表</TabsTrigger>
             <TabsTrigger value="uploads">教师卷</TabsTrigger>
-            <TabsTrigger value="import">批量导入</TabsTrigger>
             <TabsTrigger value="audit">AI 审核</TabsTrigger>
             <TabsTrigger value="feedback">用户反馈</TabsTrigger>
             <TabsTrigger value="users">用户数据</TabsTrigger>
@@ -384,10 +383,6 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
             <TeacherUploadsPanel token={token} />
           </TabsContent>
 
-          <TabsContent value="import" className="mt-4">
-            <ImportPanel token={token} kps={kps} onDone={reload} />
-          </TabsContent>
-
           <TabsContent value="audit" className="mt-4">
             <AuditPanel token={token} kps={kps} questions={questions} onApplied={reload} />
           </TabsContent>
@@ -424,69 +419,6 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
         )}
       </main>
     </div>
-  );
-}
-
-function ImportPanel({ token, kps, onDone }: { token: string; kps: Kp[]; onDone: () => void }) {
-  const [text, setText] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  const template = JSON.stringify([
-    {
-      knowledge_point_slug: "demand",
-      type: "basic",
-      difficulty: 1,
-      stem: "Question text in English…",
-      option_a: "...",
-      option_b: "...",
-      option_c: "...",
-      option_d: "...",
-      correct_answer: "A",
-      explanation: "中文解析…",
-      pitfall_note: "易错提醒（可选）",
-      term_tags: ["demand", "shift"],
-      status: "published",
-    },
-  ], null, 2);
-
-  async function importJson() {
-    setBusy(true);
-    try {
-      const arr = JSON.parse(text);
-      if (!Array.isArray(arr)) throw new Error("应为 JSON 数组");
-      const r = await fetch("/api/admin/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ items: arr }),
-      });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error ?? "导入失败");
-      toast.success(`成功导入 ${j.inserted} 题`);
-      setText("");
-      onDone();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "导入失败");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Card>
-      <CardContent className="p-6 space-y-3">
-        <p className="text-sm text-muted-foreground">
-          粘贴 JSON 数组进行批量导入。<code className="text-xs bg-muted px-1 py-0.5 rounded">knowledge_point_slug</code> 必须匹配已存在的知识点。
-        </p>
-        <details className="text-xs">
-          <summary className="cursor-pointer text-primary">查看模板</summary>
-          <pre className="mt-2 bg-muted p-3 rounded text-xs overflow-auto">{template}</pre>
-        </details>
-        <Textarea rows={12} value={text} onChange={(e) => setText(e.target.value)} placeholder="[{...}]" className="font-mono text-xs" />
-        <Button onClick={importJson} disabled={busy || !text.trim()}>
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Upload className="h-4 w-4" /> 导入</>}
-        </Button>
-      </CardContent>
-    </Card>
   );
 }
 
