@@ -48,6 +48,23 @@ type Counts = Record<
 >;
 
 
+function TeacherEntryBody() {
+  return (
+    <>
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 sm:h-11 sm:w-11">
+          <ClipboardCheck className="h-5 w-5 text-primary" />
+        </div>
+        <div>
+          <div className="text-base font-bold sm:text-lg">教师端</div>
+          <div className="text-[11px] text-muted-foreground sm:text-sm">布置考试、管理花名册与成绩册</div>
+        </div>
+      </div>
+      <ArrowRight className="h-4 w-4 shrink-0 opacity-70 transition-transform group-hover:translate-x-0.5" />
+    </>
+  );
+}
+
 function Index() {
   const [currentDate, setCurrentDate] = useState<Date | null>(null);
   const [kps, setKps] = useState<Kp[]>([]);
@@ -337,6 +354,23 @@ function Index() {
           </div>
           <ArrowRight className="sm:hidden h-5 w-5 opacity-90 group-hover:translate-x-1 transition-transform" />
         </Link>
+
+        {user ? (
+          <Link
+            to="/teacher"
+            className="group glass glass-hover relative mb-5 flex items-center justify-between gap-3 overflow-hidden rounded-2xl p-3 text-foreground sm:p-4"
+          >
+            <TeacherEntryBody />
+          </Link>
+        ) : (
+          <Link
+            to="/auth"
+            search={{ redirect: "/teacher" }}
+            className="group glass glass-hover relative mb-5 flex items-center justify-between gap-3 overflow-hidden rounded-2xl p-3 text-foreground sm:p-4"
+          >
+            <TeacherEntryBody />
+          </Link>
+        )}
 
         {/* 五分大神带你飞 */}
         <section className="mb-5">

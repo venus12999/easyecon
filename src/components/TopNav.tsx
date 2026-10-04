@@ -97,6 +97,14 @@ export function TopNav() {
           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
         ) : user ? (
           <div className="flex min-w-0 items-center gap-1.5">
+          {!user.email?.endsWith("@exam.easyecon.local") && (
+            <Button asChild size="sm" variant="outline" className="shrink-0 gap-1">
+              <Link to="/teacher" aria-label="教师端">
+                <ClipboardCheck className="h-4 w-4" />
+                <span className="hidden sm:inline">教师端</span>
+              </Link>
+            </Button>
+          )}
           {showAdmin && (
             <Button asChild size="sm" variant="outline" className="shrink-0 gap-1">
               <Link to="/admin">
@@ -150,11 +158,19 @@ export function TopNav() {
           </DropdownMenu>
           </div>
         ) : (
-          path !== "/auth" && (
-            <Button asChild size="sm">
-              <Link to="/auth" search={redirect && redirect !== "/" ? { redirect } : undefined}>登录 / 注册</Link>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Button asChild size="sm" variant="outline" className="gap-1">
+              <Link to="/auth" search={{ redirect: "/teacher" }} aria-label="教师端">
+                <ClipboardCheck className="h-4 w-4" />
+                教师端
+              </Link>
             </Button>
-          )
+            {path !== "/auth" && (
+              <Button asChild size="sm">
+                <Link to="/auth" search={redirect && redirect !== "/" ? { redirect } : undefined}>登录 / 注册</Link>
+              </Button>
+            )}
+          </div>
         )}
       </div>
     </header>
