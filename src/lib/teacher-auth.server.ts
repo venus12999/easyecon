@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { isAdminEmailServer } from "@/lib/admin-emails.server";
+import { isTeacherEmailServer } from "@/lib/teacher-emails.server";
 import { createUserScopedClient, verifyUserRequest } from "@/lib/user-auth.server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -51,7 +52,7 @@ export async function uploadTeacherAssignmentImage(jwt: string, path: string, fi
 export async function verifyTeacherRequest(request: Request) {
   const u = await verifyUserRequest(request);
   if (!u) return null;
-  if (isAdminEmailServer(u.email)) return u;
+  if (isAdminEmailServer(u.email) || isTeacherEmailServer(u.email)) return u;
   const db = await getTeacherDb(u.jwt);
   const { data: roles } = await db.from("user_roles").select("role").eq("user_id", u.userId);
   if (roles?.some((row) => row.role === "admin" || row.role === "teacher")) return u;

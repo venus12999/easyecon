@@ -1,12 +1,12 @@
 import { createFileRoute, useNavigate, useRouter, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ArrowRight, ClipboardCheck, Loader2, Sparkles, ShieldCheck, BookOpen } from "lucide-react";
+import { Loader2, Sparkles, ShieldCheck, BookOpen } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { LOGO_URL } from "@/lib/brand";
@@ -14,11 +14,15 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { getRememberPreference, setRememberPreference } from "@/lib/remember-session";
 import { safeRedirectPath } from "@/lib/safe-redirect";
+import { authFetch } from "@/lib/auth-fetch";
+
+type Audience = "student" | "teacher";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({ meta: [{ title: "登录 / 注册 · AP 微观经济" }, { name: "robots", content: "noindex" }] }),
-  validateSearch: (search: Record<string, unknown>): { redirect?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { redirect?: string; role?: Audience } => ({
     redirect: safeRedirectPath(search.redirect),
+    role: search.role === "teacher" || search.role === "student" ? search.role : undefined,
   }),
   component: AuthPage,
 });
@@ -31,25 +35,58 @@ const schema = z.object({
 function AuthPage() {
   const nav = useNavigate();
   const router = useRouter();
-  const { redirect } = Route.useSearch();
-  const { user } = useAuth();
+  const { redirect, role } = Route.useSearch();
+  const { user, signOut } = useAuth();
   const [tab, setTab] = useState<"login" | "register">("login");
+  const [audience, setAudience] = useState<Audience>(role === "teacher" || redirect === "/teacher" ? "teacher" : "student");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [forgot, setForgot] = useState(false);
   const [remember, setRemember] = useState(true);
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
-  const teacherEntry = redirect === "/teacher";
+  const teacherEntry = audience === "teacher";
+  const announceAuth = useRef<string | null>(null);
 
-  function goAfterAuth() {
+  function studentPath() {
     const path = safeRedirectPath(redirect);
-    if (path) router.history.push(path);
-    else void nav({ to: "/" });
+    if (!path || path === "/teacher") return "/";
+    return path;
+  }
+
+  async function goAfterAuth(announce: string | null, keepSession = false) {
+    if (teacherEntry) {
+      const response = await authFetch("/api/teacher/class");
+      if (!response.ok) {
+        if (!keepSession) await supabase.auth.signOut();
+        toast.error(keepSession ? "这个账号是学生账号，没有教师工作台。" : "这是学生账号，没有教师端。请改选「学生」登录。");
+        return;
+      }
+      if (announce) toast.success(announce);
+      router.history.push("/teacher");
+      return;
+    }
+    if (announce) toast.success(announce);
+    const path = studentPath();
+    if (path === "/") void nav({ to: "/" });
+    else router.history.push(path);
+  }
+
+  async function continueSession() {
+    setBusy(true);
+    try {
+      await goAfterAuth(null, true);
+    } finally {
+      setBusy(false);
+    }
   }
 
   useEffect(() => {
-    if (user) goAfterAuth();
+    if (!user) return;
+    const announce = announceAuth.current;
+    if (!announce) return;
+    announceAuth.current = null;
+    void goAfterAuth(announce);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
@@ -67,10 +104,14 @@ function AuthPage() {
     setBusy(true);
     try {
       if (tab === "register") {
+        const nextPath = teacherEntry ? "/teacher" : studentPath();
         const { data, error } = await supabase.auth.signUp({
           email: parsed.data.email,
           password: parsed.data.password,
-          options: { emailRedirectTo: `${window.location.origin}${safeRedirectPath(redirect) ?? "/"}` },
+          options: {
+            emailRedirectTo: `${window.location.origin}${nextPath}`,
+            data: { account_role: audience },
+          },
         });
         if (error) {
           if (/registered|exists/i.test(error.message)) toast.error("该邮箱已注册，请直接登录");
@@ -79,8 +120,7 @@ function AuthPage() {
         }
         if (data.session) {
           setRememberPreference(remember);
-          toast.success("注册成功");
-          goAfterAuth();
+          announceAuth.current = "注册成功";
         } else {
           setPendingEmail(parsed.data.email);
           toast.success("验证邮件已发送，请前往邮箱点击链接完成注册");
@@ -100,8 +140,7 @@ function AuthPage() {
           return;
         }
         setRememberPreference(remember);
-        toast.success("登录成功");
-        goAfterAuth();
+        announceAuth.current = "登录成功";
       }
     } finally {
       setBusy(false);
@@ -147,6 +186,24 @@ function AuthPage() {
 
         <Card className="border-white/50 shadow-xl">
           <CardContent className="p-6">
+            {!pendingEmail && (
+              <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl bg-muted/70 p-1">
+                <button
+                  type="button"
+                  onClick={() => setAudience("student")}
+                  className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${audience === "student" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  学生
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAudience("teacher")}
+                  className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${audience === "teacher" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  教师
+                </button>
+              </div>
+            )}
             <div className="mb-4 text-center">
               <h1 className="text-lg font-semibold">
                 {pendingEmail
@@ -155,7 +212,7 @@ function AuthPage() {
                     ? "找回密码"
                     : teacherEntry
                       ? tab === "register" ? "教师注册" : "教师登录"
-                      : tab === "register" ? "创建账号" : "欢迎回来"}
+                      : tab === "register" ? "学生注册" : "学生登录"}
               </h1>
               <p className="mt-1 text-xs text-muted-foreground">
                 {pendingEmail
@@ -163,18 +220,10 @@ function AuthPage() {
                   : forgot
                     ? "输入注册邮箱，我们会发送重设链接"
                     : teacherEntry
-                      ? "登录或注册后进入教师工作台，布置考试并查看成绩"
-                      : tab === "register" ? "注册后即可开始 AP 微观经济练习" : "继续你的学习进度"}
+                      ? "注册时选择教师，这个账号就会进入工作台。学生账号仍然只用学习主界面。"
+                      : tab === "register" ? "注册后进入学习主界面，开始 AP 微观经济练习" : "登录后继续你的学习进度"}
               </p>
             </div>
-            {teacherEntry && !pendingEmail && (
-              <div className="mb-4 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2.5 text-center">
-                <p className="text-xs text-muted-foreground">这是教师入口。成功后会进入教师工作台。</p>
-                <Link to="/auth" search={{ redirect: undefined }} className="mt-1 inline-block text-xs font-medium text-primary">
-                  我是学生，返回学习登录
-                </Link>
-              </div>
-            )}
             {pendingEmail ? (
               <div className="space-y-3">
                 <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-3 text-center text-sm font-medium break-all">
@@ -193,6 +242,24 @@ function AuthPage() {
                   onClick={() => { setPendingEmail(null); setTab("login"); setPassword(""); }}
                 >
                   已验证，返回登录
+                </Button>
+              </div>
+            ) : user ? (
+              <div className="space-y-3">
+                <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-3 text-center text-sm break-all">
+                  当前账号 {user.email}
+                </div>
+                <Button type="button" className="h-11 w-full" disabled={busy} onClick={() => void continueSession()}>
+                  {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {teacherEntry ? "进入教师工作台" : "进入学习主界面"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="link"
+                  className="h-auto w-full p-0 text-xs"
+                  onClick={() => void signOut()}
+                >
+                  使用其他账号登录
                 </Button>
               </div>
             ) : (
@@ -243,25 +310,6 @@ function AuthPage() {
             )}
           </CardContent>
         </Card>
-
-        {!teacherEntry && !pendingEmail && (
-          <Link
-            to="/auth"
-            search={{ redirect: "/teacher" }}
-            className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-card/60 px-4 py-3 text-left backdrop-blur transition-colors hover:bg-card"
-          >
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                <ClipboardCheck className="h-4 w-4 text-primary" />
-              </div>
-              <div>
-                <div className="text-sm font-medium">教师端入口</div>
-                <div className="text-xs text-muted-foreground">布置考试、管理花名册与成绩册</div>
-              </div>
-            </div>
-            <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-          </Link>
-        )}
 
         <div className="mt-6 grid grid-cols-3 gap-2 text-center text-[11px] text-muted-foreground">
           <div className="rounded-lg border border-border/50 bg-card/40 px-2 py-3 backdrop-blur">

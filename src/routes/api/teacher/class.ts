@@ -9,6 +9,9 @@ export const Route = createFileRoute("/api/teacher/class")({
       GET: async ({ request }) => {
         const u = await verifyTeacherRequest(request);
         if (!u) return jsonErr("unauthorized", 401);
+        if (new URL(request.url).searchParams.get("probe") === "1") {
+          return Response.json({ ok: true });
+        }
         const db = await getTeacherDb(u.jwt);
         const cls = await ensureTeacherClass(u.userId, db);
         const { data: roster } = await db

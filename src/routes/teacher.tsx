@@ -876,7 +876,7 @@ function TeacherHome() {
           <h1 className="text-xl font-bold">请先登录</h1>
           <p className="text-sm text-muted-foreground">教师工作台需要登录后才能布置考试。</p>
           <Button asChild className="w-full">
-            <Link to="/auth" search={{ redirect: "/teacher" }}>去登录</Link>
+            <Link to="/auth" search={{ role: "teacher", redirect: "/teacher" }}>去登录</Link>
           </Button>
           <Button asChild variant="ghost" className="w-full">
             <Link to="/">返回首页</Link>
@@ -889,8 +889,8 @@ function TeacherHome() {
     return (
       <main className="flex min-h-screen items-center justify-center px-4">
         <div className="glass w-full max-w-sm space-y-3 rounded-2xl p-8 text-center">
-          <h1 className="text-xl font-bold">需要教师权限</h1>
-          <p className="text-sm text-muted-foreground">请让管理员把你的账号设为 teacher，或使用管理员账号进入。</p>
+          <h1 className="text-xl font-bold">学生账号没有教师端</h1>
+          <p className="text-sm text-muted-foreground">学生使用学习主界面。教师请退出后，在登录页选择「教师」。</p>
           <Button asChild variant="outline" className="w-full">
             <Link to="/">返回首页</Link>
           </Button>

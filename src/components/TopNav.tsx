@@ -12,10 +12,10 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { isAdminEmail } from "@/lib/admin-emails";
 import { useSchoolExamLock } from "@/hooks/use-school-exam-lock";
-import { useEffect, useState } from "react";
-import { authFetch } from "@/lib/auth-fetch";
 import { clearSchoolExamSession, isExamLocalEmail, markExamExited } from "@/lib/school-exam-session";
+import { authFetch } from "@/lib/auth-fetch";
 import { useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 
 export function TopNav() {
   const { user, loading, signOut } = useAuth();
@@ -24,25 +24,23 @@ export function TopNav() {
     select: (r) => `${r.location.pathname}${r.location.searchStr}`,
   });
   const showAdmin = isAdminEmail(user?.email);
+  const [showTeacher, setShowTeacher] = useState(false);
   const { session: examSession, locked: examLocked, refresh } = useSchoolExamLock();
   const nav = useNavigate();
-  const [showTeacher, setShowTeacher] = useState(showAdmin);
   const label = user?.email?.split("@")[0] ?? "";
 
   useEffect(() => {
-    if (!user) {
+    if (!user || user.email?.endsWith("@exam.easyecon.local")) {
       setShowTeacher(false);
       return;
     }
-    if (user.email?.endsWith("@exam.easyecon.local")) {
-      setShowTeacher(false);
-      return;
-    }
-    if (isAdminEmail(user.email)) {
-      setShowTeacher(true);
-      return;
-    }
-    void authFetch("/api/teacher/class").then((r) => setShowTeacher(r.ok));
+    let cancel = false;
+    void authFetch("/api/teacher/class?probe=1").then((response) => {
+      if (!cancel) setShowTeacher(response.ok);
+    });
+    return () => {
+      cancel = true;
+    };
   }, [user]);
 
   async function leaveExam() {
@@ -97,14 +95,6 @@ export function TopNav() {
           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
         ) : user ? (
           <div className="flex min-w-0 items-center gap-1.5">
-          {!user.email?.endsWith("@exam.easyecon.local") && (
-            <Button asChild size="sm" variant="outline" className="shrink-0 gap-1">
-              <Link to="/teacher" aria-label="教师端">
-                <ClipboardCheck className="h-4 w-4" />
-                <span className="hidden sm:inline">教师端</span>
-              </Link>
-            </Button>
-          )}
           {showAdmin && (
             <Button asChild size="sm" variant="outline" className="shrink-0 gap-1">
               <Link to="/admin">
@@ -136,7 +126,7 @@ export function TopNav() {
               </DropdownMenuItem>
               {showTeacher && (
                 <DropdownMenuItem asChild>
-                  <Link to="/teacher"><ClipboardCheck className="mr-2 h-4 w-4" />教师端</Link>
+                  <Link to="/teacher"><ClipboardCheck className="mr-2 h-4 w-4" />教师工作台</Link>
                 </DropdownMenuItem>
               )}
               {showAdmin && (
@@ -159,12 +149,6 @@ export function TopNav() {
           </div>
         ) : (
           <div className="flex shrink-0 items-center gap-1.5">
-            <Button asChild size="sm" variant="outline" className="gap-1">
-              <Link to="/auth" search={{ redirect: "/teacher" }} aria-label="教师端">
-                <ClipboardCheck className="h-4 w-4" />
-                教师端
-              </Link>
-            </Button>
             {path !== "/auth" && (
               <Button asChild size="sm">
                 <Link to="/auth" search={redirect && redirect !== "/" ? { redirect } : undefined}>登录 / 注册</Link>

@@ -1,13 +1,12 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ArrowLeft, CalendarCheck, Check, ClipboardCheck, Crown, Loader2, Save, Shield, Sparkles, UserRound } from "lucide-react";
+import { ArrowLeft, CalendarCheck, Check, Crown, Loader2, Save, Shield, Sparkles, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
-import { authFetch } from "@/lib/auth-fetch";
 import { isAdminEmail } from "@/lib/admin-emails";
 import { supabase } from "@/integrations/supabase/client";
 import { ManualPayDialog } from "@/components/ManualPayDialog";
@@ -61,7 +60,6 @@ function ProfilePage() {
   const [companionId, setCompanionId] = useState<CompanionId>("sarah");
   const [memory, setMemory] = useState(() => summarizeMemory());
   const isAdmin = isAdminEmail(user?.email);
-  const [isTeacher, setIsTeacher] = useState(isAdmin);
 
   useEffect(() => {
     pingComeback();
@@ -87,18 +85,6 @@ function ProfilePage() {
     const response = await fetch("/api/membership", { headers: { Authorization: `Bearer ${token}` } });
     return response.ok ? await response.json() as Membership : null;
   }
-
-  useEffect(() => {
-    if (!user) {
-      setIsTeacher(false);
-      return;
-    }
-    if (isAdminEmail(user.email)) {
-      setIsTeacher(true);
-      return;
-    }
-    void authFetch("/api/teacher/class").then((r) => setIsTeacher(r.ok));
-  }, [user]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -185,45 +171,30 @@ function ProfilePage() {
           <p className="text-sm text-muted-foreground">设置你在平台中显示的名字</p>
         </div>
       </div>
-      {(isAdmin || isTeacher) && (
+      {isAdmin && (
         <Card className="mb-5 border-primary/20">
           <CardHeader>
             <CardTitle className="text-base">工作台</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-2 sm:grid-cols-2">
-            {isAdmin && (
-              <Button asChild className="h-auto justify-start gap-2 px-4 py-3">
-                <Link to="/admin">
-                  <Shield className="h-4 w-4" />
-                  <span className="text-left">
-                    <span className="block font-medium">管理后台</span>
-                    <span className="block text-xs font-normal text-primary-foreground/80">题库、用户、反馈与人工收款</span>
-                  </span>
-                </Link>
-              </Button>
-            )}
-            {isTeacher && (
-              <Button asChild variant="outline" className="h-auto justify-start gap-2 px-4 py-3">
-                <Link to="/teacher">
-                  <ClipboardCheck className="h-4 w-4" />
-                  <span className="text-left">
-                    <span className="block font-medium">教师端</span>
-                    <span className="block text-xs font-normal text-muted-foreground">布置考试、花名册和成绩册</span>
-                  </span>
-                </Link>
-              </Button>
-            )}
-            {isAdmin && (
-              <Button asChild variant="outline" className="h-auto justify-start gap-2 px-4 py-3">
-                <Link to="/admin-tutor">
-                  <CalendarCheck className="h-4 w-4" />
-                  <span className="text-left">
-                    <span className="block font-medium">试课预约管理</span>
-                    <span className="block text-xs font-normal text-muted-foreground">查看和标记试课预约</span>
-                  </span>
-                </Link>
-              </Button>
-            )}
+            <Button asChild className="h-auto justify-start gap-2 px-4 py-3">
+              <Link to="/admin">
+                <Shield className="h-4 w-4" />
+                <span className="text-left">
+                  <span className="block font-medium">管理后台</span>
+                  <span className="block text-xs font-normal text-primary-foreground/80">题库、用户、反馈与人工收款</span>
+                </span>
+              </Link>
+            </Button>
+            <Button asChild variant="outline" className="h-auto justify-start gap-2 px-4 py-3">
+              <Link to="/admin-tutor">
+                <CalendarCheck className="h-4 w-4" />
+                <span className="text-left">
+                  <span className="block font-medium">试课预约管理</span>
+                  <span className="block text-xs font-normal text-muted-foreground">查看和标记试课预约</span>
+                </span>
+              </Link>
+            </Button>
           </CardContent>
         </Card>
       )}
