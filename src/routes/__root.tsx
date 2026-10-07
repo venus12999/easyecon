@@ -97,14 +97,15 @@ function AppShell() {
   const isExamEntry = path === "/exam";
   const { locked: examLocked } = useSchoolExamLock();
   const hideChrome = isMockExam || isExamEntry || examLocked;
+  const isTeacherConsole = path.startsWith("/teacher");
   return (
     <>
       <div className="app-gradient-bg flex min-h-screen w-full flex-col">
-        <TopNav />
+        {!isTeacherConsole && <TopNav />}
         <main className="min-w-0 flex-1">
           <Outlet />
         </main>
-        {!isAuthRoute && !hideChrome && (
+        {!isAuthRoute && !hideChrome && !isTeacherConsole && (
           <footer className="flex flex-wrap justify-center gap-x-5 gap-y-2 px-4 py-4 text-xs text-foreground/60">
             <Link to="/pricing">定价</Link>
             <Link to="/legal/terms">服务条款</Link>

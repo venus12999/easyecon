@@ -53,6 +53,8 @@ export async function verifyTeacherRequest(request: Request) {
   if (!u) return null;
   if (isAdminEmailServer(u.email)) return u;
   const db = await getTeacherDb(u.jwt);
+  const { data: roles } = await db.from("user_roles").select("role").eq("user_id", u.userId);
+  if (roles?.some((row) => row.role === "admin" || row.role === "teacher")) return u;
   const { data, error } = await db.rpc("is_school_staff", { _user_id: u.userId });
   if (error || data !== true) return null;
   return u;

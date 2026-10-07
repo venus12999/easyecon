@@ -7,7 +7,6 @@ import {
   BookOpen,
   Target,
   XCircle,
-  BarChart3,
   Library,
   ArrowRight,
   SquarePen,
@@ -76,11 +75,7 @@ function Index() {
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [coach, setCoach] = useState<CoachSuggestion | null>(null);
   const [coachCompanion, setCoachCompanion] = useState<CompanionId>("sarah");
-  const [stats, setStats] = useState<{ today: number; rate: number | null; totalAttempts: number }>({
-    today: 0,
-    rate: null,
-    totalAttempts: 0,
-  });
+  const [stats, setStats] = useState<{ today: number }>({ today: 0 });
 
   useEffect(() => {
     setCurrentDate(new Date());
@@ -110,33 +105,19 @@ function Index() {
 
   useEffect(() => {
     if (!user) {
-      setStats({ today: 0, rate: null, totalAttempts: 0 });
+      setStats({ today: 0 });
       return;
     }
     (async () => {
       const now = new Date();
       const startOfDay = new Date(now);
       startOfDay.setHours(0, 0, 0, 0);
-      const [todayRes, totalRes, correctRes] = await Promise.all([
-        supabase
-          .from("answer_attempts")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", user.id)
-          .gte("created_at", startOfDay.toISOString()),
-        supabase
-          .from("answer_attempts")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", user.id),
-        supabase
-          .from("answer_attempts")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", user.id)
-          .eq("is_correct", true),
-      ]);
-      const today = todayRes.count ?? 0;
-      const total = totalRes.count ?? 0;
-      const correct = correctRes.count ?? 0;
-      setStats({ today, totalAttempts: total, rate: total ? Math.round((correct / total) * 100) : null });
+      const todayRes = await supabase
+        .from("answer_attempts")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .gte("created_at", startOfDay.toISOString());
+      setStats({ today: todayRes.count ?? 0 });
     })();
   }, [user]);
 
@@ -184,36 +165,23 @@ function Index() {
       
       <main className="mx-auto max-w-6xl px-3 py-4 sm:px-4 sm:py-8">
         {/* 顶部问候 */}
-        <section className="mb-4 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 sm:mb-6 sm:flex sm:items-start sm:justify-between sm:gap-4">
-          <div className="min-w-0">
-            <h1 className="truncate text-lg font-bold tracking-tight sm:text-3xl">
-              {greeting}，{userLabel} <span className="inline-block">👋</span>
-            </h1>
-            <p className="mt-1 text-xs text-muted-foreground sm:mt-2 sm:text-base">
-              {authLoading
-                ? "正在读取学习进度…"
-                : examLocked && examSession
-                ? examSession.submitted
-                  ? "已交卷。老师公布成绩前，请先退出考场再刷题。"
-                  : `正在考试：${examSession.title}`
-                : user
-                ? stats.today > 0
-                  ? `今天已完成 ${stats.today} 题，继续保持！`
-                  : "今天还没开始刷题，挑一张卡片出发吧。"
-                : "登录后可云端同步进度。"}
-            </p>
-          </div>
-          {user && (
-            <div className="shrink-0 rounded-xl bg-card border px-3 py-1.5 sm:px-4 sm:py-2.5 flex items-center gap-2 shadow-sm">
-              <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
-              <div className="leading-tight">
-                <div className="text-xs text-muted-foreground">正确率</div>
-                <div className="text-sm font-bold sm:text-base">
-                  {stats.rate !== null ? `${stats.rate}%` : "—"}
-                </div>
-              </div>
-            </div>
-          )}
+        <section className="mb-4 sm:mb-6">
+          <h1 className="truncate text-lg font-bold tracking-tight sm:text-3xl">
+            {greeting}，{userLabel} <span className="inline-block">👋</span>
+          </h1>
+          <p className="mt-1 text-xs text-muted-foreground sm:mt-2 sm:text-base">
+            {authLoading
+              ? "正在读取学习进度…"
+              : examLocked && examSession
+              ? examSession.submitted
+                ? "已交卷。老师公布成绩前，请先退出考场再刷题。"
+                : `正在考试：${examSession.title}`
+              : user
+              ? stats.today > 0
+                ? `今天已完成 ${stats.today} 题，继续保持！`
+                : "今天还没开始刷题，挑一张卡片出发吧。"
+              : "登录后可云端同步进度。"}
+          </p>
         </section>
 
         {user && coach && !examLocked && (

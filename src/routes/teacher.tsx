@@ -1,25 +1,38 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import {
+  ArrowLeft,
   BarChart3,
   Check,
+  ChevronDown,
   ClipboardList,
   Copy,
+  Clock,
   FileUp,
+  LayoutDashboard,
   Loader2,
+  LogOut,
+  Plus,
   Sparkles,
   Trash2,
   Users,
 } from "lucide-react";
+import { isAdminEmail } from "@/lib/admin-emails";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/use-auth";
 import { authFetch } from "@/lib/auth-fetch";
 import { applyKnownApAnswerKey, looksLikeProvidedFigure, parseApExamPages } from "@/lib/ap-exam-parse";
@@ -141,12 +154,69 @@ function examWindow(startsAt: string, endsAt: string) {
 
 function EmptyState({ icon: Icon, title, hint }: { icon: typeof Users; title: string; hint: string }) {
   return (
-    <div className="glass rounded-2xl px-6 py-12 text-center">
-      <Icon className="mx-auto mb-3 h-8 w-8 text-muted-foreground/70" />
+    <div className="px-6 py-12 text-center">
+      <Icon className="mx-auto mb-3 h-7 w-7 text-primary/50" />
       <p className="font-medium">{title}</p>
       <p className="mt-1 text-sm text-muted-foreground">{hint}</p>
     </div>
   );
+}
+
+function StatCard({
+  label,
+  value,
+  hint,
+  icon: Icon,
+}: {
+  label: string;
+  value: ReactNode;
+  hint: string;
+  icon?: typeof Users;
+}) {
+  return (
+    <div className="glass rounded-2xl px-4 py-4">
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span>{label}</span>
+        {Icon ? (
+          <span className="grid h-8 w-8 place-items-center rounded-xl bg-primary/10 text-primary">
+            <Icon className="h-4 w-4" />
+          </span>
+        ) : null}
+      </div>
+      <div className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">{value}</div>
+      <p className="mt-1 text-[11px] text-muted-foreground">{hint}</p>
+    </div>
+  );
+}
+
+type TeacherPage = "overview" | "roster" | "exam" | "scores" | "pdf";
+
+const PAGE_COPY: Record<TeacherPage, [string, string, string]> = {
+  overview: ["工作台", "欢迎使用教师工作台", "先导入学生名册，再创建第一场考试。"],
+  roster: ["学生名册", "学生名册", "导入一次即可复用，新增学生不会覆盖已有记录。"],
+  exam: ["布置考试", "布置一场考试", "设置考试信息，确认后即可生成学生考试码。"],
+  scores: ["成绩分析", "成绩分析", "考试发布并收到学生答卷后，成绩会显示在这里。"],
+  pdf: ["PDF 出题", "PDF 智能出题", "上传试卷 PDF，整理题目后提交到后台，再布置考试。"],
+};
+
+const NAV: { id: TeacherPage; label: string; icon: typeof Users }[] = [
+  { id: "overview", label: "工作台", icon: LayoutDashboard },
+  { id: "roster", label: "学生名册", icon: Users },
+  { id: "exam", label: "布置考试", icon: ClipboardList },
+  { id: "scores", label: "成绩分析", icon: BarChart3 },
+  { id: "pdf", label: "PDF 出题", icon: FileUp },
+];
+
+function mcqRate(rows: GradeRow[]) {
+  let correct = 0;
+  let total = 0;
+  for (const row of rows) {
+    if (row.mcq_correct == null || !row.mcq_total) continue;
+    correct += row.mcq_correct;
+    total += row.mcq_total;
+  }
+  if (!total) return null;
+  return Math.round((correct / total) * 100);
 }
 
 function isPageShot(url: string | null | undefined) {
@@ -197,7 +267,7 @@ function emptyItem(page: number, order: number, kind: "mcq" | "frq"): PdfItem {
 }
 
 function TeacherHome() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, signOut } = useAuth();
   const [denied, setDenied] = useState(false);
   const [ready, setReady] = useState(false);
   const [roster, setRoster] = useState<RosterRow[]>([]);
@@ -223,7 +293,13 @@ function TeacherHome() {
   const [pdfAiRan, setPdfAiRan] = useState(false);
   const [pdfAiDone, setPdfAiDone] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
-  const [tab, setTab] = useState("roster");
+  const [page, setPage] = useState<TeacherPage>("overview");
+  const [examStep, setExamStep] = useState<"edit" | "review" | "done">("edit");
+  const [publishedExam, setPublishedExam] = useState<{ title: string; code: string } | null>(null);
+  const [rosterQuery, setRosterQuery] = useState("");
+  const [scoreQuery, setScoreQuery] = useState("");
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [snapshot, setSnapshot] = useState<{ id: string; rows: GradeRow[] } | null>(null);
   const [copied, setCopied] = useState("");
 
   const loadClass = useCallback(async () => {
@@ -298,10 +374,12 @@ function TeacherHome() {
         return;
       }
       toast.success(`考试码 ${j.assignment.exam_code} 已复制`);
+      setPublishedExam({ title, code: j.assignment.exam_code });
       setTitle("");
+      setExamStep("done");
       await loadAssignments();
       setGradeId(j.assignment.id);
-      setTab("assign");
+      setPage("exam");
       try {
         await navigator.clipboard.writeText(j.assignment.exam_code);
         setCopied(j.assignment.exam_code);
@@ -326,7 +404,7 @@ function TeacherHome() {
 
   async function loadGradebook(id: string) {
     setGradeId(id);
-    setTab("grades");
+    setPage("scores");
     const r = await authFetch(`/api/teacher/gradebook?assignment_id=${id}`);
     const j = await r.json();
     if (!r.ok) {
@@ -745,7 +823,8 @@ function TeacherHome() {
       await Promise.all([loadPdfs(), loadAssignments()]);
       setPaperId(j.paper.id);
       setSource("existing");
-      setTab("assign");
+      setExamStep("edit");
+      setPage("exam");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "提交失败");
     } finally {
@@ -766,21 +845,41 @@ function TeacherHome() {
     if (first) setPaperId(first.id);
   }, [libraryPapers, paperId]);
 
-  if (authLoading) {
+  useEffect(() => {
+    const id = assignments[0]?.id;
+    if (!id) {
+      setSnapshot(null);
+      return;
+    }
+    let cancel = false;
+    void authFetch(`/api/teacher/gradebook?assignment_id=${id}`).then(async (r) => {
+      if (!r.ok || cancel) return;
+      const j = await r.json();
+      if (!cancel) setSnapshot({ id, rows: j.rows ?? [] });
+    });
+    return () => {
+      cancel = true;
+    };
+  }, [assignments]);
+
+  if (authLoading || (!ready && user && !denied)) {
     return (
-      <main className="mx-auto max-w-sm px-4 py-16 text-center">
-        <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
+      <main className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
       </main>
     );
   }
   if (!user) {
     return (
-      <main className="mx-auto max-w-md px-4 py-16 text-center space-y-4">
-        <div className="glass mx-auto max-w-sm rounded-2xl p-8 space-y-3">
+      <main className="flex min-h-screen items-center justify-center px-4">
+        <div className="glass w-full max-w-sm space-y-3 rounded-2xl p-8 text-center">
           <h1 className="text-xl font-bold">请先登录</h1>
           <p className="text-sm text-muted-foreground">教师工作台需要登录后才能布置考试。</p>
           <Button asChild className="w-full">
             <Link to="/auth" search={{ redirect: "/teacher" }}>去登录</Link>
+          </Button>
+          <Button asChild variant="ghost" className="w-full">
+            <Link to="/">返回首页</Link>
           </Button>
         </div>
       </main>
@@ -788,214 +887,484 @@ function TeacherHome() {
   }
   if (denied) {
     return (
-      <main className="mx-auto max-w-md px-4 py-16 text-center">
-        <div className="glass mx-auto max-w-sm rounded-2xl p-8 space-y-3">
+      <main className="flex min-h-screen items-center justify-center px-4">
+        <div className="glass w-full max-w-sm space-y-3 rounded-2xl p-8 text-center">
           <h1 className="text-xl font-bold">需要教师权限</h1>
           <p className="text-sm text-muted-foreground">请让管理员把你的账号设为 teacher，或使用管理员账号进入。</p>
+          <Button asChild variant="outline" className="w-full">
+            <Link to="/">返回首页</Link>
+          </Button>
         </div>
       </main>
     );
   }
-  if (!ready) {
-    return (
-      <main className="mx-auto max-w-sm px-4 py-16 text-center">
-        <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
-      </main>
-    );
-  }
 
+  const copy = PAGE_COPY[page];
+  const accountLabel = user.email?.split("@")[0] ?? "教师";
+  const todayLabel = new Date().toLocaleDateString("zh-CN", {
+    weekday: "short",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+  const rosterQueryText = rosterQuery.trim().toLowerCase();
+  const shownRoster = rosterQueryText
+    ? roster.filter((r) => `${r.student_id} ${r.student_name}`.toLowerCase().includes(rosterQueryText))
+    : roster;
+  const scoreQueryText = scoreQuery.trim().toLowerCase();
+  const shownGrades = scoreQueryText
+    ? gradeRows.filter((r) => `${r.student_id} ${r.student_name}`.toLowerCase().includes(scoreQueryText))
+    : gradeRows;
   const submittedCount = gradeRows.filter((r) => r.status === "submitted").length;
   const inProgressCount = gradeRows.filter((r) => r.status === "in_progress").length;
+  const liveCount = assignments.filter((a) => examWindow(a.starts_at, a.ends_at).label === "进行中").length;
+  const overviewRate = mcqRate(snapshot?.rows ?? []);
+  const pendingCount = snapshot ? snapshot.rows.filter((r) => r.status !== "submitted").length : 0;
+  const gradeRate = mcqRate(gradeRows);
+  const frqCount = gradeRows.filter((r) => r.status === "submitted" && Object.keys(r.frq_answers ?? {}).length > 0).length;
+  const bestScore = gradeRows.reduce((best, row) => {
+    if (row.mcq_correct == null || !row.mcq_total) return best;
+    return Math.max(best, row.mcq_correct / row.mcq_total);
+  }, -1);
+  const paperLabel = source === "random"
+    ? "固定随机卷（60 道选择题 + 3 道大题）"
+    : selectedPaper
+      ? paperPickerLabel(selectedPaper)
+      : "未选择";
+
+  function go(next: TeacherPage) {
+    setPage(next);
+    if (next === "exam" && examStep === "edit" && !title.trim()) {
+      setStartsAt(toLocalInput(new Date()));
+      setEndsAt(toLocalInput(new Date(Date.now() + 2 * 60 * 60 * 1000)));
+    }
+  }
+
+  function reviewExam() {
+    if (roster.length === 0) {
+      toast.error("请先导入学生名册，再布置考试。");
+      go("roster");
+      return;
+    }
+    if (!title.trim()) {
+      toast.error("请先填写考试名称");
+      return;
+    }
+    if (source === "existing" && !paperId) {
+      toast.error("请选择一份试卷");
+      return;
+    }
+    const starts = Date.parse(startsAt);
+    const ends = Date.parse(endsAt);
+    if (!Number.isFinite(starts) || !Number.isFinite(ends) || ends <= starts) {
+      toast.error("请设置有效的开考和截止时间");
+      return;
+    }
+    setExamStep("review");
+  }
+
+  function submitProgress(id: string) {
+    if (snapshot?.id !== id || snapshot.rows.length === 0) return "—";
+    const done = snapshot.rows.filter((r) => r.status === "submitted").length;
+    return `${done} / ${snapshot.rows.length}`;
+  }
 
   return (
-    <main className="mx-auto max-w-5xl px-3 py-5 pb-[max(4rem,env(safe-area-inset-bottom))] sm:px-4 sm:py-8 sm:pb-16 space-y-5 sm:space-y-6">
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
-        <div className="space-y-1 min-w-0">
-          <p className="text-xs font-medium tracking-wide text-primary">学校计分考</p>
-          <h1 className="text-xl font-bold tracking-tight sm:text-3xl">教师工作台</h1>
-          <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground sm:text-sm">
-            导入花名册后生成考试码。学生凭学号、姓名和考试码入场，未交卷可再次进入。
-          </p>
-        </div>
-        <div className="grid grid-cols-2 gap-2 sm:flex">
-          <div className="glass rounded-2xl px-3 py-2 sm:min-w-[92px] sm:px-4 sm:py-2.5">
-            <div className="text-base font-semibold tabular-nums sm:text-lg">{roster.length}</div>
-            <div className="text-[11px] text-muted-foreground">花名册</div>
+    <div className="flex min-h-screen flex-col">
+      <header className="border-b border-white/60 px-4 py-3 md:px-10">
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <Button asChild variant="outline" size="sm" className="shrink-0">
+              <Link to="/">
+                <ArrowLeft className="h-4 w-4" />
+                返回
+              </Link>
+            </Button>
+            <span className="truncate text-sm text-muted-foreground">
+              教师端 / <span className="text-foreground">{copy[0]}</span>
+            </span>
           </div>
-          <div className="glass rounded-2xl px-3 py-2 sm:min-w-[92px] sm:px-4 sm:py-2.5">
-            <div className="text-base font-semibold tabular-nums sm:text-lg">{assignments.length}</div>
-            <div className="text-[11px] text-muted-foreground">已布置</div>
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" className="flex max-w-[50vw] items-center gap-2 rounded-full py-1 pl-1 pr-2 text-sm font-medium hover:bg-white/60">
+                <span className="grid h-8 w-8 place-items-center rounded-full bg-primary/15 text-xs font-semibold text-primary">
+                  {(accountLabel[0] ?? "教").toUpperCase()}
+                </span>
+                <span className="truncate">{accountLabel}</span>
+                <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-70" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem asChild>
+                <Link to="/profile">个人资料</Link>
+              </DropdownMenuItem>
+              {isAdminEmail(user.email) && (
+                <DropdownMenuItem asChild>
+                  <Link to="/admin">管理后台</Link>
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => void signOut()}>
+                <LogOut className="mr-2 h-4 w-4" />退出登录
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
+        <nav className="mx-auto mt-3 flex w-full max-w-6xl gap-1 overflow-auto" aria-label="主导航">
+          {NAV.map((item) => {
+            const Icon = item.icon;
+            const active = page === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => go(item.id)}
+                className={cn(
+                  "flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground transition hover:bg-white/70",
+                  active && "bg-primary/10 font-semibold text-primary",
+                )}
+              >
+                <Icon className="h-4 w-4" />
+                {item.label}
+              </button>
+            );
+          })}
+        </nav>
       </header>
 
-      <Tabs
-        value={tab}
-        onValueChange={(v) => {
-          setTab(v);
-          if (v === "assign" && !title.trim()) {
-            setStartsAt(toLocalInput(new Date()));
-            setEndsAt(toLocalInput(new Date(Date.now() + 2 * 60 * 60 * 1000)));
-          }
-        }}
-      >
-        <TabsList className="grid h-auto w-full grid-cols-4 rounded-2xl p-1">
-          <TabsTrigger value="roster" className="w-full flex-col gap-0.5 rounded-xl px-1 py-2 text-[11px] sm:flex-row sm:gap-1.5 sm:text-sm">
-            <Users className="h-3.5 w-3.5" />
-            花名册
-          </TabsTrigger>
-          <TabsTrigger value="assign" className="w-full flex-col gap-0.5 rounded-xl px-1 py-2 text-[11px] sm:flex-row sm:gap-1.5 sm:text-sm">
-            <ClipboardList className="h-3.5 w-3.5" />
-            <span className="sm:hidden">布置</span>
-            <span className="hidden sm:inline">布置考试</span>
-          </TabsTrigger>
-          <TabsTrigger value="grades" className="w-full flex-col gap-0.5 rounded-xl px-1 py-2 text-[11px] sm:flex-row sm:gap-1.5 sm:text-sm">
-            <BarChart3 className="h-3.5 w-3.5" />
-            成绩册
-          </TabsTrigger>
-          <TabsTrigger value="pdf" className="w-full flex-col gap-0.5 rounded-xl px-1 py-2 text-[11px] sm:flex-row sm:gap-1.5 sm:text-sm">
-            <FileUp className="h-3.5 w-3.5" />
-            <span className="sm:hidden">PDF</span>
-            <span className="hidden sm:inline">PDF 出题</span>
-          </TabsTrigger>
-        </TabsList>
+      <div className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 pb-16 md:px-10 md:py-8">
+          <div className="mb-6 flex items-end justify-between gap-4">
+            <div className="min-w-0">
+              <p className="mb-1 text-xs font-semibold tracking-wide text-primary">AP MICROECONOMICS</p>
+              <h1 className="text-2xl font-bold tracking-tight md:text-[27px]">{copy[1]}</h1>
+              <p className="mt-1 text-sm text-muted-foreground">{copy[2]}</p>
+            </div>
+            <span className="hidden shrink-0 rounded-full border border-white/80 bg-white/55 px-3 py-2 text-xs text-muted-foreground sm:inline-flex">
+              {todayLabel}
+            </span>
+          </div>
 
-        <TabsContent value="roster" className="mt-4 space-y-4">
-          <Card className="glass rounded-2xl border-white/60 shadow-none">
-            <CardContent className="space-y-3 p-5">
-              <Field label="粘贴花名册" hint="两列：学号,姓名。可从 Excel 另存为 CSV 后整表粘贴。追加不会清掉已有学生。覆盖会整表替换；有未结束的考试时不能覆盖。">
+          {page === "overview" && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <StatCard label="我的学生" value={roster.length} hint={roster.length ? `${roster.filter((r) => r.user_id).length} 人已入场绑定` : "尚未导入学生"} icon={Users} />
+                <StatCard label="进行中的考试" value={liveCount} hint={assignments.length ? `共布置 ${assignments.length} 场` : "创建考试后会显示在这里"} icon={ClipboardList} />
+                <StatCard label="平均正确率" value={overviewRate == null ? "—" : `${overviewRate}%`} hint={overviewRate == null ? "暂无成绩数据" : "最近一场已交卷的选择题"} icon={BarChart3} />
+                <StatCard label="待处理" value={pendingCount} hint={snapshot ? "最近一场尚未交卷" : "暂无待处理事项"} icon={Clock} />
+              </div>
+              <div className="grid gap-4 lg:grid-cols-[1.35fr_1fr]">
+                <section className="glass rounded-2xl p-5">
+                  <h2 className="text-[15px] font-semibold">开始使用</h2>
+                  <p className="mt-0.5 text-xs text-muted-foreground">完成以下步骤即可开始管理课程</p>
+                  <div className="mt-2 divide-y divide-white/70">
+                    <div className="flex items-center gap-3 py-3">
+                      <span className={cn("h-2 w-2 shrink-0 rounded-full", roster.length ? "bg-success" : "bg-primary")} />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium">第 1 步：导入学生名册</p>
+                        <p className="text-xs text-muted-foreground">粘贴学号和姓名，建立班级名单</p>
+                      </div>
+                      <Button size="sm" variant="outline" onClick={() => go("roster")}>导入学生</Button>
+                    </div>
+                    <div className="flex items-center gap-3 py-3">
+                      <span className={cn("h-2 w-2 shrink-0 rounded-full", assignments.length ? "bg-success" : "bg-muted-foreground/30")} />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium">第 2 步：布置考试</p>
+                        <p className="text-xs text-muted-foreground">选择试卷并设置考试时间</p>
+                      </div>
+                      <Button size="sm" variant="outline" onClick={() => go("exam")}>创建考试</Button>
+                    </div>
+                  </div>
+                </section>
+                <section className="glass rounded-2xl p-5">
+                  <h2 className="text-[15px] font-semibold">快捷操作</h2>
+                  <p className="mt-0.5 text-xs text-muted-foreground">常用教学入口</p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Button onClick={() => go("exam")}><Plus className="h-4 w-4" />布置考试</Button>
+                    <Button variant="outline" onClick={() => go("roster")}>导入学生</Button>
+                    <Button variant="outline" onClick={() => go("pdf")}>上传 PDF</Button>
+                  </div>
+                  <p className="mt-4 rounded-xl bg-white/50 px-3 py-3 text-xs leading-relaxed text-muted-foreground">
+                    完成名册导入后，即可开始布置考试并查看成绩。
+                  </p>
+                </section>
+              </div>
+              <section className="glass overflow-hidden rounded-2xl">
+                <div className="flex items-center justify-between gap-3 px-5 py-4">
+                  <div>
+                    <h2 className="text-[15px] font-semibold">最近考试</h2>
+                    <p className="text-xs text-muted-foreground">查看提交进度与班级表现</p>
+                  </div>
+                  <Button onClick={() => go("exam")}><Plus className="h-4 w-4" />布置考试</Button>
+                </div>
+                {assignments.length === 0 ? (
+                  <EmptyState icon={ClipboardList} title="还没有考试" hint="导入学生后，点击「布置考试」创建第一场考试。" />
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="hover:bg-transparent">
+                          <TableHead>考试名称</TableHead>
+                          <TableHead>截止时间</TableHead>
+                          <TableHead>提交情况</TableHead>
+                          <TableHead>正确率</TableHead>
+                          <TableHead>状态</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {assignments.slice(0, 6).map((a) => {
+                          const win = examWindow(a.starts_at, a.ends_at);
+                          return (
+                            <TableRow key={a.id} className="cursor-pointer" onClick={() => void loadGradebook(a.id)}>
+                              <TableCell className="font-medium">{a.title}</TableCell>
+                              <TableCell className="whitespace-nowrap text-muted-foreground">{new Date(a.ends_at).toLocaleString()}</TableCell>
+                              <TableCell>{submitProgress(a.id)}</TableCell>
+                              <TableCell>{snapshot?.id === a.id && overviewRate != null ? `${overviewRate}%` : "—"}</TableCell>
+                              <TableCell><Pill tone={win.tone}>{win.label}</Pill></TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </section>
+            </div>
+          )}
+
+          {page === "roster" && (
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold">学生名册</h2>
+                  <p className="mt-1 text-xs text-muted-foreground">导入一次即可复用。追加不会清掉已有学生；覆盖会整表替换，有未结束的考试时不能覆盖。</p>
+                </div>
+                <Button onClick={() => void importRoster(false)}>导入学生</Button>
+              </div>
+              <section className="glass rounded-2xl p-5">
+                <h2 className="text-[15px] font-semibold">快速导入</h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">从 Excel 复制「学号、姓名」两列，粘贴到这里</p>
                 <Textarea
                   rows={6}
                   value={csvText}
                   onChange={(e) => setCsvText(e.target.value)}
-                  className="min-h-[8rem] font-mono text-sm sm:min-h-[10rem]"
+                  className="mt-4 min-h-[8rem] font-mono text-sm"
+                  placeholder={"例如：\n2026001, 张小明\n2026002, 王小雨"}
                   aria-label="花名册 CSV"
                 />
-              </Field>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Button className="w-full sm:w-auto" onClick={() => void importRoster(false)}>追加导入</Button>
-                <Button className="w-full sm:w-auto" variant="outline" onClick={() => void importRoster(true)}>覆盖导入</Button>
-              </div>
-            </CardContent>
-          </Card>
-          {roster.length === 0 ? (
-            <EmptyState icon={Users} title="还没有学生" hint="粘贴学号和姓名后点「追加导入」，学生才能用考试码入场。" />
-          ) : (
-            <Card className="glass overflow-hidden rounded-2xl border-white/60 shadow-none">
-              <CardContent className="p-0">
-                <div className="flex items-center justify-between px-5 py-3">
-                  <p className="text-sm font-medium">当前 {roster.length} 人</p>
-                  <p className="text-xs text-muted-foreground">
-                    {roster.filter((r) => r.user_id).length} 人已入场绑定
-                  </p>
+                <p className="mt-2 text-[11px] text-muted-foreground">支持逗号或制表符分隔。表头含「学号」时会自动跳过。</p>
+                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                  <Button onClick={() => void importRoster(false)}>追加导入</Button>
+                  <Button variant="outline" onClick={() => void importRoster(true)}>覆盖导入</Button>
                 </div>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="hover:bg-transparent">
-                        <TableHead className="whitespace-nowrap">学号</TableHead>
-                        <TableHead className="whitespace-nowrap">姓名</TableHead>
-                        <TableHead className="whitespace-nowrap">账号</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {roster.map((r) => (
-                        <TableRow key={r.id}>
-                          <TableCell className="whitespace-nowrap font-mono">{r.student_id}</TableCell>
-                          <TableCell className="whitespace-nowrap">{r.student_name}</TableCell>
-                          <TableCell>
-                            <Pill tone={r.user_id ? "ok" : "muted"}>{r.user_id ? "已绑定" : "未入场"}</Pill>
-                          </TableCell>
+              </section>
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  value={rosterQuery}
+                  onChange={(e) => setRosterQuery(e.target.value)}
+                  placeholder="搜索姓名或学号"
+                  className="max-w-xs"
+                />
+                <span className="text-xs text-muted-foreground">共 {shownRoster.length} 位学生</span>
+              </div>
+              <section className="glass overflow-hidden rounded-2xl">
+                {roster.length === 0 ? (
+                  <EmptyState icon={Users} title="还没有学生" hint="粘贴学号和姓名，导入你的第一批学生。" />
+                ) : shownRoster.length === 0 ? (
+                  <EmptyState icon={Users} title="没有匹配的学生" hint="换一个姓名或学号再搜一次。" />
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="hover:bg-transparent">
+                          <TableHead>学号</TableHead>
+                          <TableHead>姓名</TableHead>
+                          <TableHead>班级</TableHead>
+                          <TableHead>状态</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
-            </Card>
+                      </TableHeader>
+                      <TableBody>
+                        {shownRoster.map((r) => (
+                          <TableRow key={r.id}>
+                            <TableCell className="font-mono">{r.student_id}</TableCell>
+                            <TableCell className="font-medium">{r.student_name}</TableCell>
+                            <TableCell>本班</TableCell>
+                            <TableCell>
+                              <Pill tone={r.user_id ? "ok" : "muted"}>{r.user_id ? "已绑定" : "未入场"}</Pill>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </section>
+            </div>
           )}
-        </TabsContent>
 
-        <TabsContent value="assign" className="mt-4 space-y-4">
-          <Card className="glass rounded-2xl border-white/60 shadow-none">
-            <CardContent className="space-y-4 p-5">
-              <Field label="考试名称">
-                <Input placeholder="例如：期中考试" value={title} onChange={(e) => setTitle(e.target.value)} />
-              </Field>
-              <Field label="试卷来源">
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant={source === "existing" ? "default" : "outline"} onClick={() => setSource("existing")}>
-                    现有卷库
-                  </Button>
-                  <Button type="button" variant={source === "random" ? "default" : "outline"} onClick={() => setSource("random")}>
-                    生成固定随机卷
-                  </Button>
-                </div>
-              </Field>
-              {source === "existing" && (
-                <Field label="选择试卷">
-                  <Select value={paperId} onValueChange={setPaperId}>
-                    <SelectTrigger><SelectValue placeholder="选择试卷" /></SelectTrigger>
-                    <SelectContent>
-                      {libraryPapers.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>
-                          {paperPickerLabel(p)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-              )}
-              {source === "existing" && selectedPaper && !selectedPaper.slug.startsWith("school-") && (
-                <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-900">
-                  这是公开卷库。未走考试入场的学生仍可能在「模考」里练习同一份卷。课上请只用考试码入场；随机卷或 PDF 导入卷不会出现在公开模考列表。
-                </p>
-              )}
-              {source === "random" && (
-                <p className="rounded-xl bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
-                  开考前抽好 60 题选择题 + 3 道大题，全班同一套，保证评分公平。题量较大，课上计时请预留充足时间。
-                </p>
-              )}
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="开考时间">
-                  <Input type="datetime-local" className="min-w-0 w-full text-sm" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} />
-                </Field>
-                <Field label="截止时间">
-                  <Input type="datetime-local" className="min-w-0 w-full text-sm" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
-                </Field>
+          {page === "exam" && (
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-lg font-semibold">布置一场考试</h2>
+                <p className="mt-1 text-xs text-muted-foreground">设置考试信息，确认后即可生成学生考试码。</p>
               </div>
-              <Button className="w-full sm:w-auto" onClick={() => void createAssignment()} disabled={creating || !title.trim() || (source === "existing" && !paperId)}>
-                {creating ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
-                生成考试码
-              </Button>
-            </CardContent>
-          </Card>
-          {assignments.length === 0 ? (
-            <EmptyState icon={ClipboardList} title="还没有考试" hint="填好名称和试卷后点「生成考试码」，把 6 位码发给学生即可。" />
-          ) : (
-            <div className="space-y-3">
-              {assignments.map((a) => {
-                const win = examWindow(a.starts_at, a.ends_at);
-                return (
-                  <Card key={a.id} className="glass rounded-2xl border-white/60 shadow-none">
-                    <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+              <section className="glass max-w-3xl rounded-2xl p-5 md:p-6">
+                <div className="mb-6 flex items-center gap-3 text-xs">
+                  <div className={cn("flex items-center gap-2", examStep === "edit" ? "font-semibold text-primary" : "text-foreground")}>
+                    <span className="grid h-6 w-6 place-items-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground">
+                      {examStep === "edit" ? "1" : "✓"}
+                    </span>
+                    考试设置
+                  </div>
+                  <span className="h-px max-w-16 flex-1 bg-border" />
+                  <div className={cn("flex items-center gap-2", examStep === "review" ? "font-semibold text-primary" : "text-muted-foreground")}>
+                    <span className={cn(
+                      "grid h-6 w-6 place-items-center rounded-full text-[11px] font-semibold",
+                      examStep === "edit" ? "bg-muted text-muted-foreground" : "bg-primary text-primary-foreground",
+                    )}>
+                      {examStep === "done" ? "✓" : "2"}
+                    </span>
+                    确认发布
+                  </div>
+                </div>
+
+                {examStep === "done" && publishedExam ? (
+                  <div className="space-y-4">
+                    <div className="rounded-2xl bg-success/10 px-4 py-3 text-sm text-success">
+                      考试「{publishedExam.title}」已创建。把考试码发给学生即可入场。
+                    </div>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                      <span className="font-mono text-2xl tracking-[0.18em]">{publishedExam.code}</span>
+                      <Button variant="outline" onClick={() => void copyCode(publishedExam.code)}>
+                        {copied === publishedExam.code ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                        {copied === publishedExam.code ? "已复制" : "复制考试码"}
+                      </Button>
+                    </div>
+                    <div className="flex flex-col gap-2 border-t border-white/70 pt-4 sm:flex-row">
+                      <Button variant="outline" onClick={() => { setExamStep("edit"); setPublishedExam(null); }}>再布置一场</Button>
+                      <Button onClick={() => void loadGradebook(gradeId)}>查看成绩</Button>
+                    </div>
+                  </div>
+                ) : examStep === "review" ? (
+                  <div className="space-y-4">
+                    <div className="rounded-2xl border border-white/80 bg-white/45 p-4">
+                      <h3 className="mb-3 text-sm font-semibold">请确认考试信息</h3>
+                      <dl className="grid grid-cols-[96px_1fr] gap-x-3 gap-y-2 text-sm">
+                        <dt className="text-muted-foreground">考试名称</dt><dd className="font-medium">{title}</dd>
+                        <dt className="text-muted-foreground">班级与人数</dt><dd className="font-medium">本班，共 {roster.length} 人</dd>
+                        <dt className="text-muted-foreground">试卷</dt><dd className="font-medium">{paperLabel}</dd>
+                        <dt className="text-muted-foreground">考试时间</dt>
+                        <dd className="font-medium">{new Date(startsAt).toLocaleString()} 至 {new Date(endsAt).toLocaleString()}</dd>
+                      </dl>
+                    </div>
+                    <div className="flex flex-col gap-2 border-t border-white/70 pt-4 sm:flex-row sm:justify-between">
+                      <Button variant="outline" onClick={() => setExamStep("edit")}>返回修改</Button>
+                      <Button onClick={() => void createAssignment()} disabled={creating}>
+                        {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                        生成考试码并发布
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <Field label="考试名称">
+                      <Input placeholder="例如：Unit 2 供需与弹性测验" value={title} onChange={(e) => setTitle(e.target.value)} />
+                    </Field>
+                    <Field label="选择班级">
+                      <Input readOnly value={roster.length ? `本班（${roster.length} 人）` : "请先导入学生名册"} />
+                    </Field>
+                    <Field label="试卷来源">
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          className={cn(
+                            "rounded-xl border px-3 py-2 text-sm",
+                            source === "existing" ? "border-primary/40 bg-primary/10 font-medium text-primary" : "border-border bg-white/60 text-muted-foreground",
+                          )}
+                          onClick={() => setSource("existing")}
+                        >
+                          从现有题库选择
+                        </button>
+                        <button
+                          type="button"
+                          className={cn(
+                            "rounded-xl border px-3 py-2 text-sm",
+                            source === "random" ? "border-primary/40 bg-primary/10 font-medium text-primary" : "border-border bg-white/60 text-muted-foreground",
+                          )}
+                          onClick={() => setSource("random")}
+                        >
+                          生成固定随机卷
+                        </button>
+                      </div>
+                    </Field>
+                    {source === "existing" ? (
+                      <Field label="选择试卷" hint="选择已有题卷，学生将完成同一套题目。">
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                          <Select value={paperId || undefined} onValueChange={setPaperId}>
+                            <SelectTrigger className="min-w-0 flex-1"><SelectValue placeholder="选择试卷" /></SelectTrigger>
+                            <SelectContent>
+                              {libraryPapers.map((p) => (
+                                <SelectItem key={p.id} value={p.id}>{paperPickerLabel(p)}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Button type="button" variant="outline" disabled={!selectedPaper} onClick={() => setPreviewOpen(true)}>预览试卷</Button>
+                        </div>
+                      </Field>
+                    ) : (
+                      <Field label="随机卷范围" hint="开考前抽好 60 题选择题 + 3 道大题，全班同一套。">
+                        <div className="flex flex-col gap-2 sm:flex-row">
+                          <Input readOnly value="全部已发布题目" className="flex-1" />
+                          <Button type="button" variant="outline" onClick={() => setPreviewOpen(true)}>预览说明</Button>
+                        </div>
+                      </Field>
+                    )}
+                    {source === "existing" && selectedPaper && !selectedPaper.slug.startsWith("school-") && (
+                      <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-900">
+                        这是公开卷库。未走考试入场的学生仍可能在「模考」里练习同一份卷。课上请只用考试码入场；随机卷或 PDF 导入卷不会出现在公开模考列表。
+                      </p>
+                    )}
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Field label="开始时间">
+                        <Input type="datetime-local" className="min-w-0 w-full text-sm" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} />
+                      </Field>
+                      <Field label="截止时间">
+                        <Input type="datetime-local" className="min-w-0 w-full text-sm" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
+                      </Field>
+                    </div>
+                    <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-900">
+                      学生使用学号和考试码进入。未交卷的学生可在截止前重新进入；已提交的答卷不能重复提交。
+                    </p>
+                    <div className="flex flex-col gap-3 border-t border-white/70 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                      <span className="text-xs text-muted-foreground">预计考试人数：{roster.length} 人</span>
+                      <Button onClick={reviewExam}>检查并继续</Button>
+                    </div>
+                  </div>
+                )}
+              </section>
+
+              <section className="space-y-3">
+                <h2 className="text-[15px] font-semibold">已布置的考试</h2>
+                {assignments.length === 0 ? (
+                  <div className="glass rounded-2xl">
+                    <EmptyState icon={ClipboardList} title="还没有考试" hint="填好名称和试卷后生成考试码，把 6 位码发给学生即可。" />
+                  </div>
+                ) : assignments.map((a) => {
+                  const win = examWindow(a.starts_at, a.ends_at);
+                  return (
+                    <div key={a.id} className="glass flex flex-col gap-4 rounded-2xl p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
                       <div className="min-w-0 space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <h2 className="font-semibold">{a.title}</h2>
+                          <h3 className="font-semibold">{a.title}</h3>
                           <Pill tone={win.tone}>{win.label}</Pill>
                           <Pill tone={a.results_published ? "ok" : "muted"}>
                             {a.results_published ? "已公布解析" : "未公布解析"}
                           </Pill>
                         </div>
                         <p className="text-xs leading-relaxed text-muted-foreground">
-                          {a.paper?.title ?? "试卷"}
-                          <span className="hidden sm:inline"> · {new Date(a.starts_at).toLocaleString()} – {new Date(a.ends_at).toLocaleString()}</span>
-                        </p>
-                        <p className="text-[11px] text-muted-foreground sm:hidden">
-                          {new Date(a.starts_at).toLocaleString()} – {new Date(a.ends_at).toLocaleString()}
+                          {a.paper?.title ?? "试卷"} · {new Date(a.starts_at).toLocaleString()} – {new Date(a.ends_at).toLocaleString()}
                         </p>
                         <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center">
-                          <span className="font-mono text-lg tracking-[0.12em] sm:text-xl sm:tracking-[0.16em]">{a.exam_code}</span>
+                          <span className="font-mono text-lg tracking-[0.14em]">{a.exam_code}</span>
                           <Button size="sm" variant="outline" className="h-8 w-full gap-1 sm:w-auto" onClick={() => void copyCode(a.exam_code)}>
                             {copied === a.exam_code ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                             {copied === a.exam_code ? "已复制" : "复制考试码"}
@@ -1003,217 +1372,265 @@ function TeacherHome() {
                         </div>
                       </div>
                       <Button size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => void loadGradebook(a.id)}>
-                        查看成绩册
+                        查看成绩
                       </Button>
-                    </CardContent>
-                  </Card>
-                );
-              })}
+                    </div>
+                  );
+                })}
+              </section>
             </div>
           )}
-        </TabsContent>
 
-        <TabsContent value="grades" className="mt-4 space-y-4">
-          {assignments.length === 0 ? (
-            <EmptyState icon={BarChart3} title="还没有可查看的考试" hint="先到「布置考试」生成考试码，学生交卷后这里会出现成绩。" />
-          ) : (
-            <>
-              <Card className="glass rounded-2xl border-white/60 shadow-none">
-                <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
-                  <div className="flex-1">
-                    <Field label="选择考试">
-                      <Select value={gradeId} onValueChange={(id) => void loadGradebook(id)}>
-                        <SelectTrigger><SelectValue placeholder="选择一场考试" /></SelectTrigger>
-                        <SelectContent>
-                          {assignments.map((a) => (
-                            <SelectItem key={a.id} value={a.id}>{a.title}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                  </div>
-                  {gradeMeta && (
-                    <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-                      <Button size="sm" className="w-full sm:w-auto" onClick={() => void togglePublish(!gradeMeta.results_published)}>
+          {page === "scores" && (
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold">成绩分析</h2>
+                  <p className="mt-1 text-xs text-muted-foreground">考试发布并收到学生答卷后，成绩会显示在这里。</p>
+                </div>
+                <Button variant="outline" disabled={!gradeRows.length} onClick={exportCsv}>导出成绩</Button>
+              </div>
+              {assignments.length === 0 ? (
+                <div className="glass rounded-2xl">
+                  <EmptyState icon={BarChart3} title="还没有可查看的考试" hint="先到「布置考试」生成考试码，学生交卷后这里会出现成绩。" />
+                </div>
+              ) : (
+                <>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <Select value={gradeId || undefined} onValueChange={(id) => void loadGradebook(id)}>
+                      <SelectTrigger className="w-full sm:max-w-xs"><SelectValue placeholder="选择一场考试" /></SelectTrigger>
+                      <SelectContent>
+                        {assignments.map((a) => (
+                          <SelectItem key={a.id} value={a.id}>{a.title}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      value={scoreQuery}
+                      onChange={(e) => setScoreQuery(e.target.value)}
+                      placeholder="搜索学生"
+                      className="w-full sm:max-w-xs"
+                    />
+                    {gradeMeta && (
+                      <Button className="sm:ml-auto" onClick={() => void togglePublish(!gradeMeta.results_published)}>
                         {gradeMeta.results_published ? "取消公布成绩" : "公布成绩与解析"}
                       </Button>
-                      <Button size="sm" variant="outline" className="w-full sm:w-auto" onClick={exportCsv}>导出 CSV</Button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                    <StatCard label="班级正确率" value={gradeRate == null ? "—" : `${gradeRate}%`} hint={gradeRate == null ? "暂无成绩数据" : "已交卷选择题"} />
+                    <StatCard label="已提交" value={gradeId ? `${submittedCount} / ${gradeRows.length}` : "0 / 0"} hint={gradeId ? `${inProgressCount} 人作答中` : "请选择一场考试"} />
+                    <StatCard label="最高正确率" value={bestScore < 0 ? "—" : `${Math.round(bestScore * 100)}%`} hint={bestScore < 0 ? "暂无成绩数据" : "单份已交答卷"} />
+                    <StatCard label="已交大题" value={frqCount} hint={frqCount ? "可在下方查看原文" : "暂无大题作答"} />
+                  </div>
+                  <section className="glass overflow-hidden rounded-2xl">
+                    <div className="px-5 py-4">
+                      <h2 className="text-[15px] font-semibold">学生成绩</h2>
+                      <p className="text-xs text-muted-foreground">{gradeMeta ? gradeMeta.title : "成绩会在学生提交答卷后显示"}</p>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-              {gradeMeta && (
-                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                  <Pill tone="ok">{submittedCount} 已交</Pill>
-                  <Pill tone="live">{inProgressCount} 作答中</Pill>
-                  <Pill tone="muted">{Math.max(0, gradeRows.length - submittedCount - inProgressCount)} 未交</Pill>
-                </div>
-              )}
-              {!gradeId ? (
-                <EmptyState icon={BarChart3} title="请选择一场考试" hint="从上方下拉框挑一场，或从「布置考试」点「查看成绩册」。" />
-              ) : gradeRows.length === 0 ? (
-                <EmptyState icon={Users} title="这份成绩册还是空的" hint="确认花名册已导入。学生入场后会出现「作答中」，交卷后显示选择题对错。" />
-              ) : (
-                <Card className="glass overflow-hidden rounded-2xl border-white/60 shadow-none">
-                  <CardContent className="p-0">
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="hover:bg-transparent">
-                            <TableHead className="whitespace-nowrap">学号</TableHead>
-                            <TableHead className="whitespace-nowrap">姓名</TableHead>
-                            <TableHead className="whitespace-nowrap">状态</TableHead>
-                            <TableHead className="whitespace-nowrap">选择题</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {gradeRows.map((row) => (
-                            <TableRow key={row.student_id}>
-                              <TableCell className="whitespace-nowrap font-mono">{row.student_id}</TableCell>
-                              <TableCell className="whitespace-nowrap">{row.student_name}</TableCell>
-                              <TableCell>
-                                <Pill tone={row.status === "submitted" ? "ok" : row.status === "in_progress" ? "live" : "muted"}>
-                                  {row.status === "submitted" ? "已交" : row.status === "in_progress" ? "作答中" : "未交"}
-                                </Pill>
-                              </TableCell>
-                              <TableCell className="whitespace-nowrap tabular-nums">
-                                {row.mcq_correct != null ? `${row.mcq_correct}/${row.mcq_total}` : "—"}
-                              </TableCell>
+                    {!gradeId ? (
+                      <EmptyState icon={BarChart3} title="请选择一场考试" hint="从上方选择考试，或从工作台点进一场考试。" />
+                    ) : shownGrades.length === 0 ? (
+                      <EmptyState icon={Users} title="还没有成绩" hint="布置考试并收集答卷后，这里会显示学生成绩。" />
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="hover:bg-transparent">
+                              <TableHead>学生</TableHead>
+                              <TableHead>选择题</TableHead>
+                              <TableHead>大题</TableHead>
+                              <TableHead>提交状态</TableHead>
                             </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {shownGrades.map((row) => (
+                              <TableRow key={row.student_id}>
+                                <TableCell>
+                                  <div className="font-medium">{row.student_name}</div>
+                                  <div className="font-mono text-[11px] text-muted-foreground">{row.student_id}</div>
+                                </TableCell>
+                                <TableCell className="tabular-nums">
+                                  {row.mcq_correct != null ? `${row.mcq_correct}/${row.mcq_total}` : "—"}
+                                </TableCell>
+                                <TableCell>
+                                  {Object.keys(row.frq_answers ?? {}).length > 0 ? "已作答" : "—"}
+                                </TableCell>
+                                <TableCell>
+                                  <Pill tone={row.status === "submitted" ? "ok" : row.status === "in_progress" ? "live" : "muted"}>
+                                    {row.status === "submitted" ? "已提交" : row.status === "in_progress" ? "作答中" : "未交"}
+                                  </Pill>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
+                  </section>
+                  {gradeRows.some((r) => Object.keys(r.frq_answers ?? {}).length > 0) && (
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-semibold">大题原文</h3>
+                      {gradeRows.filter((r) => r.status === "submitted" && Object.keys(r.frq_answers ?? {}).length > 0).map((r) => (
+                        <div key={`frq-${r.student_id}`} className="glass space-y-2 rounded-2xl p-4 text-xs">
+                          <div className="font-medium">{r.student_id} {r.student_name}</div>
+                          {Object.entries(r.frq_answers ?? {}).map(([id, ans]) => (
+                            <pre key={id} className="whitespace-pre-wrap rounded-xl bg-white/60 p-3">{ans.text || (ans.fileUrl ? ans.fileUrl : "（空）")}</pre>
                           ))}
-                        </TableBody>
-                      </Table>
+                        </div>
+                      ))}
                     </div>
-                  </CardContent>
-                </Card>
+                  )}
+                </>
               )}
-              {gradeRows.some((r) => Object.keys(r.frq_answers ?? {}).length > 0) && (
-                <div className="space-y-2">
-                  <h3 className="text-sm font-semibold">大题原文（学生端不展示得分）</h3>
-                  {gradeRows.filter((r) => r.status === "submitted").map((r) => (
-                    <Card key={`frq-${r.student_id}`} className="glass rounded-2xl border-white/60 shadow-none">
-                      <CardContent className="space-y-2 p-4 text-xs">
-                        <div className="font-medium">{r.student_id} {r.student_name}</div>
-                        {Object.entries(r.frq_answers ?? {}).map(([id, ans]) => (
-                          <pre key={id} className="whitespace-pre-wrap rounded-xl bg-muted/70 p-3">{ans.text || (ans.fileUrl ? ans.fileUrl : "（空）")}</pre>
-                        ))}
-                      </CardContent>
-                    </Card>
-                  ))}
+            </div>
+          )}
+
+          {page === "pdf" && (
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-lg font-semibold">PDF 智能出题</h2>
+                <p className="mt-1 text-xs text-muted-foreground">上传试卷后会自动切题，并先让 AI 审一遍。确认后提交到后台，再去布置考试。</p>
+              </div>
+              <section className="glass max-w-3xl rounded-2xl p-5">
+                <label
+                  className={cn(
+                    "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-primary/35 bg-primary/5 px-4 py-10 text-center transition hover:bg-primary/10",
+                    pdfBusy && "pointer-events-none opacity-70",
+                  )}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const f = e.dataTransfer.files?.[0];
+                    if (!f || pdfBusy) return;
+                    if (f.type !== "application/pdf" && !f.name.toLowerCase().endsWith(".pdf")) {
+                      toast.error("请上传 PDF 文件");
+                      return;
+                    }
+                    void onPdfFile(f);
+                  }}
+                >
+                  <FileUp className="h-6 w-6 text-primary" />
+                  <span className="text-sm font-medium">{pdfBusy || "选择或拖入 PDF 文件"}</span>
+                  <span className="text-xs text-muted-foreground">支持官方试卷 PDF，上传后直接看切好的题目</span>
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    className="sr-only"
+                    disabled={!!pdfBusy}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) void onPdfFile(f);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+                <p className="mt-3 text-[11px] text-muted-foreground">草稿只对你可见。是否进入模拟考试或练习库，由管理员决定。</p>
+              </section>
+
+              {imports.length === 0 && !activeImport ? (
+                <div className="glass max-w-3xl rounded-2xl">
+                  <EmptyState icon={FileUp} title="还没有 PDF 草稿" hint="上传试卷后，识别结果会保存在这里。" />
+                </div>
+              ) : (
+                <div className="max-w-3xl space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs text-muted-foreground">点开一份导入查看切题。未提交的草稿可以清掉。</p>
+                    {imports.some((imp) => imp.status !== "published") && (
+                      <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => void deleteDraftImports()}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                        清理未提交
+                      </Button>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {imports.map((imp) => (
+                      <div key={imp.id} className="flex items-center">
+                        <Button size="sm" variant={activeImport === imp.id ? "default" : "outline"} onClick={() => void openImport(imp.id)}>
+                          {importChipLabel(imp)}
+                        </Button>
+                        <button
+                          type="button"
+                          className="ml-0.5 rounded-md p-1 text-muted-foreground hover:bg-white/70 hover:text-foreground"
+                          aria-label={`删除 ${importChipLabel(imp)}`}
+                          onClick={() => void deleteImport(imp.id, imp.status)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
-            </>
-          )}
-        </TabsContent>
 
-        <TabsContent value="pdf" className="mt-4 space-y-4">
-          <Card className="glass rounded-2xl border-white/60 shadow-none">
-            <CardContent className="space-y-3 p-5">
-              <p className="text-sm text-muted-foreground">
-                上传 PDF 后会自动切题，并强制让 AI 先审一遍。你只需改被标出来的题，然后保存并提交到后台。是否进入模拟考试或练习库，由管理员决定。
-              </p>
-              <label className={cn(
-                "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-primary/30 bg-primary/5 px-4 py-8 text-center transition hover:bg-primary/10",
-                pdfBusy && "pointer-events-none opacity-70",
-              )}>
-                <FileUp className="h-6 w-6 text-primary" />
-                <span className="text-sm font-medium">{pdfBusy || "点击选择 PDF"}</span>
-                <span className="text-xs text-muted-foreground">支持官方试卷 PDF，上传后直接看切好的题目</span>
-                <input
-                  type="file"
-                  accept="application/pdf"
-                  className="sr-only"
-                  disabled={!!pdfBusy}
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) void onPdfFile(f);
-                    e.target.value = "";
-                  }}
-                />
-              </label>
-            </CardContent>
-          </Card>
-          {imports.length === 0 && !activeImport ? (
-            <EmptyState icon={FileUp} title="还没有 PDF 导入" hint="现有卷库不够用时再上传。日常考试可直接用「布置考试」里的卷库。" />
-          ) : (
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs text-muted-foreground">点开一份导入查看切题。未提交的草稿可以清掉。</p>
-                {imports.some((imp) => imp.status !== "published") && (
-                  <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => void deleteDraftImports()}>
-                    <Trash2 className="h-3.5 w-3.5" />
-                    清理未提交
-                  </Button>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {imports.map((imp) => (
-                  <div key={imp.id} className="flex items-center">
-                    <Button size="sm" variant={activeImport === imp.id ? "default" : "outline"} onClick={() => void openImport(imp.id)}>
-                      {importChipLabel(imp)}
-                    </Button>
-                    <button
-                      type="button"
-                      className="ml-0.5 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                      aria-label={`删除 ${importChipLabel(imp)}`}
-                      onClick={() => void deleteImport(imp.id, imp.status)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                ))}
-              </div>
+              {activeImport && (
+                <div className="space-y-4">
+                  <section className="glass rounded-2xl p-5">
+                    <Field label="试卷标题">
+                      <Input placeholder="例如：2022 AP Micro" value={pdfTitle} onChange={(e) => setPdfTitle(e.target.value)} />
+                    </Field>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button size="sm" onClick={() => setItems((xs) => [...xs, emptyItem(pages[0]?.page_number ?? 1, xs.length + 1, "mcq")])}>加选择题</Button>
+                      <Button size="sm" variant="outline" onClick={() => setItems((xs) => [...xs, emptyItem(pages[0]?.page_number ?? 1, xs.length + 1, "frq")])}>加大题</Button>
+                      <Button size="sm" variant="outline" disabled={aiBusy || !items.length} onClick={() => void runPdfAi(activeImport, items)}>
+                        {aiBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                        {aiBusy ? "AI 审核中…" : "再跑一遍 AI 审核"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        disabled={!!pdfBusy || aiBusy || !items.length || !pdfAiDone || alreadyPublished}
+                        onClick={() => void saveAndPublish()}
+                      >
+                        {pdfBusy === "保存并提交到后台…" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                        {pdfBusy === "保存并提交到后台…" ? "提交中…" : alreadyPublished ? "已提交到后台" : "保存并提交到后台"}
+                      </Button>
+                    </div>
+                    {alreadyPublished && (
+                      <p className="mt-3 text-xs text-muted-foreground">这份卷已经提交。改题请重新上传 PDF，不要在这里再点提交，以免卷库里出现重复的学校卷。</p>
+                    )}
+                    {aiBusy && <p className="mt-3 text-xs text-muted-foreground">AI 正在审核切题，审完后即可提交。</p>}
+                    {!pdfAiDone && items.length > 0 && !aiBusy && !alreadyPublished && (
+                      <p className="mt-3 text-xs text-muted-foreground">请等 AI 审完，或点「再跑一遍 AI 审核」后再提交。</p>
+                    )}
+                    {pdfFindings.length > 0 && (
+                      <p className="mt-3 text-xs text-amber-800">AI 标出 {pdfFindings.length} 道题需要看一眼，其余题目可以直接用。</p>
+                    )}
+                  </section>
+                  <PdfQuestionList
+                    items={items}
+                    findings={pdfFindings}
+                    aiRan={pdfAiRan}
+                    onChange={(idx, patch) => setItems((xs) => xs.map((x, i) => (i === idx ? { ...x, ...patch } : x)))}
+                    onRemove={(idx) => setItems((xs) => xs.filter((_, i) => i !== idx))}
+                  />
+                </div>
+              )}
             </div>
           )}
-          {activeImport && (
-            <div className="space-y-4">
-              <Card className="glass rounded-2xl border-white/60 shadow-none">
-                <CardContent className="space-y-3 p-5">
-                  <Field label="试卷标题">
-                    <Input placeholder="例如：2022 AP Micro" value={pdfTitle} onChange={(e) => setPdfTitle(e.target.value)} />
-                  </Field>
-                  <div className="flex flex-wrap gap-2">
-                    <Button size="sm" className="w-full sm:w-auto" onClick={() => setItems((xs) => [...xs, emptyItem(pages[0]?.page_number ?? 1, xs.length + 1, "mcq")])}>加选择题</Button>
-                    <Button size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => setItems((xs) => [...xs, emptyItem(pages[0]?.page_number ?? 1, xs.length + 1, "frq")])}>加大题</Button>
-                    <Button size="sm" variant="outline" className="w-full sm:w-auto" disabled={aiBusy || !items.length} onClick={() => void runPdfAi(activeImport, items)}>
-                      {aiBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                      {aiBusy ? "AI 审核中…" : "再跑一遍 AI 审核"}
-                    </Button>
-                    <Button
-                      size="sm"
-                      className="w-full sm:w-auto"
-                      disabled={!!pdfBusy || aiBusy || !items.length || !pdfAiDone || alreadyPublished}
-                      onClick={() => void saveAndPublish()}
-                    >
-                      {pdfBusy === "保存并提交到后台…" ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                      {pdfBusy === "保存并提交到后台…" ? "提交中…" : alreadyPublished ? "已提交到后台" : "保存并提交到后台"}
-                    </Button>
-                  </div>
-                  {alreadyPublished && (
-                    <p className="text-xs text-muted-foreground">这份卷已经提交。改题请重新上传 PDF，不要在这里再点提交，以免卷库里出现重复的学校卷。</p>
-                  )}
-                  {aiBusy && (
-                    <p className="text-xs text-muted-foreground">AI 正在审核切题，审完后即可提交。</p>
-                  )}
-                  {!pdfAiDone && items.length > 0 && !aiBusy && !alreadyPublished && (
-                    <p className="text-xs text-muted-foreground">请等 AI 审完，或点「再跑一遍 AI 审核」后再提交。</p>
-                  )}
-                  {pdfFindings.length > 0 && (
-                    <p className="text-xs text-amber-800">AI 标出 {pdfFindings.length} 道题需要看一眼，其余题目可以直接用。</p>
-                  )}
-                </CardContent>
-              </Card>
-              <PdfQuestionList
-                items={items}
-                findings={pdfFindings}
-                aiRan={pdfAiRan}
-                onChange={(idx, patch) => setItems((xs) => xs.map((x, i) => i === idx ? { ...x, ...patch } : x))}
-                onRemove={(idx) => setItems((xs) => xs.filter((_, i) => i !== idx))}
-              />
+      </div>
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-lg rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>试卷预览</DialogTitle>
+            <DialogDescription>
+              {source === "random"
+                ? "发布时会生成一套固定随机卷：60 道选择题和 3 道大题，全班同一套，保证评分公平。"
+                : selectedPaper
+                  ? paperPickerLabel(selectedPaper)
+                  : "请先选择一份试卷。"}
+            </DialogDescription>
+          </DialogHeader>
+          {source === "existing" && selectedPaper && (
+            <div className="space-y-3 text-sm">
+              <p className="text-muted-foreground">学生入场后会做到这一份卷。可以先打开看题面，课上仍请只用考试码入场。</p>
+              <Button asChild>
+                <a href={`/mock/${selectedPaper.slug}`} target="_blank" rel="noreferrer">打开试卷</a>
+              </Button>
             </div>
           )}
-        </TabsContent>
-      </Tabs>
-    </main>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
