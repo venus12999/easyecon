@@ -153,6 +153,8 @@ export const Route = createFileRoute("/api/teacher/pdf")({
       GET: async ({ request }) => {
         try {
         const u = await verifyTeacherRequest(request);
+        if (u === "expired") return jsonErr("session_expired", 401);
+        if (u === "unavailable") return jsonErr("unavailable", 503);
         if (!u) return jsonErr("unauthorized", 401);
         const db = await getTeacherDb(u.jwt);
         const cls = await ensureTeacherClass(u.userId, db);
@@ -176,6 +178,8 @@ export const Route = createFileRoute("/api/teacher/pdf")({
       POST: async ({ request }) => {
         try {
         const u = await verifyTeacherRequest(request);
+        if (u === "expired") return jsonErr("session_expired", 401);
+        if (u === "unavailable") return jsonErr("unavailable", 503);
         if (!u) return jsonErr("unauthorized", 401);
         const db = await getTeacherDb(u.jwt);
         const cls = await ensureTeacherClass(u.userId, db);

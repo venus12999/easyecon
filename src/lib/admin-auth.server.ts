@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { isAdminEmailServer } from "@/lib/admin-emails.server";
+import { installOutboundProxy } from "@/lib/outbound-proxy.server";
 
 /** 用 Bearer Supabase JWT 校验请求是否来自管理员账号。 */
 export async function verifyAdminRequest(request: Request): Promise<boolean> {
@@ -7,6 +8,7 @@ export async function verifyAdminRequest(request: Request): Promise<boolean> {
     const auth = request.headers.get("authorization") ?? request.headers.get("Authorization");
     const jwt = auth?.toLowerCase().startsWith("bearer ") ? auth.slice(7).trim() : null;
     if (!jwt) return false;
+    await installOutboundProxy();
     const url = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL;
     const anon = process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
     if (!url || !anon) return false;

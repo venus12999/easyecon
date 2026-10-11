@@ -15,6 +15,7 @@ import {
   ClipboardList,
   Copy,
   Clock,
+  Eye,
   FileUp,
   LayoutDashboard,
   Loader2,
@@ -269,6 +270,7 @@ function emptyItem(page: number, order: number, kind: "mcq" | "frq"): PdfItem {
 function TeacherHome() {
   const { user, loading: authLoading, signOut } = useAuth();
   const [denied, setDenied] = useState(false);
+  const [checkFailed, setCheckFailed] = useState(false);
   const [ready, setReady] = useState(false);
   const [roster, setRoster] = useState<RosterRow[]>([]);
   const [csvText, setCsvText] = useState("学号,姓名\n");
@@ -301,16 +303,37 @@ function TeacherHome() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [snapshot, setSnapshot] = useState<{ id: string; rows: GradeRow[] } | null>(null);
   const [copied, setCopied] = useState("");
+  const [studentEditor, setStudentEditor] = useState<null | { id: string | null; student_id: string; student_name: string }>(null);
+  const [studentEditorError, setStudentEditorError] = useState("");
+  const [savingStudent, setSavingStudent] = useState(false);
+  const [simOpen, setSimOpen] = useState(false);
+  const [simStage, setSimStage] = useState<"login" | "exam" | "done">("login");
+  const [simStudentId, setSimStudentId] = useState("");
+  const [simExamCode, setSimExamCode] = useState("");
+  const [simSeconds, setSimSeconds] = useState(60 * 60);
+  const [minecraft, setMinecraft] = useState(false);
 
   const loadClass = useCallback(async () => {
     const r = await authFetch("/api/teacher/class");
-    if (r.status === 401) {
+    if (r.status === 401 || r.status === 503) {
+      const j = await r.json().catch(() => ({}));
+      if (j.error === "session_expired") {
+        await supabase.auth.signOut();
+        return;
+      }
+      if (j.error === "unavailable") {
+        setDenied(false);
+        setCheckFailed(true);
+        return;
+      }
+      setCheckFailed(false);
       setDenied(true);
       return;
     }
     const j = await r.json();
     setRoster(j.roster ?? []);
     setDenied(false);
+    setCheckFailed(false);
     setReady(true);
   }, []);
 
@@ -333,6 +356,45 @@ function TeacherHome() {
     void loadClass().then(() => Promise.all([loadAssignments(), loadPdfs()]));
   }, [authLoading, user, loadClass, loadAssignments, loadPdfs]);
 
+  useEffect(() => {
+    try {
+      setMinecraft(localStorage.getItem("easyecon-teacher-theme") === "minecraft");
+    } catch {
+      setMinecraft(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!minecraft) {
+      delete document.body.dataset.theme;
+      return;
+    }
+    document.body.dataset.theme = "minecraft";
+    return () => {
+      delete document.body.dataset.theme;
+    };
+  }, [minecraft]);
+
+  function toggleMinecraft() {
+    setMinecraft((on) => {
+      const next = !on;
+      try {
+        localStorage.setItem("easyecon-teacher-theme", next ? "minecraft" : "default");
+      } catch {
+        /* 皮肤选择存不下时，这一次刷新前仍然生效 */
+      }
+      return next;
+    });
+  }
+
+  useEffect(() => {
+    if (!simOpen || simStage !== "exam") return;
+    const timer = window.setInterval(() => {
+      setSimSeconds((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [simOpen, simStage]);
+
   async function importRoster(replace: boolean) {
     if (replace && !window.confirm("覆盖会删除现有花名册。有未结束的考试时系统会拒绝覆盖。确定继续？")) {
       return;
@@ -353,6 +415,76 @@ function TeacherHome() {
     }
     setRoster(j.roster ?? []);
     toast.success(`花名册 ${j.roster?.length ?? 0} 人`);
+  }
+
+  function openStudentEditor(row?: RosterRow) {
+    setStudentEditorError("");
+    setStudentEditor(
+      row
+        ? { id: row.id, student_id: row.student_id, student_name: row.student_name }
+        : { id: null, student_id: "", student_name: "" },
+    );
+  }
+
+  async function saveStudent() {
+    if (!studentEditor) return;
+    const student_id = studentEditor.student_id.trim();
+    const student_name = studentEditor.student_name.trim();
+    if (!student_id || !student_name) {
+      setStudentEditorError("学号和姓名都需要填写。");
+      return;
+    }
+    setSavingStudent(true);
+    setStudentEditorError("");
+    try {
+      const r = await authFetch("/api/teacher/class", {
+        method: studentEditor.id ? "PATCH" : "POST",
+        body: JSON.stringify(
+          studentEditor.id
+            ? { id: studentEditor.id, student_id, student_name }
+            : { rows: [{ student_id, student_name }] },
+        ),
+      });
+      const j = await r.json();
+      if (!r.ok) {
+        setStudentEditorError(j.error ?? "保存失败");
+        return;
+      }
+      setRoster(j.roster ?? []);
+      setStudentEditor(null);
+      toast.success(studentEditor.id ? "学生信息已更新" : "已添加学生");
+    } finally {
+      setSavingStudent(false);
+    }
+  }
+
+  async function deleteStudent(row: RosterRow) {
+    if (!window.confirm(`确定删除学生「${row.student_name}」（学号 ${row.student_id}）吗？`)) return;
+    const r = await authFetch("/api/teacher/class", {
+      method: "DELETE",
+      body: JSON.stringify({ id: row.id }),
+    });
+    const j = await r.json();
+    if (!r.ok) {
+      toast.error(j.error ?? "删除失败");
+      return;
+    }
+    setRoster(j.roster ?? []);
+    toast.success("已从名册移除");
+  }
+
+  function openStudentSimulation() {
+    const latest = publishedExam ?? (assignments[0] ? { title: assignments[0].title, code: assignments[0].exam_code } : null);
+    setSimStudentId(roster[0]?.student_id ?? "");
+    setSimExamCode(latest?.code ?? "");
+    setSimStage("login");
+    setSimSeconds(60 * 60);
+    setSimOpen(true);
+  }
+
+  function closeStudentSimulation() {
+    setSimOpen(false);
+    setSimStage("login");
   }
 
   async function createAssignment() {
@@ -862,7 +994,7 @@ function TeacherHome() {
     };
   }, [assignments]);
 
-  if (authLoading || (!ready && user && !denied)) {
+  if (authLoading || (!ready && user && !denied && !checkFailed)) {
     return (
       <main className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -885,7 +1017,32 @@ function TeacherHome() {
       </main>
     );
   }
+  if (checkFailed) {
+    return (
+      <main className="flex min-h-screen items-center justify-center px-4">
+        <div className="glass w-full max-w-sm space-y-3 rounded-2xl p-8 text-center">
+          <h1 className="text-xl font-bold">暂时无法确认教师身份</h1>
+          <p className="text-sm text-muted-foreground">登录是成功的。服务器这次没有连上校验，并不是学生账号。</p>
+          <Button className="w-full" onClick={() => void loadClass()}>重试</Button>
+        </div>
+      </main>
+    );
+  }
   if (denied) {
+    if (isAdminEmail(user.email)) {
+      return (
+        <main className="flex min-h-screen items-center justify-center px-4">
+          <div className="glass w-full max-w-sm space-y-3 rounded-2xl p-8 text-center">
+            <h1 className="text-xl font-bold">登录校验没通过</h1>
+            <p className="text-sm text-muted-foreground">这个账号可以进入教师端。服务器这次没有确认登录，请再试一次。</p>
+            <Button className="w-full" onClick={() => void loadClass()}>重试</Button>
+            <Button asChild variant="outline" className="w-full">
+              <Link to="/">返回首页</Link>
+            </Button>
+          </div>
+        </main>
+      );
+    }
     return (
       <main className="flex min-h-screen items-center justify-center px-4">
         <div className="glass w-full max-w-sm space-y-3 rounded-2xl p-8 text-center">
@@ -970,7 +1127,7 @@ function TeacherHome() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="teacher-console flex min-h-screen flex-col">
       <header className="border-b border-white/60 px-4 py-3 md:px-10">
         <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
@@ -984,10 +1141,15 @@ function TeacherHome() {
               教师端 / <span className="text-foreground">{copy[0]}</span>
             </span>
           </div>
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={openStudentSimulation}>
+              <Eye className="h-4 w-4" />
+              模拟学生视角
+            </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button type="button" className="flex max-w-[50vw] items-center gap-2 rounded-full py-1 pl-1 pr-2 text-sm font-medium hover:bg-white/60">
-                <span className="grid h-8 w-8 place-items-center rounded-full bg-primary/15 text-xs font-semibold text-primary">
+                <span className="teacher-avatar grid h-8 w-8 place-items-center rounded-full bg-primary/15 text-xs font-semibold text-primary">
                   {(accountLabel[0] ?? "教").toUpperCase()}
                 </span>
                 <span className="truncate">{accountLabel}</span>
@@ -1009,6 +1171,7 @@ function TeacherHome() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          </div>
         </div>
         <nav className="mx-auto mt-3 flex w-full max-w-6xl gap-1 overflow-auto" aria-label="主导航">
           {NAV.map((item) => {
@@ -1019,6 +1182,7 @@ function TeacherHome() {
                 key={item.id}
                 type="button"
                 onClick={() => go(item.id)}
+                aria-current={active ? "page" : undefined}
                 className={cn(
                   "flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-3 py-2 text-sm font-medium text-muted-foreground transition hover:bg-white/70",
                   active && "bg-primary/10 font-semibold text-primary",
@@ -1039,9 +1203,15 @@ function TeacherHome() {
               <h1 className="text-2xl font-bold tracking-tight md:text-[27px]">{copy[1]}</h1>
               <p className="mt-1 text-sm text-muted-foreground">{copy[2]}</p>
             </div>
-            <span className="hidden shrink-0 rounded-full border border-white/80 bg-white/55 px-3 py-2 text-xs text-muted-foreground sm:inline-flex">
-              {todayLabel}
-            </span>
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+              <Button type="button" size="sm" className="theme-toggle" aria-pressed={minecraft} onClick={toggleMinecraft}>
+                <span aria-hidden="true">{minecraft ? "☀️" : "🟩"}</span>
+                {minecraft ? "切换回简约风格" : "切换到 Minecraft 风格"}
+              </Button>
+              <span className="hidden rounded-full border border-white/80 bg-white/55 px-3 py-2 text-xs text-muted-foreground sm:inline-flex">
+                {todayLabel}
+              </span>
+            </div>
           </div>
 
           {page === "overview" && (
@@ -1105,6 +1275,7 @@ function TeacherHome() {
                         <TableRow className="hover:bg-transparent">
                           <TableHead>考试名称</TableHead>
                           <TableHead>截止时间</TableHead>
+                          <TableHead>考试码</TableHead>
                           <TableHead>提交情况</TableHead>
                           <TableHead>正确率</TableHead>
                           <TableHead>状态</TableHead>
@@ -1117,6 +1288,18 @@ function TeacherHome() {
                             <TableRow key={a.id} className="cursor-pointer" onClick={() => void loadGradebook(a.id)}>
                               <TableCell className="font-medium">{a.title}</TableCell>
                               <TableCell className="whitespace-nowrap text-muted-foreground">{new Date(a.ends_at).toLocaleString()}</TableCell>
+                              <TableCell>
+                                <button
+                                  type="button"
+                                  className="rounded-md px-1 font-mono text-xs tracking-wide text-primary hover:bg-primary/10"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void copyCode(a.exam_code);
+                                  }}
+                                >
+                                  {copied === a.exam_code ? "已复制" : a.exam_code}
+                                </button>
+                              </TableCell>
                               <TableCell>{submitProgress(a.id)}</TableCell>
                               <TableCell>{snapshot?.id === a.id && overviewRate != null ? `${overviewRate}%` : "—"}</TableCell>
                               <TableCell><Pill tone={win.tone}>{win.label}</Pill></TableCell>
@@ -1138,7 +1321,10 @@ function TeacherHome() {
                   <h2 className="text-lg font-semibold">学生名册</h2>
                   <p className="mt-1 text-xs text-muted-foreground">导入一次即可复用。追加不会清掉已有学生；覆盖会整表替换，有未结束的考试时不能覆盖。</p>
                 </div>
-                <Button onClick={() => void importRoster(false)}>导入学生</Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" onClick={() => openStudentEditor()}>手动添加</Button>
+                  <Button onClick={() => void importRoster(false)}>导入学生</Button>
+                </div>
               </div>
               <section className="glass rounded-2xl p-5">
                 <h2 className="text-[15px] font-semibold">快速导入</h2>
@@ -1180,6 +1366,7 @@ function TeacherHome() {
                           <TableHead>姓名</TableHead>
                           <TableHead>班级</TableHead>
                           <TableHead>状态</TableHead>
+                          <TableHead className="text-right">操作</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1190,6 +1377,13 @@ function TeacherHome() {
                             <TableCell>本班</TableCell>
                             <TableCell>
                               <Pill tone={r.user_id ? "ok" : "muted"}>{r.user_id ? "已绑定" : "未入场"}</Pill>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button type="button" variant="ghost" size="sm" onClick={() => openStudentEditor(r)}>编辑</Button>
+                              <Button type="button" variant="ghost" size="sm" onClick={() => void deleteStudent(r)}>
+                                <Trash2 className="h-4 w-4" />
+                                删除
+                              </Button>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -1631,6 +1825,123 @@ function TeacherHome() {
           )}
         </DialogContent>
       </Dialog>
+
+      <Dialog open={studentEditor !== null} onOpenChange={(open) => { if (!open) setStudentEditor(null); }}>
+        <DialogContent className="max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>{studentEditor?.id ? "编辑学生" : "添加学生"}</DialogTitle>
+            <DialogDescription>学号在本班内不能重复。已有考试记录的学生不能从名册删除。</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="student-id">学号</Label>
+              <Input
+                id="student-id"
+                value={studentEditor?.student_id ?? ""}
+                onChange={(e) => setStudentEditor((current) => current ? { ...current, student_id: e.target.value } : current)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="student-name">姓名</Label>
+              <Input
+                id="student-name"
+                value={studentEditor?.student_name ?? ""}
+                onChange={(e) => setStudentEditor((current) => current ? { ...current, student_name: e.target.value } : current)}
+              />
+            </div>
+            {studentEditorError && <p className="text-sm text-destructive">{studentEditorError}</p>}
+            <div className="flex justify-end gap-2 pt-1">
+              <Button type="button" variant="outline" onClick={() => setStudentEditor(null)}>取消</Button>
+              <Button type="button" disabled={savingStudent} onClick={() => void saveStudent()}>
+                {savingStudent ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                保存
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {simOpen && (
+        <div className="app-gradient-bg fixed inset-0 z-50 flex flex-col">
+          <header className="flex items-center justify-between gap-3 border-b border-white/60 px-4 py-3 md:px-8">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold tracking-wide text-primary">学生视角预览</p>
+              <p className="truncate text-sm text-muted-foreground">不会验证考试码，也不会保存答卷</p>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={closeStudentSimulation}>返回教师端</Button>
+          </header>
+          <div className="flex flex-1 items-start justify-center overflow-auto px-4 py-8">
+            {simStage === "login" && (
+              <section className="glass w-full max-w-md rounded-2xl p-6">
+                <h2 className="text-xl font-semibold">学生入场</h2>
+                <p className="mt-1 text-sm text-muted-foreground">这里只是教师预览。正式考试请让学生打开考试入口，输入真实学号和考试码。</p>
+                <div className="mt-5 space-y-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="sim-student">学号</Label>
+                    <Input id="sim-student" value={simStudentId} onChange={(e) => setSimStudentId(e.target.value)} placeholder="例如 2026001" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="sim-code">考试码</Label>
+                    <Input id="sim-code" value={simExamCode} onChange={(e) => setSimExamCode(e.target.value.toUpperCase())} placeholder="6 位考试码" className="font-mono tracking-widest" />
+                  </div>
+                  <Button
+                    className="w-full"
+                    onClick={() => {
+                      if (!simStudentId.trim() || !simExamCode.trim()) {
+                        toast.error("请填写学号和考试码");
+                        return;
+                      }
+                      setSimSeconds(60 * 60);
+                      setSimStage("exam");
+                    }}
+                  >
+                    进入考试
+                  </Button>
+                </div>
+              </section>
+            )}
+            {simStage === "exam" && (
+              <section className="glass w-full max-w-2xl rounded-2xl p-6">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl font-semibold">
+                      {assignments.find((a) => a.exam_code.toUpperCase() === simExamCode.trim().toUpperCase())?.title ?? "考试预览"}
+                    </h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      学号 {simStudentId.trim()} · 考试码 {simExamCode.trim().toUpperCase()}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-primary/10 px-3 py-1 font-mono text-sm text-primary">
+                    {String(Math.floor(simSeconds / 60)).padStart(2, "0")}:{String(simSeconds % 60).padStart(2, "0")}
+                  </span>
+                </div>
+                <div className="mt-5 rounded-2xl border border-white/80 bg-white/50 p-4 text-sm leading-6">
+                  学生正式入场后会看到这套试卷的选择题和大题。这次预览不加载真题，输入的内容也不会提交。
+                </div>
+                <Textarea className="mt-4 min-h-32" placeholder="可以在这里试着写答案，关闭后不会保留" />
+                <div className="mt-4 flex justify-end gap-2">
+                  <Button type="button" variant="outline" onClick={() => setSimStage("login")}>返回入场</Button>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      if (window.confirm("这是模拟提交，不会保存答案。确定结束预览？")) setSimStage("done");
+                    }}
+                  >
+                    模拟提交
+                  </Button>
+                </div>
+              </section>
+            )}
+            {simStage === "done" && (
+              <section className="glass w-full max-w-md rounded-2xl p-6 text-center">
+                <h2 className="text-xl font-semibold">预览已结束</h2>
+                <p className="mt-2 text-sm text-muted-foreground">没有保存任何答卷。学生仍需使用正式考试入口完成考试。</p>
+                <Button className="mt-5" onClick={closeStudentSimulation}>返回教师端</Button>
+              </section>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

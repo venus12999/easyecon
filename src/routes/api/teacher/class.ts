@@ -8,6 +8,8 @@ export const Route = createFileRoute("/api/teacher/class")({
     handlers: {
       GET: async ({ request }) => {
         const u = await verifyTeacherRequest(request);
+        if (u === "expired") return jsonErr("session_expired", 401);
+        if (u === "unavailable") return jsonErr("unavailable", 503);
         if (!u) return jsonErr("unauthorized", 401);
         if (new URL(request.url).searchParams.get("probe") === "1") {
           return Response.json({ ok: true });
@@ -23,6 +25,8 @@ export const Route = createFileRoute("/api/teacher/class")({
       },
       POST: async ({ request }) => {
         const u = await verifyTeacherRequest(request);
+        if (u === "expired") return jsonErr("session_expired", 401);
+        if (u === "unavailable") return jsonErr("unavailable", 503);
         if (!u) return jsonErr("unauthorized", 401);
         const db = await getTeacherDb(u.jwt);
         const cls = await ensureTeacherClass(u.userId, db);
@@ -57,6 +61,85 @@ export const Route = createFileRoute("/api/teacher/class")({
           })),
           { onConflict: "class_id,student_id" },
         );
+        if (error) return jsonErr(error.message, 500);
+        const { data: roster } = await db
+          .from("school_roster")
+          .select("id,student_id,student_name,user_id,created_at")
+          .eq("class_id", cls.id)
+          .order("student_id");
+        return Response.json({ class: cls, roster: roster ?? [] });
+      },
+      PATCH: async ({ request }) => {
+        const u = await verifyTeacherRequest(request);
+        if (u === "expired") return jsonErr("session_expired", 401);
+        if (u === "unavailable") return jsonErr("unavailable", 503);
+        if (!u) return jsonErr("unauthorized", 401);
+        const db = await getTeacherDb(u.jwt);
+        const cls = await ensureTeacherClass(u.userId, db);
+        const body = (await request.json()) as { id?: string; student_id?: string; student_name?: string };
+        const id = String(body.id ?? "").trim();
+        const studentId = String(body.student_id ?? "").trim();
+        const studentName = String(body.student_name ?? "").trim();
+        if (!id || !studentId || !studentName) return jsonErr("学号和姓名都需要填写");
+        const { data: owned } = await db
+          .from("school_roster")
+          .select("id,student_id,user_id")
+          .eq("id", id)
+          .eq("class_id", cls.id)
+          .maybeSingle();
+        if (!owned) return jsonErr("找不到这名学生", 404);
+        if (owned.user_id && owned.student_id !== studentId) {
+          return jsonErr("这名学生已经入场，不能再改学号");
+        }
+        const { data: clash } = await db
+          .from("school_roster")
+          .select("id")
+          .eq("class_id", cls.id)
+          .eq("student_id", studentId)
+          .neq("id", id)
+          .maybeSingle();
+        if (clash) return jsonErr("这个学号已在名册中");
+        const { error } = await db
+          .from("school_roster")
+          .update({
+            student_id: studentId,
+            student_name: studentName,
+            name_key: normalizeStudentName(studentName),
+          })
+          .eq("id", id)
+          .eq("class_id", cls.id);
+        if (error) return jsonErr(error.message, 500);
+        const { data: roster } = await db
+          .from("school_roster")
+          .select("id,student_id,student_name,user_id,created_at")
+          .eq("class_id", cls.id)
+          .order("student_id");
+        return Response.json({ class: cls, roster: roster ?? [] });
+      },
+      DELETE: async ({ request }) => {
+        const u = await verifyTeacherRequest(request);
+        if (u === "expired") return jsonErr("session_expired", 401);
+        if (u === "unavailable") return jsonErr("unavailable", 503);
+        if (!u) return jsonErr("unauthorized", 401);
+        const db = await getTeacherDb(u.jwt);
+        const cls = await ensureTeacherClass(u.userId, db);
+        const body = (await request.json()) as { id?: string };
+        const id = String(body.id ?? "").trim();
+        if (!id) return jsonErr("缺少学生");
+        const { data: owned } = await db
+          .from("school_roster")
+          .select("id")
+          .eq("id", id)
+          .eq("class_id", cls.id)
+          .maybeSingle();
+        if (!owned) return jsonErr("找不到这名学生", 404);
+        const { count, error: attemptError } = await db
+          .from("school_attempts")
+          .select("id", { count: "exact", head: true })
+          .eq("roster_id", id);
+        if (attemptError) return jsonErr(attemptError.message, 500);
+        if ((count ?? 0) > 0) return jsonErr("这名学生已有考试记录，不能从名册删除");
+        const { error } = await db.from("school_roster").delete().eq("id", id).eq("class_id", cls.id);
         if (error) return jsonErr(error.message, 500);
         const { data: roster } = await db
           .from("school_roster")

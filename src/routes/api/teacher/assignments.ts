@@ -9,6 +9,8 @@ export const Route = createFileRoute("/api/teacher/assignments")({
     handlers: {
       GET: async ({ request }) => {
         const u = await verifyTeacherRequest(request);
+        if (u === "expired") return jsonErr("session_expired", 401);
+        if (u === "unavailable") return jsonErr("unavailable", 503);
         if (!u) return jsonErr("unauthorized", 401);
         const db = await getTeacherDb(u.jwt);
         const cls = await ensureTeacherClass(u.userId, db);
@@ -51,6 +53,8 @@ export const Route = createFileRoute("/api/teacher/assignments")({
       },
       POST: async ({ request }) => {
         const u = await verifyTeacherRequest(request);
+        if (u === "expired") return jsonErr("session_expired", 401);
+        if (u === "unavailable") return jsonErr("unavailable", 503);
         if (!u) return jsonErr("unauthorized", 401);
         const db = await getTeacherDb(u.jwt);
         const cls = await ensureTeacherClass(u.userId, db);
@@ -108,6 +112,8 @@ export const Route = createFileRoute("/api/teacher/assignments")({
       },
       PATCH: async ({ request }) => {
         const u = await verifyTeacherRequest(request);
+        if (u === "expired") return jsonErr("session_expired", 401);
+        if (u === "unavailable") return jsonErr("unavailable", 503);
         if (!u) return jsonErr("unauthorized", 401);
         const db = await getTeacherDb(u.jwt);
         const cls = await ensureTeacherClass(u.userId, db);

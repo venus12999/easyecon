@@ -34,6 +34,10 @@ export function TopNav() {
       setShowTeacher(false);
       return;
     }
+    if (isAdminEmail(user.email)) {
+      setShowTeacher(true);
+      return;
+    }
     let cancel = false;
     void authFetch("/api/teacher/class?probe=1").then((response) => {
       if (!cancel) setShowTeacher(response.ok);

@@ -1,7 +1,7 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { isAdminEmailServer } from "@/lib/admin-emails.server";
 import { isTeacherEmailServer } from "@/lib/teacher-emails.server";
-import { createUserScopedClient, verifyUserRequest } from "@/lib/user-auth.server";
+import { createUserScopedClient, verifyUserRequestDetailed } from "@/lib/user-auth.server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export async function getTeacherDb(jwt: string): Promise<SupabaseClient> {
@@ -50,7 +50,8 @@ export async function uploadTeacherAssignmentImage(jwt: string, path: string, fi
 }
 
 export async function verifyTeacherRequest(request: Request) {
-  const u = await verifyUserRequest(request);
+  const u = await verifyUserRequestDetailed(request);
+  if (u === "expired" || u === "unavailable") return u;
   if (!u) return null;
   if (isAdminEmailServer(u.email) || isTeacherEmailServer(u.email)) return u;
   const db = await getTeacherDb(u.jwt);

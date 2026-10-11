@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { getRememberPreference, setRememberPreference } from "@/lib/remember-session";
 import { safeRedirectPath } from "@/lib/safe-redirect";
 import { authFetch } from "@/lib/auth-fetch";
+import { isAdminEmail } from "@/lib/admin-emails";
 
 type Audience = "student" | "teacher";
 
@@ -54,13 +55,28 @@ function AuthPage() {
     return path;
   }
 
-  async function goAfterAuth(announce: string | null, keepSession = false) {
+  async function goAfterAuth(announce: string | null, keepSession = false, email?: string | null) {
     if (teacherEntry) {
-      const response = await authFetch("/api/teacher/class");
-      if (!response.ok) {
-        if (!keepSession) await supabase.auth.signOut();
-        toast.error(keepSession ? "这个账号是学生账号，没有教师工作台。" : "这是学生账号，没有教师端。请改选「学生」登录。");
-        return;
+      const { data: sessionData } = await supabase.auth.getSession();
+      const signedInEmail = email ?? sessionData.session?.user.email ?? user?.email;
+      // 管理员账号选教师就进工作台。校验失败也不能写成「这是学生账号」，更不能把刚登录的会话清掉。
+      if (!isAdminEmail(signedInEmail)) {
+        const response = await authFetch("/api/teacher/class?probe=1");
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          if (body.error === "unavailable") {
+            toast.error("暂时连不上教师校验，请再试一次");
+            return;
+          }
+          if (body.error === "session_expired") {
+            if (!keepSession) await supabase.auth.signOut();
+            toast.error("登录状态已失效，请再登录一次");
+            return;
+          }
+          if (!keepSession) await supabase.auth.signOut();
+          toast.error(keepSession ? "这个账号是学生账号，没有教师工作台。" : "这是学生账号，没有教师端。请改选「学生」登录。");
+          return;
+        }
       }
       if (announce) toast.success(announce);
       router.history.push("/teacher");
@@ -120,13 +136,14 @@ function AuthPage() {
         }
         if (data.session) {
           setRememberPreference(remember);
-          announceAuth.current = "注册成功";
+          announceAuth.current = null;
+          await goAfterAuth("注册成功", false, data.user?.email ?? parsed.data.email);
         } else {
           setPendingEmail(parsed.data.email);
           toast.success("验证邮件已发送，请前往邮箱点击链接完成注册");
         }
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email: parsed.data.email,
           password: parsed.data.password,
         });
@@ -140,7 +157,8 @@ function AuthPage() {
           return;
         }
         setRememberPreference(remember);
-        announceAuth.current = "登录成功";
+        announceAuth.current = null;
+        await goAfterAuth("登录成功", false, data.user?.email ?? parsed.data.email);
       }
     } finally {
       setBusy(false);
