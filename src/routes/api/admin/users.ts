@@ -84,7 +84,7 @@ export const Route = createFileRoute("/api/admin/users")({
         const qIds = Array.from(
           new Set([...(attempts ?? []).map((a) => a.question_id), ...(wrongs ?? []).map((w) => w.question_id)]),
         );
-         const qMap: Record<string, { stem: string; correct_answer: string }> = {};
+         const qMap: Record<string, { stem: string; correct_answer: string | null }> = {};
         if (qIds.length) {
           const { data: qs } = await supabaseAdmin
             .from("questions")

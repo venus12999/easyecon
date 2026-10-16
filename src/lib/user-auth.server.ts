@@ -15,7 +15,7 @@ function supabasePublicEnv() {
 
 export type VerifiedUser = { userId: string; email: string | null; jwt: string };
 
-async function readSession(request: Request): Promise<VerifiedUser | "expired" | null> {
+async function readSession(request: Request): Promise<VerifiedUser | "expired" | "unavailable" | null> {
   try {
     const auth = request.headers.get("authorization") ?? request.headers.get("Authorization");
     const jwt = auth?.toLowerCase().startsWith("bearer ") ? auth.slice(7).trim() : null;

@@ -493,7 +493,7 @@ function expandLabelRows(
   kinds: RowKind[],
   w: number,
   h: number,
-  band: { y0: number; y1: number; rules?: number },
+  band: { y0: number; y1: number; rules?: number; figures?: number },
   step: number,
 ) {
   let y0 = band.y0;

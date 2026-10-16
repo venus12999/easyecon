@@ -579,6 +579,110 @@ export type Database = {
           },
         ]
       }
+      profiles: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          email: string
+          exam_date: string | null
+          id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          email: string
+          exam_date?: string | null
+          id?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          email?: string
+          exam_date?: string | null
+          id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      questions: {
+        Row: {
+          correct_answer: string | null
+          created_at: string
+          difficulty: number
+          exclude_from_pool: boolean
+          explanation: string
+          id: string
+          image_url: string | null
+          knowledge_point_id: string
+          option_a: string
+          option_b: string
+          option_c: string
+          option_d: string
+          option_e: string | null
+          pitfall_note: string | null
+          status: Database["public"]["Enums"]["question_status"]
+          stem: string
+          term_tags: string[] | null
+          type: Database["public"]["Enums"]["question_type"]
+          updated_at: string
+        }
+        Insert: {
+          correct_answer?: string | null
+          created_at?: string
+          difficulty?: number
+          exclude_from_pool?: boolean
+          explanation: string
+          id?: string
+          image_url?: string | null
+          knowledge_point_id: string
+          option_a: string
+          option_b: string
+          option_c: string
+          option_d: string
+          option_e?: string | null
+          pitfall_note?: string | null
+          status?: Database["public"]["Enums"]["question_status"]
+          stem: string
+          term_tags?: string[] | null
+          type?: Database["public"]["Enums"]["question_type"]
+          updated_at?: string
+        }
+        Update: {
+          correct_answer?: string | null
+          created_at?: string
+          difficulty?: number
+          exclude_from_pool?: boolean
+          explanation?: string
+          id?: string
+          image_url?: string | null
+          knowledge_point_id?: string
+          option_a?: string
+          option_b?: string
+          option_c?: string
+          option_d?: string
+          option_e?: string | null
+          pitfall_note?: string | null
+          status?: Database["public"]["Enums"]["question_status"]
+          stem?: string
+          term_tags?: string[] | null
+          type?: Database["public"]["Enums"]["question_type"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "questions_knowledge_point_id_fkey"
+            columns: ["knowledge_point_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_points"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       school_assignments: {
         Row: {
           class_id: string
@@ -616,7 +720,22 @@ export type Database = {
           starts_at?: string
           title?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "school_assignments_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "school_classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "school_assignments_paper_id_fkey"
+            columns: ["paper_id"]
+            isOneToOne: false
+            referencedRelation: "mock_papers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       school_attempts: {
         Row: {
@@ -658,7 +777,22 @@ export type Database = {
           submitted_at?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "school_attempts_assignment_id_fkey"
+            columns: ["assignment_id"]
+            isOneToOne: false
+            referencedRelation: "school_assignments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "school_attempts_roster_id_fkey"
+            columns: ["roster_id"]
+            isOneToOne: false
+            referencedRelation: "school_roster"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       school_classes: {
         Row: {
@@ -712,7 +846,22 @@ export type Database = {
           paper_id?: string | null
           status?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "school_pdf_imports_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "school_classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "school_pdf_imports_paper_id_fkey"
+            columns: ["paper_id"]
+            isOneToOne: false
+            referencedRelation: "mock_papers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       school_pdf_items: {
         Row: {
@@ -766,7 +915,15 @@ export type Database = {
           sort_order?: number
           stem?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "school_pdf_items_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "school_pdf_imports"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       school_pdf_pages: {
         Row: {
@@ -790,7 +947,15 @@ export type Database = {
           import_id?: string
           page_number?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "school_pdf_pages_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "school_pdf_imports"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       school_roster: {
         Row: {
@@ -820,108 +985,12 @@ export type Database = {
           student_name?: string
           user_id?: string | null
         }
-        Relationships: []
-      }
-      profiles: {
-        Row: {
-          created_at: string
-          display_name: string | null
-          email: string
-          exam_date: string | null
-          id: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          display_name?: string | null
-          email: string
-          exam_date?: string | null
-          id?: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          display_name?: string | null
-          email?: string
-          exam_date?: string | null
-          id?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      questions: {
-        Row: {
-          correct_answer: string
-          created_at: string
-          difficulty: number
-          exclude_from_pool: boolean
-          explanation: string
-          id: string
-          image_url: string | null
-          knowledge_point_id: string
-          option_a: string
-          option_b: string
-          option_c: string
-          option_d: string
-          option_e: string | null
-          pitfall_note: string | null
-          status: Database["public"]["Enums"]["question_status"]
-          stem: string
-          term_tags: string[] | null
-          type: Database["public"]["Enums"]["question_type"]
-          updated_at: string
-        }
-        Insert: {
-          correct_answer?: string | null
-          created_at?: string
-          difficulty?: number
-          exclude_from_pool?: boolean
-          explanation: string
-          id?: string
-          image_url?: string | null
-          knowledge_point_id: string
-          option_a: string
-          option_b: string
-          option_c: string
-          option_d: string
-          option_e?: string | null
-          pitfall_note?: string | null
-          status?: Database["public"]["Enums"]["question_status"]
-          stem: string
-          term_tags?: string[] | null
-          type?: Database["public"]["Enums"]["question_type"]
-          updated_at?: string
-        }
-        Update: {
-          correct_answer?: string
-          created_at?: string
-          difficulty?: number
-          exclude_from_pool?: boolean
-          explanation?: string
-          id?: string
-          image_url?: string | null
-          knowledge_point_id?: string
-          option_a?: string
-          option_b?: string
-          option_c?: string
-          option_d?: string
-          option_e?: string | null
-          pitfall_note?: string | null
-          status?: Database["public"]["Enums"]["question_status"]
-          stem?: string
-          term_tags?: string[] | null
-          type?: Database["public"]["Enums"]["question_type"]
-          updated_at?: string
-        }
         Relationships: [
           {
-            foreignKeyName: "questions_knowledge_point_id_fkey"
-            columns: ["knowledge_point_id"]
+            foreignKeyName: "school_roster_class_id_fkey"
+            columns: ["class_id"]
             isOneToOne: false
-            referencedRelation: "knowledge_points"
+            referencedRelation: "school_classes"
             referencedColumns: ["id"]
           },
         ]
@@ -1181,10 +1250,7 @@ export type Database = {
         }
         Returns: boolean
       }
-      is_school_staff: {
-        Args: { _user_id: string }
-        Returns: boolean
-      }
+      is_school_staff: { Args: { _user_id: string }; Returns: boolean }
       release_ai_quota: {
         Args: { p_kind: string; p_user_id: string }
         Returns: undefined
@@ -1211,12 +1277,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1240,11 +1306,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1265,11 +1331,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1290,11 +1356,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1307,11 +1373,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
