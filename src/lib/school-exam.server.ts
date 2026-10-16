@@ -1,6 +1,8 @@
 import { createHmac } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { readPageImage, readPointMarker, schoolExamAiOn, stripPageImage, stripPointMarker } from "@/lib/exam-flags";
+import { gradeFrqAnswer, type FrqBreakdown } from "@/lib/frq-grade.server";
 import { EXAM_LOCK_GRACE_MS, isUuid } from "@/lib/school-exam-session";
 import type { Json } from "@/integrations/supabase/types";
 
@@ -117,29 +119,31 @@ export type McqPick = { question_id: string; picked: string | null };
 export async function scorePaperMcq(paperId: string, picks: McqPick[]) {
   const { data: pqs } = await supabaseAdmin
     .from("paper_questions")
-    .select("sort_order,question_id,questions!inner(id,knowledge_point_id,correct_answer)")
+    .select("sort_order,question_id,questions!inner(id,knowledge_point_id,correct_answer,explanation)")
     .eq("paper_id", paperId)
     .order("sort_order", { ascending: true });
   const pickMap = new Map(picks.map((p) => [p.question_id, p.picked]));
   const detail = ((pqs ?? []) as unknown as Array<{
     question_id: string;
-    questions: { id: string; knowledge_point_id: string; correct_answer: string };
+    questions: { id: string; knowledge_point_id: string; correct_answer: string; explanation: string | null };
   }>).map((row) => {
     const picked = pickMap.get(row.question_id) ?? null;
     const correct = (row.questions.correct_answer ?? "").trim().toUpperCase();
     const hasKey = ["A", "B", "C", "D", "E"].includes(correct);
+    const points = readPointMarker(row.questions.explanation);
     return {
       question_id: row.question_id,
       knowledge_point_id: row.questions.knowledge_point_id,
       picked,
       correct: hasKey ? correct : "",
       is_correct: hasKey && picked === correct,
+      points: hasKey ? points : 0,
     };
   });
   const keyed = detail.filter((d) => d.correct);
   return {
-    total: keyed.length,
-    correct: keyed.filter((d) => d.is_correct).length,
+    total: keyed.reduce((sum, d) => sum + (d.points || 1), 0),
+    correct: keyed.filter((d) => d.is_correct).reduce((sum, d) => sum + (d.points || 1), 0),
     detail,
   };
 }
@@ -159,6 +163,85 @@ export function parseFrqAnswers(raw: unknown): {
   return { items: obj as Record<string, { text: string; fileUrl: string | null; fileKind: string | null; fileName: string | null }>, progress: null };
 }
 
+type SavedFrq = { text: string; fileUrl: string | null; fileKind: string | null; fileName: string | null };
+
+function phaseRank(phase: unknown) {
+  if (phase === "frq" || phase === "done") return 3;
+  if (phase === "break") return 2;
+  if (phase === "running") return 1;
+  return 0;
+}
+
+function picksFrom(detail: unknown): McqPick[] {
+  if (!Array.isArray(detail)) return [];
+  return detail.map((row) => {
+    const d = row as { question_id?: string; picked?: string | null };
+    return { question_id: String(d.question_id ?? ""), picked: d.picked ?? null };
+  }).filter((p) => p.question_id);
+}
+
+/** Keep the furthest section and never replace a saved answer with a blank. */
+export function mergeSavedAttempt(
+  existing: { mcq_detail: unknown; frq_answers: unknown },
+  incoming: { mcq_detail?: McqPick[]; frq_answers?: unknown },
+) {
+  const prev = parseFrqAnswers(existing.frq_answers);
+  const next = parseFrqAnswers(incoming.frq_answers);
+  const prevProgress = (prev.progress ?? {}) as Record<string, unknown>;
+  const nextProgress = (next.progress ?? {}) as Record<string, unknown>;
+  const prevSeq = Number(prevProgress.save_seq) || 0;
+  const nextSeq = Number(nextProgress.save_seq) || 0;
+  if (nextSeq > 0 && prevSeq > 0 && nextSeq < prevSeq) {
+    return {
+      mcq_detail: picksFrom(existing.mcq_detail),
+      frq_answers: existing.frq_answers ?? { items: prev.items, progress: prevProgress },
+    };
+  }
+  const alreadyLocked = prevProgress.mcq_locked === true || phaseRank(prevProgress.phase) >= 2;
+  const prevPicks = picksFrom(existing.mcq_detail);
+  const nextPicks = incoming.mcq_detail ?? [];
+  const mcq = new Map<string, string | null>();
+  if (alreadyLocked && prevPicks.length > 0) {
+    prevPicks.forEach((p) => mcq.set(p.question_id, p.picked));
+  } else {
+    prevPicks.forEach((p) => mcq.set(p.question_id, p.picked));
+    nextPicks.forEach((p) => {
+      if (!p.question_id) return;
+      const kept = mcq.get(p.question_id);
+      if (p.picked || !kept) mcq.set(p.question_id, p.picked ?? null);
+    });
+  }
+  const items: Record<string, SavedFrq> = {};
+  const incomingHasItems = Object.keys(next.items).length > 0;
+  if (!incomingHasItems) {
+    Object.assign(items, prev.items);
+  } else {
+    for (const id of new Set([...Object.keys(prev.items), ...Object.keys(next.items)])) {
+      const older = prev.items[id];
+      const newer = next.items[id];
+      if (newer && (newer.text?.trim() || newer.fileUrl || !older)) items[id] = newer;
+      else if (older) items[id] = older;
+      else if (newer) items[id] = newer;
+    }
+  }
+  const phase = phaseRank(nextProgress.phase) >= phaseRank(prevProgress.phase)
+    ? (typeof nextProgress.phase === "string" ? nextProgress.phase : prevProgress.phase)
+    : prevProgress.phase;
+  const mcqLocked = alreadyLocked || nextProgress.mcq_locked === true || phaseRank(phase) >= 2;
+  return {
+    mcq_detail: [...mcq.entries()].map(([question_id, picked]) => ({ question_id, picked })),
+    frq_answers: {
+      items,
+      progress: {
+        ...prevProgress,
+        ...nextProgress,
+        phase: mcqLocked && phaseRank(phase) < 2 ? "frq" : phase,
+        mcq_locked: mcqLocked,
+      },
+    },
+  };
+}
+
 export function redactMcqDetail(detail: unknown, published: boolean) {
   if (!Array.isArray(detail)) return [];
   return detail.map((row) => {
@@ -173,6 +256,188 @@ export function redactMcqDetail(detail: unknown, published: boolean) {
       is_correct: d.is_correct,
     };
   });
+}
+
+function studentVisibleFrq(raw: unknown) {
+  const parsed = parseFrqAnswers(raw);
+  return parsed.progress ? { items: parsed.items, progress: parsed.progress } : { items: parsed.items };
+}
+
+export type StoredFrqGrade = {
+  max_score: number;
+  ai_score: number | null;
+  ai_comment: string | null;
+  ai_suggestions: string | null;
+  ai_breakdown?: FrqBreakdown[];
+  manual_score: number | null;
+};
+
+export function readStoredGrades(raw: unknown): Record<string, StoredFrqGrade> {
+  if (!raw || typeof raw !== "object") return {};
+  const grades = (raw as Record<string, unknown>).grades;
+  if (!grades || typeof grades !== "object" || Array.isArray(grades)) return {};
+  const out: Record<string, StoredFrqGrade> = {};
+  for (const [id, value] of Object.entries(grades as Record<string, unknown>)) {
+    if (!value || typeof value !== "object") continue;
+    const g = value as Record<string, unknown>;
+    const breakdown = Array.isArray(g.ai_breakdown)
+      ? g.ai_breakdown.flatMap((row) => {
+          if (!row || typeof row !== "object") return [];
+          const b = row as Record<string, unknown>;
+          return [{ point: String(b.point ?? ""), awarded: !!b.awarded, comment: String(b.comment ?? "") }];
+        })
+      : undefined;
+    out[id] = {
+      max_score: typeof g.max_score === "number" ? g.max_score : 0,
+      ai_score: typeof g.ai_score === "number" ? g.ai_score : null,
+      ai_comment: typeof g.ai_comment === "string" ? g.ai_comment : null,
+      ai_suggestions: typeof g.ai_suggestions === "string" ? g.ai_suggestions : null,
+      ai_breakdown: breakdown,
+      manual_score: typeof g.manual_score === "number" ? g.manual_score : null,
+    };
+  }
+  return out;
+}
+
+function packFrqAnswers(raw: unknown, grades: Record<string, StoredFrqGrade>): Json {
+  const parsed = parseFrqAnswers(raw);
+  return {
+    items: parsed.items,
+    progress: parsed.progress,
+    grades,
+  } as unknown as Json;
+}
+
+export async function attachSchoolAiGrades(paperId: string, rawAnswers: unknown, opts?: { force?: boolean }): Promise<Json> {
+  const existing = readStoredGrades(rawAnswers);
+  if (!opts?.force) {
+    const { data: paper } = await supabaseAdmin.from("mock_papers").select("description").eq("id", paperId).maybeSingle();
+    if (!schoolExamAiOn(paper?.description)) return packFrqAnswers(rawAnswers, existing);
+  }
+  const parsed = parseFrqAnswers(rawAnswers);
+  const { data: frqs } = await supabaseAdmin
+    .from("paper_frqs")
+    .select("id,title,content,image_url,image_text,max_score,sort_order")
+    .eq("paper_id", paperId)
+    .order("sort_order");
+  const ids = (frqs ?? []).map((f) => f.id);
+  const { data: rubrics } = ids.length
+    ? await supabaseAdmin.from("paper_frq_rubrics").select("frq_id,rubric_note").in("frq_id", ids)
+    : { data: [] as { frq_id: string; rubric_note: string | null }[] };
+  const rubricMap = new Map((rubrics ?? []).map((r) => [r.frq_id, r.rubric_note]));
+  const grades: Record<string, StoredFrqGrade> = { ...existing };
+  for (const frq of frqs ?? []) {
+    const prev = grades[frq.id];
+    if (!opts?.force && prev?.ai_score != null) continue;
+    const answer = parsed.items[frq.id];
+    const text = answer?.text?.trim() ?? "";
+    const file = answer?.fileUrl ?? null;
+    if (!text && !file) {
+      grades[frq.id] = {
+        max_score: frq.max_score ?? 9,
+        ai_score: 0,
+        ai_comment: "未作答",
+        ai_suggestions: null,
+        manual_score: prev?.manual_score ?? null,
+      };
+      continue;
+    }
+    try {
+      const graded = await gradeFrqAnswer({
+        frq,
+        rubricNote: rubricMap.get(frq.id) ?? null,
+        answerText: text || null,
+        answerFileUrl: file,
+        answerFileKind: answer?.fileKind ?? null,
+      });
+      if (!graded.ok) continue;
+      grades[frq.id] = {
+        max_score: graded.grade.max_score,
+        ai_score: graded.grade.total_score,
+        ai_comment: graded.grade.overall_comment,
+        ai_suggestions: graded.grade.suggestions,
+        ai_breakdown: graded.grade.breakdown,
+        manual_score: prev?.manual_score ?? null,
+      };
+    } catch (error) {
+      console.error("school frq grade", frq.id, error);
+    }
+  }
+  return packFrqAnswers(rawAnswers, grades);
+}
+
+export async function saveManualFrqScores(paperId: string, rawAnswers: unknown, manual: Record<string, number | null>): Promise<Json> {
+  const { data: frqs } = await supabaseAdmin.from("paper_frqs").select("id,max_score").eq("paper_id", paperId);
+  const maxById = new Map((frqs ?? []).map((f) => [f.id, f.max_score ?? 9]));
+  const grades = readStoredGrades(rawAnswers);
+  for (const [id, score] of Object.entries(manual)) {
+    const max = maxById.get(id);
+    if (max == null) continue;
+    const prev = grades[id];
+    grades[id] = {
+      max_score: prev?.max_score || max,
+      ai_score: prev?.ai_score ?? null,
+      ai_comment: prev?.ai_comment ?? null,
+      ai_suggestions: prev?.ai_suggestions ?? null,
+      ai_breakdown: prev?.ai_breakdown,
+      manual_score: score == null ? null : Math.max(0, Math.min(max, Math.round(score))),
+    };
+  }
+  return packFrqAnswers(rawAnswers, grades);
+}
+
+export type TeacherFrqView = {
+  frq_id: string;
+  title: string | null;
+  sort_order: number;
+  max_score: number;
+  answer_text: string;
+  file_url: string | null;
+  ai_score: number | null;
+  ai_comment: string | null;
+  ai_suggestions: string | null;
+  breakdown: FrqBreakdown[];
+  manual_score: number | null;
+};
+
+export function teacherFrqViews(
+  rawAnswers: unknown,
+  frqs: { id: string; title: string | null; sort_order: number; max_score: number }[],
+  submissions: { frq_id: string; ai_score: number | null; ai_max_score: number | null; ai_overall: string | null; ai_suggestions: string | null; ai_breakdown: unknown }[],
+): TeacherFrqView[] {
+  const parsed = parseFrqAnswers(rawAnswers);
+  const grades = readStoredGrades(rawAnswers);
+  const latest = new Map<string, (typeof submissions)[number]>();
+  for (const row of submissions) if (!latest.has(row.frq_id)) latest.set(row.frq_id, row);
+  return [...frqs]
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((frq) => {
+      const stored = grades[frq.id];
+      const prior = latest.get(frq.id);
+      const answer = parsed.items[frq.id];
+      const breakdown = stored?.ai_breakdown?.length
+        ? stored.ai_breakdown
+        : Array.isArray(prior?.ai_breakdown)
+          ? prior.ai_breakdown.flatMap((row) => {
+              if (!row || typeof row !== "object") return [];
+              const b = row as Record<string, unknown>;
+              return [{ point: String(b.point ?? ""), awarded: !!b.awarded, comment: String(b.comment ?? "") }];
+            })
+          : [];
+      return {
+        frq_id: frq.id,
+        title: frq.title,
+        sort_order: frq.sort_order,
+        max_score: stored?.max_score || prior?.ai_max_score || frq.max_score || 9,
+        answer_text: answer?.text ?? "",
+        file_url: answer?.fileUrl ?? null,
+        ai_score: stored?.ai_score ?? prior?.ai_score ?? null,
+        ai_comment: stored?.ai_comment ?? prior?.ai_overall ?? null,
+        ai_suggestions: stored?.ai_suggestions ?? prior?.ai_suggestions ?? null,
+        breakdown,
+        manual_score: stored?.manual_score ?? null,
+      };
+    });
 }
 
 export function publicAttempt(
@@ -194,36 +459,84 @@ export function publicAttempt(
     submitted_at: row.submitted_at,
     duration_seconds: row.duration_seconds,
     mcq_detail: redactMcqDetail(row.mcq_detail, published),
-    frq_answers: row.frq_answers,
+    frq_answers: studentVisibleFrq(row.frq_answers),
     mcq_total: submitted ? row.mcq_total : null,
     mcq_correct: submitted && published ? row.mcq_correct : null,
   };
 }
 
+const ATTEMPT_FIELDS = "id,assignment_id,roster_id,user_id,started_at,submitted_at,mcq_total,mcq_correct,duration_seconds,mcq_detail,frq_answers";
+
 type AttemptRow = NonNullable<Awaited<ReturnType<typeof loadAttempt>>>;
 
-export async function finalizeIfOverdue(attempt: AttemptRow, paperId: string, endsAt: string) {
-  if (attempt.submitted_at) return attempt;
-  if (Date.now() <= Date.parse(endsAt)) return attempt;
-  const raw = Array.isArray(attempt.mcq_detail) ? attempt.mcq_detail : [];
-  const picks: McqPick[] = raw.map((row) => {
-    const d = row as { question_id?: string; picked?: string | null };
-    return { question_id: String(d.question_id ?? ""), picked: d.picked ?? null };
-  }).filter((p) => p.question_id);
-  const scored = await scorePaperMcq(paperId, picks);
+export async function closeSchoolAttempt(
+  attemptId: string,
+  paperId: string,
+  patch?: { mcq_detail?: unknown; frq_answers?: unknown; duration_seconds?: number | null },
+) {
+  const { data: current } = await supabaseAdmin.from("school_attempts").select(ATTEMPT_FIELDS).eq("id", attemptId).maybeSingle();
+  if (!current || current.submitted_at) return current;
+  const scored = await scorePaperMcq(paperId, picksFrom(patch?.mcq_detail ?? current.mcq_detail));
   const { data } = await supabaseAdmin
     .from("school_attempts")
     .update({
       submitted_at: new Date().toISOString(),
       mcq_detail: scored.detail as Json,
+      frq_answers: (patch?.frq_answers ?? current.frq_answers) as Json,
+      duration_seconds: patch?.duration_seconds ?? current.duration_seconds,
       mcq_total: scored.total,
       mcq_correct: scored.correct,
     })
-    .eq("id", attempt.id)
+    .eq("id", attemptId)
     .is("submitted_at", null)
-    .select("id,assignment_id,roster_id,user_id,started_at,submitted_at,mcq_total,mcq_correct,duration_seconds,mcq_detail,frq_answers")
+    .select(ATTEMPT_FIELDS)
     .maybeSingle();
-  return data ? { ...attempt, ...data } : attempt;
+  if (!data) return current;
+  try {
+    const graded = await attachSchoolAiGrades(paperId, data.frq_answers);
+    const saved = await supabaseAdmin.from("school_attempts").update({ frq_answers: graded }).eq("id", attemptId).select(ATTEMPT_FIELDS).maybeSingle();
+    return saved.data ?? data;
+  } catch (error) {
+    console.error("close school attempt", error);
+    return data;
+  }
+}
+
+export async function finalizeIfOverdue(attempt: AttemptRow, paperId: string, endsAt: string) {
+  if (attempt.submitted_at) return attempt;
+  if (Date.now() <= Date.parse(endsAt)) return attempt;
+  const closed = await closeSchoolAttempt(attempt.id, paperId);
+  return closed ? { ...attempt, ...closed } : attempt;
+}
+
+export type TeacherMcqView = { n: number; picked: string | null; is_correct: boolean | null };
+
+export function teacherMcqViews(
+  questions: { question_id: string; sort_order: number; correct_answer: string | null }[],
+  detail: unknown,
+): TeacherMcqView[] {
+  const stored = new Map<string, string | null>();
+  if (Array.isArray(detail)) {
+    for (const row of detail) {
+      if (!row || typeof row !== "object") continue;
+      const item = row as { question_id?: string; picked?: string | null };
+      if (!item.question_id) continue;
+      stored.set(item.question_id, item.picked ?? null);
+    }
+  }
+  return [...questions]
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((question, index) => {
+      const raw = stored.get(question.question_id);
+      const picked = raw ? raw.trim().toUpperCase() : null;
+      const correct = (question.correct_answer ?? "").trim().toUpperCase();
+      const known = ["A", "B", "C", "D", "E"].includes(correct);
+      return {
+        n: index + 1,
+        picked,
+        is_correct: picked && known ? picked === correct : null,
+      };
+    });
 }
 
 export type ActiveExamPayload = {
@@ -319,11 +632,16 @@ export async function loadSchoolPaperQuestions(paperId: string, published: boole
   };
   const questions = ((pqs ?? []) as unknown as Array<{ questions: QRow }>).map((row) => {
     const q = row.questions;
-    if (published) return q;
+    const points = readPointMarker(q.explanation);
+    const page_image_url = readPageImage(q.explanation);
+    const explanation = stripPageImage(stripPointMarker(q.explanation));
+    if (published) return { ...q, explanation, points, page_image_url };
     return {
       ...q,
       correct_answer: "",
       explanation: "",
+      points,
+      page_image_url,
     };
   });
   return { questions, frqs: frqs ?? [] };

@@ -300,7 +300,7 @@ function Index() {
             </div>
             <div>
               <div className="text-xl font-bold sm:text-2xl">学校考试</div>
-              <div className="text-xs opacity-90 mt-1 sm:text-base">学号 + 考试码入场 · 计分考</div>
+              <div className="text-xs opacity-90 mt-1 sm:text-base">学号、姓名和考试码入场 · 计分考</div>
             </div>
           </div>
           <div className="hidden sm:inline-flex items-center gap-2 rounded-full bg-white/20 backdrop-blur px-4 py-2 text-sm font-medium shrink-0 ring-1 ring-white/25">

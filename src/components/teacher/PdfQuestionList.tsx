@@ -32,7 +32,17 @@ function itemKey(it: TeacherPdfItem) {
   return `${it.kind}-${it.sort_order}`;
 }
 
-function CropThumb({ src, fallback, label }: { src?: string | null; fallback?: string | null; label: string }) {
+function CropThumb({
+  src,
+  fallback,
+  label,
+  onStatus,
+}: {
+  src?: string | null;
+  fallback?: string | null;
+  label: string;
+  onStatus?: (status: "ok" | "weak" | "broken") => void;
+}) {
   const [mode, setMode] = useState<"src" | "fallback" | "broken">(src ? "src" : fallback ? "fallback" : "broken");
   useEffect(() => {
     setMode(src ? "src" : fallback ? "fallback" : "broken");
@@ -51,7 +61,13 @@ function CropThumb({ src, fallback, label }: { src?: string | null; fallback?: s
         src={url}
         alt={label}
         className="max-h-24 max-w-[10rem] rounded border border-border object-contain bg-white"
+        onLoad={(e) => {
+          const img = e.currentTarget;
+          const thin = img.naturalHeight < 72 || (img.naturalWidth / Math.max(1, img.naturalHeight) > 8 && img.naturalHeight < 160);
+          onStatus?.(thin ? "weak" : "ok");
+        }}
         onError={() => {
+          onStatus?.("broken");
           if (mode === "src" && fallback && fallback !== src) setMode("fallback");
           else setMode("broken");
         }}
@@ -99,9 +115,54 @@ export function PdfQuestionList({
           </span>
         </div>
       )}
-      {visible.map(({ it, idx, reason }) => {
-        const open = editing === idx;
-        return (
+      {visible.map(({ it, idx, reason }) => (
+        <PdfQuestionCard
+          key={`${it.kind}-${it.sort_order}-${idx}`}
+          it={it}
+          idx={idx}
+          reason={reason}
+          open={editing === idx}
+          aiRan={aiRan}
+          onToggle={() => setEditing(open => (open === idx ? null : idx))}
+          onChange={onChange}
+          onRemove={onRemove}
+          onReplaceImage={onReplaceImage}
+          onRecrop={onRecrop}
+        />
+      ))}
+    </div>
+  );
+}
+
+function PdfQuestionCard({
+  it,
+  idx,
+  reason,
+  open,
+  aiRan,
+  onToggle,
+  onChange,
+  onRemove,
+  onReplaceImage,
+  onRecrop,
+}: {
+  it: TeacherPdfItem;
+  idx: number;
+  reason?: string;
+  open: boolean;
+  aiRan?: boolean;
+  onToggle: () => void;
+  onChange: (index: number, patch: Partial<TeacherPdfItem>) => void;
+  onRemove: (index: number) => void;
+  onReplaceImage?: (index: number, file: File) => void;
+  onRecrop?: (index: number) => void;
+}) {
+  const [shot, setShot] = useState<"ok" | "weak" | "broken" | "none">("none");
+  useEffect(() => {
+    setShot("none");
+  }, [it.image_url]);
+  const figureReady = !!it.image_url && shot === "ok";
+  return (
           <Card key={`${it.kind}-${it.sort_order}-${idx}`} className={reason ? "overflow-hidden border-amber-300" : "overflow-hidden"}>
             <CardContent className="p-4 flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
@@ -113,10 +174,11 @@ export function PdfQuestionList({
                       </span>
                       <span className="text-xs px-1.5 py-0.5 rounded bg-secondary">{it.kind === "mcq" ? "选择题" : "大题"}</span>
                       {it.needs_image && (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-primary/15 text-primary inline-flex items-center gap-1">
-                          <ImageIcon className="h-3 w-3" /> {it.image_url ? "已截图" : "带图待补"}
+                        <span className={`text-xs px-1.5 py-0.5 rounded inline-flex items-center gap-1 ${figureReady ? "bg-primary/15 text-primary" : "bg-amber-500/15 text-amber-900"}`}>
+                          <ImageIcon className="h-3 w-3" /> {figureReady ? "已截图" : shot === "weak" ? "截图不完整" : "带图待补"}
                         </span>
                       )}
+                      <span className="text-xs text-muted-foreground">{it.max_score || 1} 分</span>
                       {reason ? (
                         <span className="text-xs px-1.5 py-0.5 rounded bg-warning/15 text-warning-foreground">需修改</span>
                       ) : aiRan ? (
@@ -133,7 +195,7 @@ export function PdfQuestionList({
                     {reason && <p className="text-xs text-amber-800 mt-1">{reason}</p>}
                   </div>
                   {it.image_url ? (
-                    <CropThumb src={it.image_url} fallback={null} label={`第 ${it.sort_order} 题截图`} />
+                    <CropThumb src={it.image_url} fallback={null} label={`第 ${it.sort_order} 题截图`} onStatus={setShot} />
                   ) : (
                     <div className="flex h-24 w-28 shrink-0 items-center justify-center rounded border border-dashed border-border bg-muted/40 text-[11px] text-muted-foreground">
                       无截图
@@ -143,7 +205,10 @@ export function PdfQuestionList({
                 {open && (
                   <div className="space-y-2 pt-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Select value={it.kind} onValueChange={(v) => onChange(idx, { kind: v as "mcq" | "frq" })}>
+                      <Select value={it.kind} onValueChange={(v) => onChange(idx, {
+                        kind: v as "mcq" | "frq",
+                        max_score: v === "mcq" && it.max_score === 9 ? 1 : it.max_score || (v === "mcq" ? 1 : 9),
+                      })}>
                         <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="mcq">选择题</SelectItem>
@@ -175,7 +240,7 @@ export function PdfQuestionList({
                       </label>
                       {onRecrop ? (
                         <Button type="button" size="sm" variant="outline" onClick={() => onRecrop(idx)}>
-                          从本页重新截取
+                          在本页框选图表
                         </Button>
                       ) : null}
                     </div>
@@ -185,6 +250,7 @@ export function PdfQuestionList({
                           <Input key={k} placeholder={`选项 ${"ABCDE"[n]}`} value={it[k]} onChange={(e) => onChange(idx, { [k]: e.target.value })} />
                         ))}
                         <Input placeholder="正确答案 A-E（选填）" value={it.correct_answer} onChange={(e) => onChange(idx, { correct_answer: e.target.value.toUpperCase() })} />
+                        <Input type="number" min={1} max={20} aria-label="选择题分值" placeholder="分值" value={it.max_score || 1} onChange={(e) => onChange(idx, { max_score: Math.min(20, Math.max(1, Number(e.target.value) || 1)) })} />
                       </div>
                     ) : (
                       <div className="grid gap-2">
@@ -198,15 +264,12 @@ export function PdfQuestionList({
                 )}
               </div>
               <div className="flex gap-2 shrink-0">
-                <Button size="sm" variant="outline" onClick={() => setEditing(open ? null : idx)}>
+                <Button size="sm" variant="outline" onClick={onToggle}>
                   {open ? "收起" : "编辑"}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => onRemove(idx)}>删除</Button>
               </div>
             </CardContent>
           </Card>
-        );
-      })}
-    </div>
   );
 }

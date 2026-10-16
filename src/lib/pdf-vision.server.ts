@@ -1,3 +1,5 @@
+import { readPrintedScore } from "@/lib/ap-exam-parse";
+
 export type VisionExamItem = {
   kind: "mcq" | "frq";
   sort_order: number;
@@ -65,6 +67,9 @@ function sanitizeItems(raw: unknown, pages: VisionPage[]): VisionExamItem[] {
     if (kind === "frq" && (content || stem).length < 20) continue;
     const answer = clip(rec.correct_answer, 8).toUpperCase();
     const blob = `${stem} ${content}`;
+    const printed = readPrintedScore(blob, 0);
+    const modelScore = Number(rec.max_score);
+    const fromModel = Number.isFinite(modelScore) && modelScore >= 1 && modelScore <= 20 ? modelScore : 0;
     items.push({
       kind,
       sort_order: items.filter((it) => it.kind === kind).length + 1,
@@ -77,7 +82,7 @@ function sanitizeItems(raw: unknown, pages: VisionPage[]): VisionExamItem[] {
       option_e: clip(rec.option_e, 500),
       correct_answer: kind === "mcq" && /^[A-E]$/.test(answer) ? answer : "",
       content: kind === "frq" ? content || stem : "",
-      max_score: kind === "frq" ? Math.min(20, Math.max(1, Number(rec.max_score) || 9)) : 1,
+      max_score: printed || fromModel || (kind === "frq" ? 9 : 1),
       needs_image: /graph|table|figure|图|表/i.test(blob),
     });
   }
@@ -96,6 +101,7 @@ export async function visionParseExamPages(pages: VisionPage[]): Promise<{ items
         "下面是一份老师上传的试卷，按页给出图片和提取到的文字。",
         "只抽出页面上真正印出的题目，不要编造，不要把说明、封面、答题卡说明当成题。",
         "选择题 kind=mcq，必须有题干和 A–D。大题、简答、free-response 用 kind=frq。",
+        "max_score 用卷面印出的分值。大题如果每个小问写了 (N points)，把各小问分值相加作为这道大题的满分。选择题没写分值就用 1。看不清分值时不要填 9。",
         "页码用我标出的 page_number。看不清就不要猜那一题。",
         ...pages.map((p) => `\n--- 第 ${p.page_number} 页文字 ---\n${p.text || "（这一页没有提取到文字）"}`),
       ].join("\n"),

@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { jsonErr } from "@/lib/json-api";
+import { withPageImage, withPointMarker } from "@/lib/exam-flags";
 import { packTeacherFrq, splitTeacherFrq, teacherGradingNote, withTeacherRubric } from "@/lib/frq-teacher-fields";
 import { fileToVisionPage, visionParseExamPages } from "@/lib/pdf-vision.server";
 import { ensureTeacherClass, getTeacherDb, uploadTeacherAssignmentImage, verifyTeacherRequest } from "@/lib/teacher-auth.server";
@@ -33,11 +34,20 @@ function stripFences(s: string) {
   return s.replace(/```json\s*/gi, "").replace(/```/g, "").trim();
 }
 
+function optionsComplete(it: PdfItemIn) {
+  return it.kind === "mcq" && [it.option_a, it.option_b, it.option_c, it.option_d].every((s) => (s ?? "").trim().length > 0);
+}
+
+function claimsMissingOptions(reason: string) {
+  return /缺少\s*A|A\s*[–—-]\s*D|任一选项|选项不完整|没有\s*[A-D]\s*选项|missing option/i.test(reason);
+}
+
 async function aiReviewItems(items: PdfItemIn[]) {
   const apiKey = process.env.LOVABLE_API_KEY;
   if (!apiKey) {
     return Response.json({ findings: [], skipped: true, error: "AI 未配置，题目已自动切好，有问题再改即可。" });
   }
+  const complete = new Set(items.filter(optionsComplete).map((it) => `${it.kind}-${it.sort_order}`));
   const payload = items.map((it) => ({
     key: `${it.kind}-${it.sort_order}`,
     kind: it.kind,
@@ -46,6 +56,7 @@ async function aiReviewItems(items: PdfItemIn[]) {
     options: it.kind === "mcq"
       ? { A: it.option_a, B: it.option_b, C: it.option_c, D: it.option_d, E: it.option_e }
       : undefined,
+    options_ok: optionsComplete(it),
     content: it.kind === "frq" ? (it.content ?? "").slice(0, 500) : undefined,
     has_image: !!it.image_url,
     needs_image: !!it.needs_image,
@@ -55,7 +66,8 @@ async function aiReviewItems(items: PdfItemIn[]) {
 
 只输出这些问题（key 必须原样返回）：
 - 题干被切到下一题，或选项里混进了下一题题号
-- 选择题缺少 A–D 中任一选项，或选项明显不是选项文本
+- 仅当 options_ok 为 false 时，才可以说选择题缺少 A–D。options_ok 为 true 时，禁止写「缺少选项」或「缺少 A–D」
+- 选项文本明显不是选项（例如整段题干被塞进某一个选项）
 - 题干提到 graph/table/figure/见图 但 has_image=false
 - 大题正文过短（明显没切全）
 
@@ -125,7 +137,7 @@ async function aiReviewItems(items: PdfItemIn[]) {
       parsed = { findings: [] };
     }
     const allowed = new Set(slice.map((p) => p.key));
-    findings.push(...(parsed.findings ?? []).filter((f) => allowed.has(f.key)));
+    findings.push(...(parsed.findings ?? []).filter((f) => allowed.has(f.key) && !(complete.has(f.key) && claimsMissingOptions(f.reason ?? ""))));
   }
   return Response.json({ findings, total: items.length });
 }
@@ -335,7 +347,7 @@ export const Route = createFileRoute("/api/teacher/pdf")({
                 content: it.kind === "frq"
                   ? packTeacherFrq(it.content, it.rubric_note ?? splitTeacherFrq(it.content).rubric_note)
                   : (it.content ?? null),
-                max_score: it.max_score ?? 9,
+                max_score: it.max_score ?? (it.kind === "mcq" ? 1 : 9),
                 reviewed: !!it.reviewed,
               })),
             );
@@ -406,7 +418,10 @@ export const Route = createFileRoute("/api/teacher/pdf")({
                 option_d: it.option_d!,
                 option_e: it.option_e || null,
                 correct_answer: mcqKey(it.correct_answer),
-                explanation: `${year} AP 微观经济真题第 ${it.sort_order} 题。`,
+                explanation: withPageImage(
+                  withPointMarker(`${year} AP 微观经济真题第 ${it.sort_order} 题。`, it.max_score ?? 1),
+                  pageMap.get(it.page_number)?.image_url,
+                ),
                 image_url: crop || null,
                 status: "published" as const,
                 exclude_from_pool: true,
@@ -431,7 +446,7 @@ export const Route = createFileRoute("/api/teacher/pdf")({
                 title: (it.stem ?? "").trim() || `FRQ ${i + 1}`,
                 content: unpacked.content.trim() || (it.stem ?? "").trim() || `见第 ${it.page_number} 页`,
                 image_url: crop || null,
-                image_text: withTeacherRubric(page?.extracted_text, grading),
+                image_text: withPageImage(withTeacherRubric(page?.extracted_text, grading), page?.image_url),
                 max_score: it.max_score ?? 9,
                 exclude_from_pool: true,
                 grading,

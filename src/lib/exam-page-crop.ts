@@ -651,7 +651,54 @@ export async function cropImageBlob(blob: Blob, plan: CropPlan): Promise<Blob> {
       }
     }
     if (!best) throw new Error("没有找到图表区域");
-    return await blobFromSlice(bmp, best);
+    const out = await blobFromSlice(bmp, best);
+    if (!(await figureCropUsable(out))) throw new Error("没有找到完整图表");
+    return out;
+  } finally {
+    bmp.close();
+  }
+}
+
+export async function cropRectFromBlob(
+  blob: Blob,
+  display: { x: number; y: number; w: number; h: number },
+  shown: { w: number; h: number },
+): Promise<Blob> {
+  const bmp = await createImageBitmap(blob);
+  try {
+    const sx = bmp.width / Math.max(1, shown.w);
+    const sy = bmp.height / Math.max(1, shown.h);
+    return await blobFromSlice(bmp, {
+      x: display.x * sx,
+      y: display.y * sy,
+      w: display.w * sx,
+      h: display.h * sy,
+    });
+  } finally {
+    bmp.close();
+  }
+}
+
+/** Reject a thin title strip or a mostly black band so it is not marked as a finished figure. */
+export async function figureCropUsable(blob: Blob) {
+  const bmp = await createImageBitmap(blob);
+  try {
+    if (bmp.width < 80 || bmp.height < 72) return false;
+    if (bmp.width / bmp.height > 8 && bmp.height < 160) return false;
+    const canvas = document.createElement("canvas");
+    const w = 48;
+    const h = 48;
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return true;
+    ctx.drawImage(bmp, 0, 0, w, h);
+    const data = ctx.getImageData(0, 0, w, h).data;
+    let dark = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i] + data[i + 1] + data[i + 2] < 90) dark++;
+    }
+    return dark / (w * h) < 0.68;
   } finally {
     bmp.close();
   }
@@ -697,7 +744,9 @@ export async function cropFigureFromExamPage(blob: Blob, hint: "table" | "graph"
       }
     }
     if (!best) throw new Error("没有找到图表区域");
-    return await blobFromSlice(bmp, best);
+    const out = await blobFromSlice(bmp, best);
+    if (!(await figureCropUsable(out))) throw new Error("没有找到完整图表");
+    return out;
   } finally {
     bmp.close();
   }

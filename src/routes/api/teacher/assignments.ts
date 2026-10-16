@@ -1,5 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { withExamAiGrade } from "@/lib/exam-flags";
 import { jsonErr } from "@/lib/json-api";
+import { teacherFrqViews } from "@/lib/school-exam.server";
 import { ensureTeacherClass, getTeacherDb, verifyTeacherRequest } from "@/lib/teacher-auth.server";
 import { createFixedRandomSchoolPaper, makeExamCode } from "@/lib/school-random-paper.server";
 import { isUuid } from "@/lib/school-exam-session";
@@ -64,6 +67,8 @@ export const Route = createFileRoute("/api/teacher/assignments")({
           source?: "existing" | "random";
           starts_at?: string;
           ends_at?: string;
+          publish_answers?: boolean;
+          ai_grade?: boolean;
         };
         const title = (body.title ?? "").trim().slice(0, 120);
         if (!title) return jsonErr("请填写考试名称");
@@ -103,26 +108,30 @@ export const Route = createFileRoute("/api/teacher/assignments")({
             exam_code: examCode,
             starts_at: new Date(starts).toISOString(),
             ends_at: new Date(ends).toISOString(),
+            results_published: body.publish_answers === true,
             created_by: u.userId,
           })
           .select("id,title,exam_code,starts_at,ends_at,results_published,paper_id")
           .single();
         if (error || !data) return jsonErr(error?.message ?? "创建失败", 500);
+        let aiGradeSaved = body.ai_grade !== true;
         if (process.env.SUPABASE_SERVICE_ROLE_KEY && paperId) {
           const minutes = Math.max(10, Math.round((ends - starts) / 60000));
-          const { data: paper } = await db.from("mock_papers").select("slug").eq("id", paperId).maybeSingle();
+          const { data: paper } = await db.from("mock_papers").select("slug, description").eq("id", paperId).maybeSingle();
           if (paper?.slug?.startsWith("school-")) {
             const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-            await supabaseAdmin
+            const updated = await supabaseAdmin
               .from("mock_papers")
               .update({
                 total_seconds: minutes * 60,
                 frq_seconds: Math.max(15 * 60, minutes * 60 - 10 * 60),
+                description: withExamAiGrade(paper.description, body.ai_grade === true),
               })
               .eq("id", paperId);
+            aiGradeSaved = !updated.error;
           }
         }
-        return Response.json({ assignment: data });
+        return Response.json({ assignment: data, ai_grade_saved: aiGradeSaved });
       },
       PATCH: async ({ request }) => {
         const u = await verifyTeacherRequest(request);
@@ -133,6 +142,44 @@ export const Route = createFileRoute("/api/teacher/assignments")({
         const cls = await ensureTeacherClass(u.userId, db);
         const body = (await request.json()) as { id?: string; results_published?: boolean };
         if (!body.id || !isUuid(body.id)) return jsonErr("missing id");
+        if (body.results_published) {
+          const { data: current } = await db
+            .from("school_assignments")
+            .select("id,ends_at,paper_id")
+            .eq("id", body.id)
+            .eq("class_id", cls.id)
+            .maybeSingle();
+          if (!current) return jsonErr("not found", 404);
+          if (Date.now() < Date.parse(current.ends_at)) return jsonErr("考试还没结束，不能公布");
+          const [{ data: attempts }, { data: frqs }] = await Promise.all([
+            supabaseAdmin.from("school_attempts").select("submitted_at,user_id,frq_answers").eq("assignment_id", current.id),
+            supabaseAdmin.from("paper_frqs").select("id,title,sort_order,max_score").eq("paper_id", current.paper_id),
+          ]);
+          if ((attempts ?? []).some((row) => !row.submitted_at)) return jsonErr("还有学生在作答，请先收卷");
+          if ((frqs ?? []).length > 0) {
+            const userIds = (attempts ?? []).map((row) => row.user_id).filter((id): id is string => !!id);
+            const submissionQuery = userIds.length
+              ? await supabaseAdmin
+                  .from("frq_submissions")
+                  .select("user_id,frq_id,ai_score,ai_max_score,ai_overall,ai_suggestions,ai_breakdown,created_at")
+                  .eq("paper_id", current.paper_id)
+                  .in("user_id", userIds)
+                  .is("archived_at", null)
+                  .order("created_at", { ascending: false })
+              : null;
+            const submissions = submissionQuery?.data ?? [];
+            const byUser = new Map<string, NonNullable<typeof submissions>>();
+            for (const row of submissions ?? []) {
+              const list = byUser.get(row.user_id) ?? [];
+              list.push(row);
+              byUser.set(row.user_id, list);
+            }
+            const missing = (attempts ?? []).some((row) =>
+              teacherFrqViews(row.frq_answers, frqs ?? [], row.user_id ? byUser.get(row.user_id) ?? [] : []).some((frq) => (frq.manual_score ?? frq.ai_score) == null),
+            );
+            if (missing) return jsonErr("大题还没有分数，不能公布");
+          }
+        }
         const { data, error } = await db
           .from("school_assignments")
           .update({ results_published: !!body.results_published })

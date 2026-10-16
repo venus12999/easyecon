@@ -64,7 +64,7 @@ export function TopNav() {
     return (
       <header className="sticky top-0 z-40 px-3 pt-3 sm:px-5">
         <div className="glass mx-auto flex min-h-12 max-w-6xl flex-wrap items-center gap-2 rounded-2xl px-3 py-2 sm:flex-nowrap sm:gap-3">
-          <span className="min-w-0 truncate text-sm font-bold">EasyEcon 考试</span>
+          <span className="min-w-0 truncate text-sm font-bold">{examSession.studentName ? `${examSession.studentName} · 考试中` : "EasyEcon 考试"}</span>
           <div className="flex-1" />
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
             {canLeaveExam && (
@@ -77,11 +77,9 @@ export function TopNav() {
                 {examSession.submitted ? "交卷状态" : "当前考试"}
               </Link>
             </Button>
-            {!canLeaveExam && (
-              <Button asChild size="sm" variant="ghost">
-                <Link to="/auth" search={{ redirect: "/" }}>换账号</Link>
-              </Button>
-            )}
+            {!canLeaveExam ? (
+              <span className="text-xs text-muted-foreground">考试中不能换账号</span>
+            ) : null}
           </div>
         </div>
       </header>

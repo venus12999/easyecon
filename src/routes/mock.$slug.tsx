@@ -43,6 +43,8 @@ import { MockResultAuthGate } from "@/components/AuthGateCard";
 import { clearPendingMock, loadPendingMock, savePendingMock } from "@/lib/pending-mock";
 import { consumeMockAccess } from "@/lib/mock-access-client";
 import { authFetch } from "@/lib/auth-fetch";
+import { ExamFigure } from "@/components/mock/ExamFigure";
+import { readExamAiGrade, readPageImage, readPointMarker, stripExamFlags, stripPointMarker } from "@/lib/exam-flags";
 import { clearSchoolExamSession, isExamLocalEmail, isUuid, markExamExited, saveSchoolExamSession } from "@/lib/school-exam-session";
 
 export const Route = createFileRoute("/mock/$slug")({
@@ -79,6 +81,8 @@ type Q = {
   option_e: string | null;
   correct_answer: OptKey;
   explanation: string;
+  points?: number;
+  page_image_url?: string | null;
   image_url: string | null;
   term_tags: string[] | null;
   knowledge_points: { name_zh: string; unit: number } | null;
@@ -110,15 +114,25 @@ function PaperRunner() {
   const [schoolReady, setSchoolReady] = useState(!assignmentId);
   const [schoolError, setSchoolError] = useState<string | null>(null);
   const [schoolPublished, setSchoolPublished] = useState(false);
+  const [schoolAiGrade, setSchoolAiGrade] = useState(false);
   const [schoolSubmitted, setSchoolSubmitted] = useState(false);
   const [schoolTitle, setSchoolTitle] = useState("");
   const [schoolEndsAt, setSchoolEndsAt] = useState("");
+  const [schoolStudentName, setSchoolStudentName] = useState("");
+  const [schoolSavedAt, setSchoolSavedAt] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
+  const [confirmFinal, setConfirmFinal] = useState(false);
+  const [submittingExam, setSubmittingExam] = useState(false);
   const [phase, setPhase] = useState<"idle" | "running" | "break" | "frq" | "authGate" | "done">("idle");
   const [revealError, setRevealError] = useState(false);
   const revealingRef = useRef(false);
   const pendingRestoredRef = useRef(false);
   const mcqPersistedRef = useRef(false);
   const schoolHydratedRef = useRef(false);
+  const finishingRef = useRef(false);
+  const progressRef = useRef({ phase: "idle" as string, mcqLocked: false });
+  const saveSeq = useRef(0);
+  const latestSave = useRef<(override?: { phase?: string; mcqLocked?: boolean }) => Promise<void>>(async () => {});
   const [breakSeconds, setBreakSeconds] = useState(0);
   const [frqSeconds, setFrqSeconds] = useState(0);
   const [frqAnswers, setFrqAnswers] = useState<Record<string, FrqAnswerState>>({});
@@ -159,8 +173,9 @@ function PaperRunner() {
 
   const remaining = (() => {
     if (!paper) return 0;
-    if (isSchoolExam && schoolEndsAt) {
-      return Math.max(0, Math.floor((Date.parse(schoolEndsAt) - Date.now()) / 1000));
+    if (isSchoolExam) {
+      if (!schoolEndsAt) return paper.total_seconds || 1;
+      return Math.max(0, Math.floor((Date.parse(schoolEndsAt) - now) / 1000));
     }
     return Math.max(0, paper.total_seconds - seconds);
   })();
@@ -195,7 +210,11 @@ function PaperRunner() {
           .eq("paper_id", p.id)
           .order("sort_order", { ascending: true }),
       ]);
-      const qs = ((pqs ?? []) as unknown as Array<{ questions: Q }>).map((row) => row.questions);
+      const qs = ((pqs ?? []) as unknown as Array<{ questions: Q }>).map((row) => ({
+        ...row.questions,
+        points: readPointMarker(row.questions.explanation),
+        explanation: stripPointMarker(row.questions.explanation),
+      }));
       setQuestions(qs);
       const loadedFrqs = (fr ?? []) as Frq[];
       setFrqs(slug === "frq-pdf-practice"
@@ -256,6 +275,7 @@ function PaperRunner() {
         setLoading(false);
         return;
       }
+      setSchoolAiGrade(readExamAiGrade(j.paper.description));
       setPaper({
         id: j.paper.id,
         slug: j.paper.slug ?? slug,
@@ -263,12 +283,13 @@ function PaperRunner() {
         total_seconds: j.paper.total_seconds,
         frq_seconds: j.paper.frq_seconds,
         break_seconds: j.paper.break_seconds,
-        description: j.paper.description ?? null,
+        description: stripExamFlags(j.paper.description) || null,
       });
       setQuestions((j.questions ?? []) as Q[]);
       setFrqs((j.frqs ?? []) as Frq[]);
       setSchoolTitle(j.assignment?.title ?? "");
       setSchoolEndsAt(j.assignment?.ends_at ?? "");
+      setSchoolStudentName(j.roster?.student_name ?? "");
       setSchoolPublished(!!j.assignment?.results_published);
       saveSchoolExamSession({
         assignmentId,
@@ -299,21 +320,22 @@ function PaperRunner() {
           };
         });
         if (Object.keys(next).length) setFrqAnswers(next);
-        const progress = raw?.progress;
+        const progress = raw?.progress as { phase?: string; seconds?: number; breakSeconds?: number; frqSeconds?: number; idx?: number; mcq_locked?: boolean } | undefined;
         if (typeof progress?.seconds === "number") setSeconds(progress.seconds);
         else if (typeof j.attempt.duration_seconds === "number") setSeconds(j.attempt.duration_seconds);
         if (typeof progress?.breakSeconds === "number") setBreakSeconds(progress.breakSeconds);
         else setBreakSeconds(j.paper.break_seconds ?? 600);
-        if (typeof progress?.frqSeconds === "number") setFrqSeconds(progress.frqSeconds);
-        else setFrqSeconds(j.paper.frq_seconds ?? 3600);
         if (typeof progress?.idx === "number") setIdx(progress.idx);
+        const hasFrq = Object.values(next).some((ans) => ans.text.trim() || ans.fileUrl);
+        const locked = progress?.mcq_locked === true || progress?.phase === "frq" || progress?.phase === "break" || hasFrq;
+        progressRef.current = { phase: locked ? "frq" : (progress?.phase ?? "running"), mcqLocked: locked };
         if (j.attempt.submitted) {
           setSchoolSubmitted(true);
           setFrqSubmitted(true);
           setPhase("done");
-        } else if (progress?.phase === "frq" || progress?.phase === "break" || progress?.phase === "running") {
-          setPhase(progress.phase);
-        } else {
+        } else if (locked) {
+          setPhase("frq");
+        } else if (progress?.phase === "running" || j.attempt) {
           setPhase("running");
         }
       }
@@ -516,8 +538,9 @@ function PaperRunner() {
   }, [phase]);
 
   useEffect(() => {
-    if (!timeUp) return;
-    if (isSchoolExam && schoolEndsAt && Date.parse(schoolEndsAt) <= Date.now()) {
+    if (!timeUp || finishingRef.current) return;
+    finishingRef.current = true;
+    if (isSchoolExam) {
       void finalizeSchoolExam();
       return;
     }
@@ -578,6 +601,15 @@ function PaperRunner() {
         setPhase("done");
         return;
       }
+      const saved = j.attempt?.frq_answers as { items?: Record<string, FrqAnswerState>; progress?: { phase?: string; mcq_locked?: boolean } } | undefined;
+      const savedItems = saved?.items ?? {};
+      const hasFrq = Object.values(savedItems).some((ans) => ans?.text?.trim() || ans?.fileUrl);
+      const locked = saved?.progress?.mcq_locked === true || saved?.progress?.phase === "frq" || saved?.progress?.phase === "break" || hasFrq;
+      if (locked || (Array.isArray(j.attempt?.mcq_detail) && j.attempt.mcq_detail.some((row: { picked?: string | null }) => row.picked))) {
+        progressRef.current = { phase: locked ? "frq" : "running", mcqLocked: locked };
+        setPhase(locked ? "frq" : "running");
+        return;
+      }
       beginPaper();
       return;
     }
@@ -592,13 +624,16 @@ function PaperRunner() {
     beginPaper();
   }
 
-  function schoolPayload() {
+  function schoolPayload(override?: { phase?: string; mcqLocked?: boolean }) {
+    const phaseNow = override?.phase ?? phase;
+    const locked = override?.mcqLocked ?? (progressRef.current.mcqLocked || phaseNow === "frq" || phaseNow === "break");
+    if (locked) progressRef.current = { phase: phaseNow === "running" ? "frq" : phaseNow, mcqLocked: true };
     return {
       assignment_id: assignmentId,
       mcq_detail: questions.map((q) => ({ question_id: q.id, picked: answers[q.id] ?? null })),
       frq_answers: {
         items: frqAnswers,
-        progress: { phase, seconds, breakSeconds, frqSeconds, idx },
+        progress: { phase: locked && phaseNow === "running" ? "frq" : phaseNow, seconds, breakSeconds, idx, mcq_locked: locked, save_seq: saveSeq.current },
       },
       duration_seconds: seconds,
     };
@@ -607,27 +642,44 @@ function PaperRunner() {
   useEffect(() => {
     if (!isSchoolExam || schoolSubmitted || phase === "idle" || phase === "done") return;
     function onHide() {
-      if (document.visibilityState === "hidden") toast.message("已离开考试页面，请马上回到考场。");
+      if (document.visibilityState === "hidden") {
+        void latestSave.current();
+        toast.message("已离开考试页面，请马上回到考场。");
+      }
     }
     function onLeave(event: BeforeUnloadEvent) {
+      void latestSave.current();
       event.preventDefault();
       event.returnValue = "";
     }
     document.addEventListener("visibilitychange", onHide);
     window.addEventListener("beforeunload", onLeave);
+    window.addEventListener("pagehide", onLeave as EventListener);
     return () => {
       document.removeEventListener("visibilitychange", onHide);
       window.removeEventListener("beforeunload", onLeave);
+      window.removeEventListener("pagehide", onLeave as EventListener);
     };
   }, [isSchoolExam, phase, schoolSubmitted]);
 
-  async function saveSchoolProgress() {
-    if (!isSchoolExam || schoolSubmitted || phase === "idle" || phase === "done") return;
-    await authFetch("/api/exam/attempt", {
+  async function saveSchoolProgress(override?: { phase?: string; mcqLocked?: boolean }) {
+    if (!isSchoolExam || schoolSubmitted || !schoolHydratedRef.current) return;
+    const phaseNow = override?.phase ?? phase;
+    if (phaseNow === "idle" || phaseNow === "done") return;
+    saveSeq.current += 1;
+    const r = await authFetch("/api/exam/attempt", {
       method: "POST",
-      body: JSON.stringify({ ...schoolPayload(), action: "save" }),
+      body: JSON.stringify({ ...schoolPayload(override), action: "save" }),
+      keepalive: true,
     });
+    const j = await r.json().catch(() => ({} as { error?: string }));
+    if (r.ok) {
+      setSchoolSavedAt(Date.now());
+      return;
+    }
+    if (j.error === "已交卷，不能再改" || j.error === "考试已截止，请交卷") void finalizeSchoolExam();
   }
+  latestSave.current = saveSchoolProgress;
 
   async function finalizeSchoolExam() {
     const r = await authFetch("/api/exam/attempt", {
@@ -635,7 +687,7 @@ function PaperRunner() {
       body: JSON.stringify({ ...schoolPayload(), action: "submit" }),
     });
     const j = await r.json();
-    if (!r.ok) {
+    if (!r.ok && j.error !== "已交卷，不能再改") {
       toast.error(j.error ?? "交卷失败");
       return false;
     }
@@ -714,9 +766,10 @@ function PaperRunner() {
 
   function submit() {
     if (isSchoolExam) {
-      void saveSchoolProgress();
       if (frqs.length > 0) {
-        setPhase(mode === "exam" ? "break" : "frq");
+        progressRef.current = { phase: "frq", mcqLocked: true };
+        setPhase("frq");
+        void saveSchoolProgress({ phase: "frq", mcqLocked: true });
       } else {
         void finalizeSchoolExam();
       }
@@ -751,9 +804,32 @@ function PaperRunner() {
     return () => clearInterval(t);
   }, [phase, breakSeconds]);
 
-  // FRQ 倒计时（仅仿真模式）
   useEffect(() => {
-    if (phase !== "frq" || mode !== "exam") return;
+    if (!isSchoolExam) return;
+    if (phase !== "running" && phase !== "frq" && phase !== "break") return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [isSchoolExam, phase]);
+
+  useEffect(() => {
+    if (!isSchoolExam || phase === "idle" || phase === "done") return;
+    const hideBadge = () => {
+      for (const el of document.querySelectorAll("a, button, div, span")) {
+        if (!(el instanceof HTMLElement)) continue;
+        const text = el.textContent ?? "";
+        if (!text.includes("Edit with Lovable") || text.length > 40) continue;
+        el.style.setProperty("display", "none", "important");
+      }
+    };
+    hideBadge();
+    const obs = new MutationObserver(hideBadge);
+    obs.observe(document.body, { childList: true, subtree: true });
+    return () => obs.disconnect();
+  }, [isSchoolExam, phase]);
+
+  // FRQ 倒计时（学校考试用截止时间，不从试卷大题时长重新计）
+  useEffect(() => {
+    if (isSchoolExam || phase !== "frq" || mode !== "exam") return;
     if (frqSeconds <= 0) {
       void submitAllFrqs();
       return;
@@ -761,46 +837,42 @@ function PaperRunner() {
     const t = setInterval(() => setFrqSeconds((s) => Math.max(0, s - 1)), 1000);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, mode, frqSeconds]);
+  }, [phase, mode, frqSeconds, isSchoolExam]);
 
   useEffect(() => {
-    if (!isSchoolExam || schoolSubmitted) return;
-    if (phase !== "running" && phase !== "frq" && phase !== "break") return;
-    const t = setInterval(() => {
-      void saveSchoolProgress();
-    }, 15000);
+    if (!isSchoolExam || !schoolReady || schoolSubmitted) return;
+    if (phase !== "running" && phase !== "frq") return;
+    const t = setTimeout(() => { void latestSave.current(); }, 400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSchoolExam, schoolReady, schoolSubmitted, phase, answers, frqAnswers, idx]);
+
+  useEffect(() => {
+    if (!isSchoolExam || !schoolReady || schoolSubmitted) return;
+    if (phase !== "running" && phase !== "frq") return;
+    const t = setInterval(() => { void latestSave.current(); }, 4000);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSchoolExam, schoolSubmitted, phase, answers, frqAnswers, seconds, idx]);
+  }, [isSchoolExam, schoolReady, schoolSubmitted, phase]);
 
   useEffect(() => {
-    if (!isSchoolExam || !assignmentId || !schoolSubmitted || schoolPublished) return;
+    if (!isSchoolExam || !assignmentId || !schoolReady || schoolSubmitted) return;
+    if (phase !== "running" && phase !== "frq" && phase !== "break") return;
     const t = window.setInterval(() => {
       void (async () => {
-        const r = await authFetch(`/api/exam/paper?assignment_id=${assignmentId}`);
+        const r = await authFetch(`/api/exam/attempt?assignment_id=${assignmentId}`);
         if (!r.ok) return;
-        const j = (await r.json()) as {
-          assignment?: { results_published?: boolean; title?: string; ends_at?: string };
-          questions?: Q[];
-          roster?: { student_id: string; student_name: string };
-        };
-        if (!j.assignment?.results_published) return;
-        setSchoolPublished(true);
-        if (j.questions?.length) setQuestions(j.questions);
-        saveSchoolExamSession({
-          assignmentId,
-          paperSlug: slug,
-          title: j.assignment.title ?? schoolTitle,
-          endsAt: j.assignment.ends_at ?? schoolEndsAt,
-          submitted: true,
-          resultsPublished: true,
-          studentName: j.roster?.student_name,
-          studentId: j.roster?.student_id,
-        });
+        const j = (await r.json()) as { assignment?: { ends_at?: string }; attempt?: { submitted?: boolean } };
+        if (j.assignment?.ends_at) setSchoolEndsAt(j.assignment.ends_at);
+        if (j.attempt?.submitted) {
+          setSchoolSubmitted(true);
+          setFrqSubmitted(true);
+          setPhase("done");
+        }
       })();
-    }, 15000);
+    }, 8000);
     return () => window.clearInterval(t);
-  }, [assignmentId, isSchoolExam, schoolPublished, schoolSubmitted, schoolEndsAt, schoolTitle, slug]);
+  }, [assignmentId, isSchoolExam, phase, schoolReady, schoolSubmitted]);
 
   async function gradeOneFrq(f: Frq): Promise<boolean> {
     return await runGradeOneFrq(f);
@@ -893,13 +965,11 @@ function PaperRunner() {
       const a = frqAnswers[f.id];
       return !(a && (a.text.trim() || a.fileUrl));
     });
-    if (unfinished.length > 0 && !(mode === "exam" && frqSeconds <= 0)) {
+    if (unfinished.length > 0 && !isSchoolExam && !(mode === "exam" && frqSeconds <= 0)) {
       toast.error(`请先写完全部 ${frqs.length} 道大题再交卷`);
       return false;
     }
-    if (isSchoolExam) {
-      return finalizeSchoolExam();
-    }
+    if (isSchoolExam) return finalizeSchoolExam();
     if (!user) {
       persistPendingPaper();
       setPhase("authGate");
@@ -963,9 +1033,12 @@ function PaperRunner() {
 
   const stats = useMemo(() => {
     if (phase !== "done") return null;
-    const total = questions.length;
-    const correct = questions.filter((q) => answers[q.id] === q.correct_answer).length;
-    return { total, correct };
+    const keyed = questions.filter((q) => ["A", "B", "C", "D", "E"].includes(q.correct_answer));
+    const rows = keyed.length > 0 ? keyed : questions;
+    const total = rows.reduce((sum, q) => sum + (q.points ?? 1), 0);
+    const correct = rows.reduce((sum, q) => sum + (answers[q.id] === q.correct_answer ? (q.points ?? 1) : 0), 0);
+    const weighted = rows.some((q) => (q.points ?? 1) !== 1);
+    return { total, correct, weighted };
   }, [phase, questions, answers]);
 
   if (loading || authLoading || (isSchoolExam && !schoolReady)) {
@@ -1023,11 +1096,11 @@ function PaperRunner() {
           {selectedCategory ? `Unit ${selectedCategory.unit} · ${selectedCategory.nameZh}` : schoolTitle || paper.title}
         </h1>
         {paper.description && (
-          <p className="text-sm text-muted-foreground mb-6">{paper.description}</p>
+          <p className="text-sm text-muted-foreground mb-6">{stripExamFlags(paper.description)}</p>
         )}
         {isSchoolExam && (
           <p className="text-sm mb-4 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
-            学校计分考 · 只能作答一次 · 交卷后默认不公布答案
+            学校计分考 · 只能作答一次 · 交卷后可以离开，成绩由老师查看
           </p>
         )}
         {!isFrqPractice && !isSchoolExam && <div className="grid sm:grid-cols-2 gap-3 mb-4">
@@ -1140,8 +1213,9 @@ function PaperRunner() {
   }
 
   if (phase === "frq") {
-    const mm = String(Math.floor(frqSeconds / 60)).padStart(2, "0");
-    const ss = String(frqSeconds % 60).padStart(2, "0");
+    const clock = isSchoolExam ? remaining : frqSeconds;
+    const mm = String(Math.floor(clock / 60)).padStart(2, "0");
+    const ss = String(clock % 60).padStart(2, "0");
     const allGrading = Object.values(grading).some(Boolean);
     const isFrqOnly = slug === "frq-pdf-practice" || slug.startsWith("frq-pack-");
     const gradedEarned = frqs.reduce((sum, f) => sum + (frqGrades[f.id]?.total_score ?? 0), 0);
@@ -1234,7 +1308,9 @@ function PaperRunner() {
                   <span className="ml-2 text-xs text-muted-foreground">满分 {f.max_score} 分</span>
                   {user && !grade && (
                     <span className="ml-2 text-[11px] text-muted-foreground font-normal">
-                      {saving ? "保存中…" : savedAt ? "已自动保存" : ans.text || ans.fileUrl ? "已恢复草稿" : ""}
+                      {isSchoolExam
+                        ? schoolSavedAt ? "已保存" : ans.text.trim() || ans.fileUrl ? "已恢复作答" : ""
+                        : saving ? "保存中…" : savedAt ? "已自动保存" : ans.text.trim() || ans.fileUrl ? "已恢复草稿" : ""}
                     </span>
                   )}
                 </div>
@@ -1245,13 +1321,7 @@ function PaperRunner() {
                 >
                   <FrqContent content={f.content} />
                   {f.image_url && (
-                    <a href={f.image_url} target="_blank" rel="noreferrer" className="block pt-2">
-                      <img
-                        src={f.image_url}
-                        alt="本题图表，点击可放大"
-                        className="max-h-[70vh] max-w-full h-auto rounded border border-slate-300"
-                      />
-                    </a>
+                    <ExamFigure src={f.image_url} pageUrl={readPageImage(f.image_text)} alt="本题图表，点击可放大" />
                   )}
                 </div>
                 <FrqAnswerBox
@@ -1289,27 +1359,31 @@ function PaperRunner() {
           );
         })}
 
-        <div className="flex flex-col items-end gap-2">
+        <div className="flex flex-col items-end gap-2 pb-16">
           <p className="text-xs text-muted-foreground">
-            {frqs.every((f) => {
+            {isSchoolExam
+              ? "没写完的大题也可以交卷，交卷后不能再改。"
+              : frqs.every((f) => {
               const a = frqAnswers[f.id];
               return a && (a.text.trim() || a.fileUrl);
             })
-              ? isSchoolExam
-                ? "交卷后等待老师公布成绩"
-                : isFrqOnly
+              ? isFrqOnly
                 ? "全部作答后即可查看评分"
                 : "交卷后 AI 将一次性批改全部大题"
               : `请先完成全部 ${frqs.length} 道大题再交卷`}
           </p>
           <Button
-            onClick={() => void submitAllFrqs()}
+            onClick={() => {
+              if (isSchoolExam) setConfirmFinal(true);
+              else void submitAllFrqs();
+            }}
             disabled={
               allGrading ||
+              (!isSchoolExam &&
               !frqs.every((f) => {
                 const a = frqAnswers[f.id];
                 return a && (a.text.trim() || a.fileUrl);
-              })
+              }))
             }
           >
             {allGrading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
@@ -1322,6 +1396,36 @@ function PaperRunner() {
               : "交卷，AI 一起批改"}
           </Button>
         </div>
+        {confirmFinal && (
+          <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4">
+            <div className="w-full max-w-md space-y-4 rounded-xl bg-white p-6">
+              <h3 className="text-lg font-bold">确认交卷？</h3>
+              <p className="text-sm text-slate-600">
+                {frqs.filter((f) => {
+                  const a = frqAnswers[f.id];
+                  return !(a && (a.text.trim() || a.fileUrl));
+                }).length > 0
+                  ? `还有 ${frqs.filter((f) => {
+                    const a = frqAnswers[f.id];
+                    return !(a && (a.text.trim() || a.fileUrl));
+                  }).length} 道大题没写。空着也可以交，交卷后不能再改。`
+                  : "交卷后不能再改选择题和大题。"}
+              </p>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" disabled={submittingExam} onClick={() => setConfirmFinal(false)}>继续作答</Button>
+                <Button
+                  disabled={submittingExam}
+                  onClick={() => {
+                    setSubmittingExam(true);
+                    void submitAllFrqs().finally(() => setSubmittingExam(false));
+                  }}
+                >
+                  {submittingExam ? "正在交卷" : "确认交卷"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
         <HighlightRemoveMenu
           target={hlRemove}
           onClose={() => setHlRemove(null)}
@@ -1350,7 +1454,9 @@ function PaperRunner() {
     const lowTime = remaining <= 5 * 60;
     const isMarked = marked.has(cur.id);
     const curCrossed = crossed[cur.id] ?? new Set<OptKey>();
-    const userName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Student";
+    const userName = isSchoolExam
+      ? (schoolStudentName || "考生")
+      : (user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Student");
     const toggleMark = () => {
       const next = new Set(marked);
       if (next.has(cur.id)) next.delete(cur.id);
@@ -1468,6 +1574,9 @@ function PaperRunner() {
                 <span className="bg-slate-900 text-white font-bold px-2.5 py-1 text-sm rounded-sm">
                   {idx + 1}
                 </span>
+                {(cur.points ?? 1) > 1 ? (
+                  <span className="text-xs text-slate-500">{cur.points} 分</span>
+                ) : null}
                 <button
                   onClick={toggleMark}
                   className={cn(
@@ -1504,13 +1613,7 @@ function PaperRunner() {
               {cur.stem}
             </div>
             {cur.image_url && (
-              <a href={cur.image_url} target="_blank" rel="noreferrer" className="mb-6 block">
-                <img
-                  src={cur.image_url}
-                  alt="本题图表，点击可放大"
-                  className="max-h-[70vh] max-w-full h-auto rounded border border-slate-300"
-                />
-              </a>
+              <ExamFigure src={cur.image_url} pageUrl={cur.page_image_url} alt="本题图表，点击可放大" />
             )}
 
             {/* Options */}
@@ -1589,7 +1692,7 @@ function PaperRunner() {
         </div>
 
         {/* Bottom bar */}
-        <footer className="relative shrink-0 border-t border-slate-300 bg-white px-3 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:h-16 sm:px-6 sm:py-0 sm:pb-0">
+        <footer className="relative z-[70] shrink-0 border-t border-slate-300 bg-white px-3 py-2 pb-16 sm:h-auto sm:px-6 sm:py-3">
           <div className="flex h-full items-center gap-2">
             <div className="hidden min-w-0 flex-1 font-bold text-base sm:block">{userName}</div>
             <Button
@@ -1727,15 +1830,15 @@ function PaperRunner() {
         {confirmSubmit && (
           <div className="fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4">
             <div className="bg-white rounded-xl max-w-md w-full p-6 space-y-4">
-              <h3 className="font-bold text-lg">确认交卷？</h3>
+              <h3 className="font-bold text-lg">{isSchoolExam ? "选择题交卷，进入大题？" : "确认交卷？"}</h3>
               <p className="text-sm text-slate-600">
                 已作答 {Object.keys(answers).length} / {questions.length} 题。
-                {isSchoolExam ? "选择题交卷后进入大题；整场考试在大题交完后才结束。" : "交卷后将无法修改。"}
+                {isSchoolExam ? "进入大题后不能再改选择题。" : "交卷后将无法修改。"}
               </p>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setConfirmSubmit(false)}>取消</Button>
                 <Button className="bg-[#1a2b6b] hover:bg-[#0f1e54]" onClick={() => { setConfirmSubmit(false); submit(); }}>
-                  确认交卷
+                  {isSchoolExam ? "确认进入大题" : "确认交卷"}
                 </Button>
               </div>
             </div>
@@ -1751,6 +1854,26 @@ function PaperRunner() {
           }}
         />
       </div>
+    );
+  }
+
+  if (isSchoolExam && phase === "done") {
+    return (
+      <main className="mx-auto flex min-h-[70vh] max-w-lg flex-col items-center justify-center px-4 py-16 text-center">
+        <h1 className="text-3xl font-bold">Congratulations</h1>
+        <p className="mt-3 text-sm text-muted-foreground">你已经交卷，可以离开了。</p>
+        <Button
+          className="mt-8"
+          onClick={() => {
+            if (assignmentId) markExamExited(assignmentId);
+            clearSchoolExamSession();
+            if (isExamLocalEmail(user?.email)) void signOut();
+            void nav({ to: "/", replace: true });
+          }}
+        >
+          离开考场
+        </Button>
+      </main>
     );
   }
 
@@ -1779,14 +1902,14 @@ function PaperRunner() {
             <span className="text-2xl text-muted-foreground">%</span>
           </div>
           <div className="mt-2 text-sm text-muted-foreground">
-            {stats.correct} / {stats.total} 题正确
+            {stats.correct} / {stats.total} {stats.weighted ? "分" : "题正确"}
           </div>
         </CardContent>
       </Card>
 
       {frqSubmitted ? (
         <>
-          <h2 className="font-semibold mb-3">选择题 {stats.correct} / {stats.total}</h2>
+          <h2 className="font-semibold mb-3">选择题 {stats.correct} / {stats.total}{stats.weighted ? " 分" : ""}</h2>
           <McqResultGrid questions={questions} answers={answers} />
           <div className="mb-8" />
 
@@ -1807,13 +1930,7 @@ function PaperRunner() {
                         </div>
                         <FrqContent content={f.content} />
                         {f.image_url && (
-                          <a href={f.image_url} target="_blank" rel="noreferrer" className="block">
-                            <img
-                              src={f.image_url}
-                              alt="本题图表"
-                              className="max-h-80 max-w-full h-auto rounded border border-slate-300"
-                            />
-                          </a>
+                          <ExamFigure src={f.image_url} pageUrl={readPageImage(f.image_text)} alt="本题图表" />
                         )}
                         {ans.text && (
                           <details className="text-xs">
@@ -1833,8 +1950,10 @@ function PaperRunner() {
                         )}
                         {grade ? (
                           <FrqGradeCard grade={grade} />
+                        ) : isSchoolExam && !schoolAiGrade ? (
+                          <p className="text-xs text-muted-foreground">本场没有开启 AI 批改。</p>
                         ) : isSchoolExam ? (
-                          <p className="text-xs text-muted-foreground">学校考试不在学生端展示 AI 评分。</p>
+                          <p className="text-xs text-muted-foreground">AI 评分还没有出来。</p>
                         ) : ans.text.trim() || ans.fileUrl ? (
                           <p className="text-xs text-destructive">已作答，但 AI 评分未完成，请返回重试。</p>
                         ) : (

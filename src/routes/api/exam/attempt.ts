@@ -4,13 +4,14 @@ import { jsonErr } from "@/lib/json-api";
 import { verifyUserRequest } from "@/lib/user-auth.server";
 import { isUuid } from "@/lib/school-exam-session";
 import {
+  closeSchoolAttempt,
   finalizeIfOverdue,
   inExamWindow,
   loadAssignmentBundle,
   loadAttempt,
+  mergeSavedAttempt,
   publicAttempt,
   rosterForUser,
-  scorePaperMcq,
   type McqPick,
 } from "@/lib/school-exam.server";
 import type { Json } from "@/integrations/supabase/types";
@@ -99,11 +100,15 @@ export const Route = createFileRoute("/api/exam/attempt")({
 
         if (action === "save") {
           if (overdue) return jsonErr("考试已截止，请交卷");
+          const merged = mergeSavedAttempt(attempt, {
+            mcq_detail: body.mcq_detail,
+            frq_answers: body.frq_answers,
+          });
           const { error } = await supabaseAdmin
             .from("school_attempts")
             .update({
-              mcq_detail: (body.mcq_detail ?? attempt.mcq_detail) as Json,
-              frq_answers: (body.frq_answers ?? attempt.frq_answers) as Json,
+              mcq_detail: merged.mcq_detail as Json,
+              frq_answers: merged.frq_answers as Json,
               duration_seconds: typeof body.duration_seconds === "number" ? body.duration_seconds : attempt.duration_seconds,
             })
             .eq("id", attempt.id)
@@ -113,27 +118,20 @@ export const Route = createFileRoute("/api/exam/attempt")({
         }
 
         if (action === "submit") {
-          const picks = Array.isArray(body.mcq_detail) ? body.mcq_detail : [];
-          const scored = await scorePaperMcq(bundle.paper.id, picks);
-          const { data, error } = await supabaseAdmin
-            .from("school_attempts")
-            .update({
-              submitted_at: new Date().toISOString(),
-              mcq_detail: scored.detail as Json,
-              frq_answers: (body.frq_answers ?? attempt.frq_answers) as Json,
-              duration_seconds: typeof body.duration_seconds === "number" ? body.duration_seconds : attempt.duration_seconds,
-              mcq_total: scored.total,
-              mcq_correct: scored.correct,
-            })
-            .eq("id", attempt.id)
-            .is("submitted_at", null)
-            .select("started_at,submitted_at,mcq_total,mcq_correct,duration_seconds,mcq_detail,frq_answers")
-            .single();
-          if (error || !data) return jsonErr(error?.message ?? "交卷失败", 500);
+          const merged = mergeSavedAttempt(attempt, {
+            mcq_detail: body.mcq_detail,
+            frq_answers: body.frq_answers,
+          });
+          const closed = await closeSchoolAttempt(attempt.id, bundle.paper.id, {
+            mcq_detail: merged.mcq_detail,
+            frq_answers: merged.frq_answers,
+            duration_seconds: typeof body.duration_seconds === "number" ? body.duration_seconds : attempt.duration_seconds,
+          });
+          if (!closed?.submitted_at) return jsonErr("交卷失败", 500);
           return Response.json({
             assignment: bundle.assignment,
             paper: bundle.paper,
-            attempt: publicAttempt(data, bundle.assignment.results_published),
+            attempt: publicAttempt(closed, bundle.assignment.results_published),
           });
         }
 

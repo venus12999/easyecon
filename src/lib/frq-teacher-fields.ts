@@ -1,3 +1,5 @@
+import { stripPageImage } from "@/lib/exam-flags";
+
 const RUBRIC_MARK = "<<<RUBRIC>>>";
 
 export function splitTeacherFrq(content: string | null | undefined): { content: string; rubric_note: string } {
@@ -29,7 +31,7 @@ export function teacherGradingNote(reference: string | null | undefined, rubric:
 const TEACHER_RUBRIC_MARK = "【教师评分标准】";
 
 export function splitImageTextRubric(imageText: string | null | undefined) {
-  const raw = imageText ?? "";
+  const raw = stripPageImage(imageText);
   const at = raw.indexOf(TEACHER_RUBRIC_MARK);
   if (at < 0) return { imageText: raw.trim(), rubric: "" };
   return {

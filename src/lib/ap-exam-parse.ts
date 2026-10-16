@@ -22,7 +22,24 @@ export type ParsedExamItem = {
 };
 
 const IMAGE_HINT =
-  /graph provided|table provided|payoff matrix|shown in the graph|the graph shows|the graph provided|figure provided|combinations of donuts|based on the (table|graph|figure|payoff)|the table shows|refer to the (graph|table|figure)|the figure shows|diagram provided|见(上|下)?(图|表)|如图|如表|下图|下表|上图|上表|图示|示意图/i;
+  /graph provided|table provided|payoff matrix|shown in the graph|the graph shows|the graph provided|figure provided|figure\s*\d|combinations of donuts|based on the (table|graph|figure|payoff)|the table shows|refer to the (graph|table|figure)|the figure shows|diagram provided|见(上|下)?(图|表)|如图|如表|下图|下表|上图|上表|图示|示意图|图\s*\d/i;
+
+/** Read a printed point value. Part marks like "(2 points)" are added up. */
+export function readPrintedScore(text: string, fallback: number) {
+  const parts = [...text.matchAll(/\((\d{1,2})\s*points?\)/gi)]
+    .map((m) => Number(m[1]))
+    .filter((n) => n >= 1 && n <= 15);
+  if (parts.length > 0) {
+    const sum = parts.reduce((a, b) => a + b, 0);
+    if (sum >= 1 && sum <= 20) return sum;
+  }
+  const loose = text.match(/\b(\d{1,2})\s*points?\b/i) ?? text.match(/(?:满分|共)\s*(\d{1,2})\s*分/);
+  if (loose) {
+    const n = Number(loose[1]);
+    if (n >= 1 && n <= 20) return n;
+  }
+  return fallback;
+}
 
 /** True when the stem/content refers to a printed table/graph, not “draw a graph”. */
 export function looksLikeProvidedFigure(text: string) {
@@ -129,7 +146,7 @@ function parseMcqs(mcqText: string): ParsedExamItem[] {
       option_e: parsed.opts.E ?? "",
       correct_answer: "",
       content: "",
-      max_score: 1,
+      max_score: readPrintedScore(blob, 1),
       needs_image: IMAGE_HINT.test(blob) || (n >= sharedFrom && n <= sharedUntil),
     });
   }
@@ -164,7 +181,7 @@ function parseFrqs(frqText: string): ParsedExamItem[] {
       option_e: "",
       correct_answer: "",
       content,
-      max_score: n === 1 ? 10 : 5,
+      max_score: readPrintedScore(content, n === 1 ? 10 : 5),
       needs_image: IMAGE_HINT.test(content),
     });
     from = start + String(n).length + 1;

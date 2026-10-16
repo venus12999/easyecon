@@ -46,7 +46,7 @@ function ExamEntry() {
         attempt?: { submitted: boolean } | null;
       };
       if (!r.ok || !j.access_token || !j.refresh_token || !j.assignment || !j.paper) {
-        toast.error(j.error ?? "入场失败");
+        toast.error(j.error ?? "入场失败", { id: "exam-enter" });
         return;
       }
       const { error } = await supabase.auth.setSession({
@@ -54,7 +54,7 @@ function ExamEntry() {
         refresh_token: j.refresh_token,
       });
       if (error) {
-        toast.error(error.message);
+        toast.error(error.message, { id: "exam-enter" });
         return;
       }
       saveSchoolExamSession({
@@ -73,7 +73,7 @@ function ExamEntry() {
         search: { assignment: j.assignment.id },
       });
     } catch {
-      toast.error("网络错误，请重试");
+      toast.error("网络错误，请重试", { id: "exam-enter" });
     } finally {
       setBusy(false);
     }
@@ -95,10 +95,11 @@ function ExamEntry() {
               <Input value={studentName} onChange={(e) => setStudentName(e.target.value)} required />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">考试码</label>
+              <label className="text-xs text-muted-foreground">考试码（6 位字母和数字，例如 K7PGAD）</label>
               <Input
                 value={examCode}
                 onChange={(e) => setExamCode(e.target.value.toUpperCase())}
+                placeholder="例如 K7PGAD"
                 className="tracking-[0.3em] font-mono uppercase"
                 maxLength={8}
                 required
