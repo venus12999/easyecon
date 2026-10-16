@@ -159,10 +159,10 @@ function PaperRunner() {
 
   const remaining = (() => {
     if (!paper) return 0;
-    const paperLeft = Math.max(0, paper.total_seconds - seconds);
-    if (!isSchoolExam || !schoolEndsAt) return paperLeft;
-    const untilEnd = Math.max(0, Math.floor((Date.parse(schoolEndsAt) - Date.now()) / 1000));
-    return Math.min(paperLeft, untilEnd);
+    if (isSchoolExam && schoolEndsAt) {
+      return Math.max(0, Math.floor((Date.parse(schoolEndsAt) - Date.now()) / 1000));
+    }
+    return Math.max(0, paper.total_seconds - seconds);
   })();
   const timeUp = (phase === "running" || phase === "frq" || phase === "break") && mode === "exam" && remaining === 0;
 
@@ -603,6 +603,23 @@ function PaperRunner() {
       duration_seconds: seconds,
     };
   }
+
+  useEffect(() => {
+    if (!isSchoolExam || schoolSubmitted || phase === "idle" || phase === "done") return;
+    function onHide() {
+      if (document.visibilityState === "hidden") toast.message("已离开考试页面，请马上回到考场。");
+    }
+    function onLeave(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("beforeunload", onLeave);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("beforeunload", onLeave);
+    };
+  }, [isSchoolExam, phase, schoolSubmitted]);
 
   async function saveSchoolProgress() {
     if (!isSchoolExam || schoolSubmitted || phase === "idle" || phase === "done") return;
@@ -1059,8 +1076,12 @@ function PaperRunner() {
                 <div className="text-xs text-muted-foreground mt-0.5">简答题</div>
               </div>
               <div className="border rounded-md py-3">
-                <div className="text-2xl font-bold text-primary">{Math.round(paper.total_seconds / 60)}</div>
-                <div className="text-xs text-muted-foreground mt-0.5">分钟</div>
+                <div className="text-2xl font-bold text-primary">
+                  {isSchoolExam && schoolEndsAt
+                    ? Math.max(0, Math.ceil((Date.parse(schoolEndsAt) - Date.now()) / 60000))
+                    : Math.round(paper.total_seconds / 60)}
+                </div>
+                <div className="text-xs text-muted-foreground mt-0.5">{isSchoolExam ? "分钟内截止" : "分钟"}</div>
               </div>
             </div>
             {!user && !isSchoolExam && (

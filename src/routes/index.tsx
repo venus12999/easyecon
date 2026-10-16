@@ -14,6 +14,7 @@ import {
   ClipboardCheck,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { registeredDisplayName } from "@/lib/display-name";
 import { computeCoachSuggestion, type CoachSuggestion } from "@/lib/mascot-coach";
 import { getCompanion, COMPANION_KEY, type CompanionId } from "@/lib/mascot-lines";
 import { useSchoolExamLock } from "@/hooks/use-school-exam-lock";
@@ -136,8 +137,10 @@ function Index() {
   // 问候语
   const hour = currentDate?.getHours();
   const greeting = hour == null ? "你好" : hour < 6 ? "凌晨好" : hour < 12 ? "早上好" : hour < 14 ? "中午好" : hour < 18 ? "下午好" : "晚上好";
+  const registeredName = registeredDisplayName(user);
   const userLabel = examSession?.studentName
     ?? displayName
+    ?? (registeredName || null)
     ?? (user?.email && !user.email.endsWith("@exam.easyecon.local") ? user.email.split("@")[0] : "同学");
 
   // 选一个有题目的 KP，用于 Practice 大卡的副标题与跳转

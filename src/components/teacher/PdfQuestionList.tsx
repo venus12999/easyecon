@@ -20,6 +20,7 @@ export type TeacherPdfItem = {
   content: string;
   max_score: number;
   reviewed: boolean;
+  rubric_note?: string;
   image_url?: string | null;
   page_image_url?: string | null;
   needs_image?: boolean;
@@ -65,12 +66,16 @@ export function PdfQuestionList({
   aiRan,
   onChange,
   onRemove,
+  onReplaceImage,
+  onRecrop,
 }: {
   items: TeacherPdfItem[];
   findings: PdfAiFinding[];
   aiRan?: boolean;
   onChange: (index: number, patch: Partial<TeacherPdfItem>) => void;
   onRemove: (index: number) => void;
+  onReplaceImage?: (index: number, file: File) => void;
+  onRecrop?: (index: number) => void;
 }) {
   const [editing, setEditing] = useState<number | null>(null);
   const [onlyFlagged, setOnlyFlagged] = useState(false);
@@ -85,7 +90,13 @@ export function PdfQuestionList({
           <Button size="sm" variant={onlyFlagged ? "default" : "outline"} onClick={() => setOnlyFlagged((v) => !v)}>
             {onlyFlagged ? "查看全部题目" : `只看需修改（${findings.length}）`}
           </Button>
-          <span className="text-xs text-muted-foreground">其余题目 AI 已通过，有需要再点编辑。</span>
+          <span className="text-xs text-muted-foreground">
+            {findings.length >= items.length
+              ? items.length === 1
+                ? "这一道需要看一眼，改完再提交。"
+                : "标出的题都需要看一眼，改完再提交。"
+              : `另外 ${items.length - findings.length} 道没有被标出，有需要再点编辑。`}
+          </span>
         </div>
       )}
       {visible.map(({ it, idx, reason }) => {
@@ -148,6 +159,26 @@ export function PdfQuestionList({
                       />
                     </div>
                     <Input placeholder="题干" value={it.stem} onChange={(e) => onChange(idx, { stem: e.target.value })} />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label className="inline-flex cursor-pointer items-center rounded-md border border-border bg-white px-2.5 py-1.5 text-xs">
+                        替换图片
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          className="sr-only"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) onReplaceImage?.(idx, file);
+                            e.target.value = "";
+                          }}
+                        />
+                      </label>
+                      {onRecrop ? (
+                        <Button type="button" size="sm" variant="outline" onClick={() => onRecrop(idx)}>
+                          从本页重新截取
+                        </Button>
+                      ) : null}
+                    </div>
                     {it.kind === "mcq" ? (
                       <div className="grid gap-2 sm:grid-cols-2">
                         {(["option_a", "option_b", "option_c", "option_d", "option_e"] as const).map((k, n) => (
@@ -156,8 +187,10 @@ export function PdfQuestionList({
                         <Input placeholder="正确答案 A-E（选填）" value={it.correct_answer} onChange={(e) => onChange(idx, { correct_answer: e.target.value.toUpperCase() })} />
                       </div>
                     ) : (
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        <Textarea placeholder="大题文字" value={it.content} onChange={(e) => onChange(idx, { content: e.target.value })} />
+                      <div className="grid gap-2">
+                        <Textarea placeholder="大题文字（学生看得到）" value={it.content} onChange={(e) => onChange(idx, { content: e.target.value })} />
+                        <Textarea placeholder="参考答案（学生看不到，AI 批改会用）" value={it.correct_answer} onChange={(e) => onChange(idx, { correct_answer: e.target.value })} />
+                        <Textarea placeholder="评分标准，一行一个得分点（学生看不到）" value={it.rubric_note ?? ""} onChange={(e) => onChange(idx, { rubric_note: e.target.value })} />
                         <Input type="number" placeholder="满分" value={it.max_score} onChange={(e) => onChange(idx, { max_score: Number(e.target.value) })} />
                       </div>
                     )}

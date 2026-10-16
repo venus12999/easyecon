@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { verifyUserRequest } from "@/lib/user-auth.server";
 import { consumeAiQuota, membershipEnvironment, releaseAiQuota } from "@/lib/membership.server";
 import { isAdminEmailServer } from "@/lib/admin-emails.server";
+import { splitImageTextRubric } from "@/lib/frq-teacher-fields";
 
 function err(msg: string, status = 400) {
   return new Response(JSON.stringify({ error: msg }), {
@@ -170,16 +171,18 @@ export const Route = createFileRoute("/api/frq/grade")({
          if (!quota.allowed) return err("membership_quota_exhausted", 403);
 
         const maxScore = frq.max_score ?? 9;
+        const imageParts = splitImageTextRubric(frq.image_text);
+        const gradingNote = rubric?.rubric_note?.trim() || imageParts.rubric;
         const userTextParts: string[] = [
           `【题号】Question ${frq.sort_order}${frq.title ? ` · ${frq.title}` : ""}`,
           `【满分】${maxScore} 分`,
           `【题目原文】\n${frq.content ?? ""}`,
         ];
-        if (frq.image_text) userTextParts.push(`【题图中的文字】\n${frq.image_text}`);
-        if (rubric?.rubric_note) {
+        if (imageParts.imageText) userTextParts.push(`【题图中的文字】\n${imageParts.imageText}`);
+        if (gradingNote) {
           userTextParts.push(
-            `【College Board 官方评分要点｜最高优先级】\n` +
-              `以下 rubric 是本题随附的官方得分点。必须逐条对照评分，不得自行新增、合并、省略或改写评分点；每个 breakdown 项必须与其中一个得分点一一对应。\n\n${rubric.rubric_note}`,
+            `【评分要点｜最高优先级】\n` +
+              `以下内容是本题的参考答案和评分标准。必须逐条对照评分，不得自行新增、合并、省略或改写评分点；每个 breakdown 项必须与其中一个得分点一一对应。\n\n${gradingNote}`,
           );
         }
         if (hasText) userTextParts.push(`【学生文字答案】\n${body.answer_text}`);

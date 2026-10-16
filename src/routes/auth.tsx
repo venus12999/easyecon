@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate, useRouter, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
+import type { EmailOtpType } from "@supabase/supabase-js";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,13 @@ const schema = z.object({
   password: z.string().min(6, "密码至少 6 位").max(72),
 });
 
+const OTP_TYPES = new Set<EmailOtpType>(["signup", "invite", "magiclink", "recovery", "email_change", "email"]);
+const confirmLocks = new Set<string>();
+
+function confirmRedirect(nextPath: string) {
+  return `${window.location.origin}/auth?next=${encodeURIComponent(nextPath)}`;
+}
+
 function AuthPage() {
   const nav = useNavigate();
   const router = useRouter();
@@ -47,6 +55,8 @@ function AuthPage() {
   const [forgot, setForgot] = useState(false);
   const [remember, setRemember] = useState(true);
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [confirmError, setConfirmError] = useState("");
   const teacherEntry = audience === "teacher";
   const announceAuth = useRef<string | null>(null);
 
@@ -101,15 +111,46 @@ function AuthPage() {
   useEffect(() => {
     if (!user) return;
     const announce = announceAuth.current;
-    if (!announce) return;
-    announceAuth.current = null;
-    void goAfterAuth(announce);
+    if (announce) {
+      announceAuth.current = null;
+      void goAfterAuth(announce);
+      return;
+    }
+    const next = safeRedirectPath(new URLSearchParams(window.location.search).get("next"));
+    if (!next || new URLSearchParams(window.location.search).has("token_hash")) return;
+    router.history.push(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   useEffect(() => {
     setRemember(getRememberPreference());
   }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tokenHash = params.get("token_hash");
+    if (!tokenHash || confirmLocks.has(tokenHash)) return;
+    confirmLocks.add(tokenHash);
+    const rawType = params.get("type");
+    const otpType: EmailOtpType = rawType && OTP_TYPES.has(rawType as EmailOtpType) ? (rawType as EmailOtpType) : "signup";
+    const next = safeRedirectPath(params.get("next"));
+    setConfirming(true);
+    setConfirmError("");
+    void supabase.auth.verifyOtp({ token_hash: tokenHash, type: otpType }).then(({ error }) => {
+      if (error) {
+        confirmLocks.delete(tokenHash);
+        setConfirming(false);
+        setConfirmError("这个验证链接无效，或已经用过。请重新发送验证邮件。");
+        return;
+      }
+      window.history.replaceState({}, "", "/auth");
+      if (next) {
+        router.history.push(next);
+        return;
+      }
+      void nav({ to: "/" });
+    });
+  }, [nav, router]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -135,7 +176,7 @@ function AuthPage() {
           email: parsed.data.email,
           password: parsed.data.password,
           options: {
-            emailRedirectTo: `${window.location.origin}${nextPath}`,
+            emailRedirectTo: confirmRedirect(nextPath),
             data: { account_role: audience, display_name: name },
           },
         });
@@ -193,7 +234,7 @@ function AuthPage() {
     const { error } = await supabase.auth.resend({
       type: "signup",
       email: pendingEmail,
-      options: { emailRedirectTo: `${window.location.origin}${teacherEntry ? "/teacher" : "/"}` },
+      options: { emailRedirectTo: confirmRedirect(teacherEntry ? "/teacher" : "/") },
     });
     setBusy(false);
     if (error) return toast.error("发送失败，请稍后重试");
@@ -215,7 +256,7 @@ function AuthPage() {
 
         <Card className="border-white/50 shadow-xl">
           <CardContent className="p-6">
-            {!pendingEmail && (
+            {!pendingEmail && !confirming && (
               <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl bg-muted/70 p-1">
                 <button
                   type="button"
@@ -235,7 +276,9 @@ function AuthPage() {
             )}
             <div className="mb-4 text-center">
               <h1 className="text-lg font-semibold">
-                {pendingEmail
+                {confirming
+                  ? "正在确认邮箱"
+                  : pendingEmail
                   ? "注册成功，请验证邮箱"
                   : forgot
                     ? "找回密码"
@@ -244,8 +287,10 @@ function AuthPage() {
                       : tab === "register" ? "学生注册" : "学生登录"}
               </h1>
               <p className="mt-1 text-xs text-muted-foreground">
-                {pendingEmail
-                  ? `验证邮件已发到 ${pendingEmail}。打开邮件里的链接后，再用这个邮箱登录。没看到邮件时，先看垃圾箱。`
+                {confirming
+                  ? "马上就好，确认后会自动进入。"
+                  : pendingEmail
+                  ? `验证邮件已发到 ${pendingEmail}。打开邮件，点确认按钮，会自动回到本站。没看到邮件时，先看垃圾箱。`
                   : forgot
                     ? "输入注册邮箱，我们会发送重设链接"
                     : teacherEntry
@@ -253,7 +298,15 @@ function AuthPage() {
                       : tab === "register" ? "注册后进入学习主界面，开始 AP 微观经济练习" : "登录后继续你的学习进度"}
               </p>
             </div>
-            {pendingEmail ? (
+            {confirmError && !confirming && (
+              <p className="mb-3 text-center text-sm text-destructive">{confirmError}</p>
+            )}
+            {confirming ? (
+              <div className="flex flex-col items-center gap-3 py-6 text-sm text-muted-foreground">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                正在确认邮箱
+              </div>
+            ) : pendingEmail ? (
               <div className="space-y-3">
                 <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-3 text-center text-sm font-medium break-all">
                   {pendingEmail}

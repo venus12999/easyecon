@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,30 +36,87 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/use-auth";
 import { authFetch } from "@/lib/auth-fetch";
-import { applyKnownApAnswerKey, looksLikeProvidedFigure, parseApExamPages } from "@/lib/ap-exam-parse";
+import { applyKnownApAnswerKey, looksLikeProvidedFigure, parseApExamPages, type ParsedExamItem } from "@/lib/ap-exam-parse";
+import { splitTeacherFrq } from "@/lib/frq-teacher-fields";
 import { cropFigureFromExamPage, cropImageBlob, cropRectsForQuestions, cropUrlFromPage, refineFigureBlob } from "@/lib/exam-page-crop";
 import { PdfQuestionList, type PdfAiFinding, type TeacherPdfItem } from "@/components/teacher/PdfQuestionList";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { useAccountLabel } from "@/lib/display-name";
+
+async function assertStoredImage(url: string) {
+  let detail = "";
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const res = await fetch(url, { cache: "no-store" });
+    if (res.ok) {
+      await res.body?.cancel();
+      return;
+    }
+    detail = await res.text().catch(() => "");
+    if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 400));
+  }
+  if (detail.includes("Object not found") || detail.includes("NoSuchKey")) {
+    throw new Error("页图没有写进存储（读取返回 400，文件不存在）");
+  }
+  throw new Error("页图读取失败");
+}
 
 async function putAssignmentPng(classId: string, importId: string, filename: string, blob: Blob) {
   const path = `assignments/${classId}/${importId}/${filename}`;
   const { error } = await supabase.storage.from("question-images").upload(path, blob, {
-    contentType: "image/png",
+    contentType: blob.type || "image/png",
     upsert: true,
   });
-  if (!error) return supabase.storage.from("question-images").getPublicUrl(path).data.publicUrl;
-  const crop = filename.match(/^(mcq|frq)-(\d+)\.png$/i);
-  if (!crop) throw new Error(error.message);
+  if (!error) {
+    const url = supabase.storage.from("question-images").getPublicUrl(path).data.publicUrl;
+    try {
+      await assertStoredImage(url);
+      return url;
+    } catch {
+      /* 客户端显示上传成功，但公开地址读不到时改走服务端再写一次 */
+    }
+  }
   const fd = new FormData();
-  fd.append("file", new File([blob], filename, { type: "image/png" }));
+  fd.append("file", new File([blob], filename, { type: blob.type || "image/png" }));
   fd.append("import_id", importId);
-  fd.append("crop_kind", crop[1].toLowerCase());
-  fd.append("sort_order", crop[2]);
+  const crop = filename.match(/^(mcq|frq)-(\d+)\.png$/i);
+  if (crop) {
+    fd.append("crop_kind", crop[1].toLowerCase());
+    fd.append("sort_order", crop[2]);
+  } else {
+    const pageNumber = filename.match(/page-(\d+)/i)?.[1];
+    if (!pageNumber) throw new Error(error?.message ?? "无法上传图片");
+    fd.append("page_number", pageNumber);
+  }
   const up = await authFetch("/api/teacher/pdf", { method: "POST", body: fd });
   const uj = await up.json().catch(() => ({}));
-  if (!up.ok || !uj.image_url) throw new Error(uj.error ?? error.message);
+  if (!up.ok || !uj.image_url) throw new Error(uj.error ?? error?.message ?? "图片上传失败");
+  await assertStoredImage(uj.image_url as string);
   return uj.image_url as string;
+}
+
+const TEST_ROSTER = [
+  { student_id: "TEST01", student_name: "测试学生一" },
+  { student_id: "TEST02", student_name: "测试学生二" },
+  { student_id: "TEST03", student_name: "测试学生三" },
+];
+
+async function pageToJpeg(blob: Blob) {
+  const bmp = await createImageBitmap(blob);
+  const scale = Math.min(1, 1400 / bmp.width);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(bmp.width * scale));
+  canvas.height = Math.max(1, Math.round(bmp.height * scale));
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("无法压缩页图");
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+  bmp.close();
+  const jpeg = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("页图压缩失败"))), "image/jpeg", 0.72);
+  });
+  return jpeg;
 }
 
 export const Route = createFileRoute("/teacher")({
@@ -243,11 +300,11 @@ function paperPickerLabel(p: Paper) {
 }
 
 function importChipLabel(imp: PdfImport) {
-  const day = imp.created_at
-    ? new Date(imp.created_at).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })
+  const when = imp.created_at
+    ? new Date(imp.created_at).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })
     : "";
   const status = imp.status === "published" ? "已提交" : imp.status === "rendered" ? "未提交" : imp.status;
-  return `${imp.filename.replace(/\.pdf$/i, "")} · ${status}${day ? ` · ${day}` : ""}`;
+  return `${imp.filename.replace(/\.pdf$/i, "")} · ${status}${when ? ` · ${when}` : ""} · ${imp.id.slice(0, 4)}`;
 }
 
 function emptyItem(page: number, order: number, kind: "mcq" | "frq"): PdfItem {
@@ -265,11 +322,13 @@ function emptyItem(page: number, order: number, kind: "mcq" | "frq"): PdfItem {
     content: "",
     max_score: 9,
     reviewed: false,
+    rubric_note: "",
   };
 }
 
 function TeacherHome() {
   const { user, loading: authLoading, signOut } = useAuth();
+  const accountLabel = useAccountLabel("教师");
   const [denied, setDenied] = useState(false);
   const [checkFailed, setCheckFailed] = useState(false);
   const [ready, setReady] = useState(false);
@@ -281,7 +340,8 @@ function TeacherHome() {
   const [source, setSource] = useState<"existing" | "random">("existing");
   const [paperId, setPaperId] = useState("");
   const [startsAt, setStartsAt] = useState(() => toLocalInput(new Date()));
-  const [endsAt, setEndsAt] = useState(() => toLocalInput(new Date(Date.now() + 2 * 60 * 60 * 1000)));
+  const [examMinutes, setExamMinutes] = useState(70);
+  const [endsAt, setEndsAt] = useState(() => toLocalInput(new Date(Date.now() + 70 * 60 * 1000)));
   const [creating, setCreating] = useState(false);
   const [gradeId, setGradeId] = useState("");
   const [gradeRows, setGradeRows] = useState<GradeRow[]>([]);
@@ -292,6 +352,9 @@ function TeacherHome() {
   const [items, setItems] = useState<PdfItem[]>([]);
   const [pdfTitle, setPdfTitle] = useState("");
   const [pdfBusy, setPdfBusy] = useState("");
+  const [pdfNotice, setPdfNotice] = useState("");
+  const [pdfClassId, setPdfClassId] = useState("");
+  const pageBlobs = useRef(new Map<number, Blob>());
   const [pdfFindings, setPdfFindings] = useState<PdfAiFinding[]>([]);
   const [pdfAiRan, setPdfAiRan] = useState(false);
   const [pdfAiDone, setPdfAiDone] = useState(false);
@@ -416,6 +479,20 @@ function TeacherHome() {
     }
     setRoster(j.roster ?? []);
     toast.success(`花名册 ${j.roster?.length ?? 0} 人`);
+  }
+
+  async function importTestRoster() {
+    const r = await authFetch("/api/teacher/class", {
+      method: "POST",
+      body: JSON.stringify({ rows: TEST_ROSTER, replace: false }),
+    });
+    const j = await r.json();
+    if (!r.ok) {
+      toast.error(j.error ?? "测试学号导入失败");
+      return;
+    }
+    setRoster(j.roster ?? []);
+    toast.success("已导入 TEST01、TEST02、TEST03。入场时姓名分别填「测试学生一」「测试学生二」「测试学生三」。");
   }
 
   function openStudentEditor(row?: RosterRow) {
@@ -599,9 +676,11 @@ function TeacherHome() {
       setPdfAiRan(true);
       setPdfAiDone(true);
       if (findings.length === 0) {
-        toast.success("AI 没有发现明显切题问题，可以直接提交。有需要再点编辑。");
+        toast.success(current.length === 1 ? "AI 没有发现这道题有明显问题。" : "AI 没有发现明显切题问题，可以直接提交。有需要再点编辑。");
+      } else if (findings.length >= current.length) {
+        toast.message(current.length === 1 ? "AI 标出这道题需要看一眼。" : `AI 标出全部 ${findings.length} 道题需要看一眼。`);
       } else {
-        toast.message(`AI 标出 ${findings.length} 道需要看一眼的题，其余不用逐题勾选。`);
+        toast.message(`AI 标出 ${findings.length} 道需要看一眼，另外 ${current.length - findings.length} 道没有被标出。`);
       }
     } catch {
       setPdfFindings([]);
@@ -613,8 +692,32 @@ function TeacherHome() {
     }
   }
 
+  async function requestVisionParse(
+    importId: string,
+    raster: { page_number: number; blob: Blob; extracted_text: string }[],
+  ): Promise<{ items: ParsedExamItem[]; error?: string }> {
+    const fd = new FormData();
+    fd.append("action", "vision-parse");
+    fd.append("import_id", importId);
+    for (const page of raster.slice(0, 8)) {
+      const jpeg = await pageToJpeg(page.blob);
+      fd.append("files", new File([jpeg], `page-${page.page_number}.jpg`, { type: "image/jpeg" }));
+      fd.append(`text-${page.page_number}`, page.extracted_text.slice(0, 8000));
+    }
+    const r = await authFetch("/api/teacher/pdf", {
+      method: "POST",
+      body: fd,
+      signal: AbortSignal.timeout(90000),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) return { items: [], error: j.error ?? "AI 看页图失败" };
+    const items = (Array.isArray(j.items) ? j.items : []) as ParsedExamItem[];
+    return { items, error: items.length ? "" : j.error ?? "AI 没有认出题目" };
+  }
+
   async function onPdfFile(file: File) {
     setPdfBusy("正在把每一页渲染成图片…");
+    setPdfNotice("");
     setPdfAiDone(false);
     setPdfAiRan(false);
     setPdfFindings([]);
@@ -630,18 +733,17 @@ function TeacherHome() {
       if (!created.ok) throw new Error(cj.error ?? "创建失败");
       const importId = cj.import.id as string;
       const classId = String(cj.import.class_id ?? "");
+      setPdfClassId(classId);
+      pageBlobs.current = new Map(raster.map((page) => [page.page_number, page.blob]));
+      const storageNotes: string[] = [];
       for (const page of raster) {
         setPdfBusy(`上传第 ${page.page_number} 页…`);
-        let imageUrl = "";
-        let clientErr = "";
-        if (classId) {
-          try {
-            imageUrl = await putAssignmentPng(classId, importId, `page-${page.page_number}.png`, page.blob);
-          } catch (e) {
-            clientErr = e instanceof Error ? e.message : "存储失败";
-          }
+        if (!classId) {
+          storageNotes.push(`第 ${page.page_number} 页没有班级，页图没法保存`);
+          continue;
         }
-        if (imageUrl) {
+        try {
+          const imageUrl = await putAssignmentPng(classId, importId, `page-${page.page_number}.png`, page.blob);
           const rec = await authFetch("/api/teacher/pdf", {
             method: "POST",
             body: JSON.stringify({
@@ -654,29 +756,27 @@ function TeacherHome() {
           });
           if (!rec.ok) {
             const rj = await rec.json().catch(() => ({}));
-            throw new Error(rj.error ?? `第 ${page.page_number} 页记录失败`);
+            storageNotes.push(`第 ${page.page_number} 页记录失败：${rj.error ?? "未知错误"}`);
           }
-        } else {
-          const fd = new FormData();
-          fd.append("file", new File([page.blob], `page-${page.page_number}.png`, { type: "image/png" }));
-          fd.append("import_id", importId);
-          fd.append("page_number", String(page.page_number));
-          fd.append("extracted_text", page.extracted_text);
-          const up = await authFetch("/api/teacher/pdf", { method: "POST", body: fd });
-          if (!up.ok) {
-            const uj = await up.json().catch(() => ({}));
-            throw new Error(uj.error ?? clientErr ?? `第 ${page.page_number} 页上传失败`);
-          }
+        } catch (e) {
+          storageNotes.push(`第 ${page.page_number} 页：${e instanceof Error ? e.message : "上传失败"}`);
         }
       }
       const opened = await openImport(importId);
       await loadPdfs();
-      const parsed = applyKnownApAnswerKey(
+      let parsed = applyKnownApAnswerKey(
         parseApExamPages(
           raster.map((page) => ({ page_number: page.page_number, extracted_text: page.extracted_text })),
         ),
         file.name,
       );
+      let visionError = "";
+      if (parsed.length === 0) {
+        setPdfBusy("文字对不上官方试卷格式，正在让 AI 看页图…");
+        const vision = await requestVisionParse(importId, raster);
+        parsed = applyKnownApAnswerKey(vision.items, file.name);
+        visionError = vision.error ?? "";
+      }
       if (parsed.length > 0) {
         const rects = cropRectsForQuestions(raster, parsed);
         const imageByKey: Record<string, string> = {};
@@ -741,6 +841,7 @@ function TeacherHome() {
             content: it.content,
             max_score: it.max_score,
             reviewed: true,
+            rubric_note: "",
             needs_image: it.needs_image,
             image_url: crop,
             page_image_url: pageUrl,
@@ -749,13 +850,15 @@ function TeacherHome() {
         setItems(nextItems);
         const mcq = parsed.filter((it) => it.kind === "mcq").length;
         const frq = parsed.filter((it) => it.kind === "frq").length;
+        const storageNote = storageNotes.length ? `页图没有保存：${storageNotes.join("；")}。` : "";
+        if (storageNote) setPdfNotice(storageNote);
         if (cropFails > 0) {
-          toast.message(`已切出 ${mcq} 道选择题、${frq} 道大题，截到 ${figures} 张图表。${cropFails} 道带图题没截到，请手工补。`);
+          toast.message(`已切出 ${mcq} 道选择题、${frq} 道大题，截到 ${figures} 张图表。${cropFails} 道带图题没截到，请手工补。${storageNote}`);
         } else {
           toast.success(`已切出 ${mcq} 道选择题、${frq} 道大题，并从整页截出 ${figures} 张对应图表。AI 正在扫一眼切题质量。`);
         }
         setPdfBusy("保存切题结果…");
-        await authFetch("/api/teacher/pdf", {
+        const saved = await authFetch("/api/teacher/pdf", {
           method: "POST",
           body: JSON.stringify({
             action: "save-items",
@@ -763,9 +866,17 @@ function TeacherHome() {
             items: nextItems,
           }),
         });
+        if (!saved.ok) {
+          const sj = await saved.json().catch(() => ({}));
+          throw new Error(sj.error ?? "题目没能保存");
+        }
         await runPdfAi(importId, nextItems);
       } else {
-        toast.success("未能自动切题，请手工加题后再提交");
+        const storageNote = storageNotes.length ? `页图也没保存：${storageNotes.join("；")}。` : "";
+        const msg = `${visionError || "没有切出题目。这份 PDF 的文字对不上官方试卷的「1. (A)(B)(C)(D)」格式，AI 也没有从页图里认出完整题目。"} ${storageNote}草稿已留下，可以手工加题。`.trim();
+        setPdfNotice(msg);
+        setItems([]);
+        toast.error("没有切出题目");
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "PDF 处理失败");
@@ -776,6 +887,7 @@ function TeacherHome() {
 
   async function openImport(id: string): Promise<{ pages: PdfPage[] } | null> {
     setActiveImport(id);
+    setPdfNotice("");
     const r = await authFetch(`/api/teacher/pdf?id=${id}`);
     const j = await r.json();
     if (!r.ok) {
@@ -783,10 +895,12 @@ function TeacherHome() {
       return null;
     }
     setPages(j.pages ?? []);
+    setPdfClassId(String(j.import?.class_id ?? ""));
     const loadedPages = (j.pages ?? []) as PdfPage[];
-    const nextItems: PdfItem[] = (j.items ?? []).map((it: PdfItem & { stem?: string | null }) => {
+    const nextItems: PdfItem[] = (j.items ?? []).map((it: PdfItem & { stem?: string | null; content?: string | null }) => {
+        const unpacked = it.kind === "frq" ? splitTeacherFrq(it.content) : { content: it.content ?? "", rubric_note: it.rubric_note ?? "" };
         const page = loadedPages.find((p) => p.page_number === it.page_number);
-        const blob = `${it.stem ?? ""} ${it.content ?? ""}`;
+        const blob = `${it.stem ?? ""} ${unpacked.content}`;
         const needs = it.needs_image ?? looksLikeProvidedFigure(blob);
         const stored = it.image_url && !isPageShot(it.image_url) ? it.image_url : null;
         const guessed = needs && page ? cropUrlFromPage(page.image_url, it.kind, it.sort_order) : null;
@@ -800,7 +914,8 @@ function TeacherHome() {
           option_d: it.option_d ?? "",
           option_e: it.option_e ?? "",
           correct_answer: it.correct_answer ?? "",
-          content: it.content ?? "",
+          content: unpacked.content,
+          rubric_note: unpacked.rubric_note,
           image_url: stored || guessed,
           page_image_url: page?.image_url ?? null,
           needs_image: needs,
@@ -914,6 +1029,46 @@ function TeacherHome() {
     }
     await loadPdfs();
     toast.success("未提交的导入已清理");
+  }
+
+  async function replaceItemImage(index: number, file: File) {
+    const it = items[index];
+    if (!it) return;
+    const local = URL.createObjectURL(file);
+    setItems((xs) => xs.map((row, i) => (i === index ? { ...row, image_url: local, needs_image: true } : row)));
+    if (!pdfClassId || !activeImport) return;
+    try {
+      const uploaded = await putAssignmentPng(pdfClassId, activeImport, `${it.kind}-${it.sort_order}.png`, file);
+      setItems((xs) => xs.map((row, i) => (i === index ? { ...row, image_url: uploaded, needs_image: true } : row)));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "图片没能保存，先用本地预览");
+    }
+  }
+
+  async function recropItem(index: number) {
+    const it = items[index];
+    if (!it) return;
+    const page = pages.find((p) => p.page_number === it.page_number);
+    let blob = pageBlobs.current.get(it.page_number) ?? null;
+    if (!blob && page?.image_url) {
+      const res = await fetch(page.image_url);
+      if (!res.ok) {
+        toast.error("这一页的图片读不出来。请用「替换图片」上传截图。");
+        return;
+      }
+      blob = await res.blob();
+    }
+    if (!blob) {
+      toast.error("没有这一页的图片，请用「替换图片」上传截图。");
+      return;
+    }
+    try {
+      const hint = it.kind === "frq" ? "frq" : "any";
+      const next = await cropFigureFromExamPage(blob, hint);
+      await replaceItemImage(index, new File([next], `${it.kind}-${it.sort_order}.png`, { type: "image/png" }));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "重新截取失败");
+    }
   }
 
   async function saveAndPublish() {
@@ -1058,7 +1213,6 @@ function TeacherHome() {
   }
 
   const copy = PAGE_COPY[page];
-  const accountLabel = user.email?.split("@")[0] ?? "教师";
   const todayLabel = new Date().toLocaleDateString("zh-CN", {
     weekday: "short",
     year: "numeric",
@@ -1093,15 +1247,16 @@ function TeacherHome() {
   function go(next: TeacherPage) {
     setPage(next);
     if (next === "exam" && examStep === "edit" && !title.trim()) {
-      setStartsAt(toLocalInput(new Date()));
-      setEndsAt(toLocalInput(new Date(Date.now() + 2 * 60 * 60 * 1000)));
+      const start = new Date();
+      setStartsAt(toLocalInput(start));
+      setExamMinutes(70);
+      setEndsAt(toLocalInput(new Date(start.getTime() + 70 * 60 * 1000)));
     }
   }
 
   function reviewExam() {
     if (roster.length === 0) {
-      toast.error("请先导入学生名册，再布置考试。");
-      go("roster");
+      toast.error("还没有学生。可以先点「导入测试学号」，或去学生名册粘贴名单。");
       return;
     }
     if (!title.trim()) {
@@ -1116,6 +1271,10 @@ function TeacherHome() {
     const ends = Date.parse(endsAt);
     if (!Number.isFinite(starts) || !Number.isFinite(ends) || ends <= starts) {
       toast.error("请设置有效的开考和截止时间");
+      return;
+    }
+    if (examMinutes < 10 || examMinutes > 240) {
+      toast.error("答题时长请设在 10 到 240 分钟之间");
       return;
     }
     setExamStep("review");
@@ -1341,6 +1500,7 @@ function TeacherHome() {
                 <p className="mt-2 text-[11px] text-muted-foreground">支持逗号或制表符分隔。表头含「学号」时会自动跳过。</p>
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                   <Button onClick={() => void importRoster(false)}>追加导入</Button>
+                  <Button type="button" variant="outline" onClick={() => void importTestRoster()}>导入测试学号</Button>
                   <Button variant="outline" onClick={() => void importRoster(true)}>覆盖导入</Button>
                 </div>
               </section>
@@ -1452,8 +1612,12 @@ function TeacherHome() {
                         <dt className="text-muted-foreground">考试名称</dt><dd className="font-medium">{title}</dd>
                         <dt className="text-muted-foreground">班级与人数</dt><dd className="font-medium">本班，共 {roster.length} 人</dd>
                         <dt className="text-muted-foreground">试卷</dt><dd className="font-medium">{paperLabel}</dd>
+                        <dt className="text-muted-foreground">答题时长</dt>
+                        <dd className="font-medium">{examMinutes} 分钟</dd>
                         <dt className="text-muted-foreground">考试时间</dt>
                         <dd className="font-medium">{new Date(startsAt).toLocaleString()} 至 {new Date(endsAt).toLocaleString()}</dd>
+                        <dt className="text-muted-foreground">防作弊</dt>
+                        <dd className="font-medium">离开页面会提醒，关闭页面前会再确认一次</dd>
                       </dl>
                     </div>
                     <div className="flex flex-col gap-2 border-t border-white/70 pt-4 sm:flex-row sm:justify-between">
@@ -1469,8 +1633,13 @@ function TeacherHome() {
                     <Field label="考试名称">
                       <Input placeholder="例如：Unit 2 供需与弹性测验" value={title} onChange={(e) => setTitle(e.target.value)} />
                     </Field>
-                    <Field label="选择班级">
-                      <Input readOnly value={roster.length ? `本班（${roster.length} 人）` : "请先导入学生名册"} />
+                    <Field label="班级" hint="一个老师目前对应一个班。有学生后才能发布。">
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <Input readOnly value={roster.length ? `本班（${roster.length} 人）` : "还没有学生"} className="flex-1" />
+                        {roster.length === 0 ? (
+                          <Button type="button" variant="outline" onClick={() => void importTestRoster()}>导入测试学号</Button>
+                        ) : null}
+                      </div>
                     </Field>
                     <Field label="试卷来源">
                       <div className="flex flex-wrap gap-2">
@@ -1523,16 +1692,55 @@ function TeacherHome() {
                         这是公开卷库。未走考试入场的学生仍可能在「模考」里练习同一份卷。课上请只用考试码入场；随机卷或 PDF 导入卷不会出现在公开模考列表。
                       </p>
                     )}
-                    <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="grid gap-3 sm:grid-cols-3">
                       <Field label="开始时间">
-                        <Input type="datetime-local" className="min-w-0 w-full text-sm" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} />
+                        <Input
+                          type="datetime-local"
+                          className="min-w-0 w-full text-sm"
+                          value={startsAt}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setStartsAt(value);
+                            const start = Date.parse(value);
+                            if (Number.isFinite(start)) setEndsAt(toLocalInput(new Date(start + examMinutes * 60 * 1000)));
+                          }}
+                        />
+                      </Field>
+                      <Field label="答题时长（分钟）" hint="改时长会重算截止时间。">
+                        <Input
+                          type="number"
+                          min={10}
+                          max={240}
+                          value={examMinutes}
+                          onChange={(e) => {
+                            const mins = Number(e.target.value);
+                            if (!Number.isFinite(mins)) return;
+                            setExamMinutes(mins);
+                            if (mins < 10 || mins > 240) return;
+                            const start = Date.parse(startsAt);
+                            if (Number.isFinite(start)) setEndsAt(toLocalInput(new Date(start + mins * 60 * 1000)));
+                          }}
+                        />
                       </Field>
                       <Field label="截止时间">
-                        <Input type="datetime-local" className="min-w-0 w-full text-sm" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
+                        <Input
+                          type="datetime-local"
+                          className="min-w-0 w-full text-sm"
+                          value={endsAt}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setEndsAt(value);
+                            const start = Date.parse(startsAt);
+                            const end = Date.parse(value);
+                            if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
+                              setExamMinutes(Math.max(1, Math.round((end - start) / 60000)));
+                            }
+                          }}
+                        />
                       </Field>
                     </div>
                     <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-900">
-                      学生使用学号和考试码进入。未交卷的学生可在截止前重新进入；已提交的答卷不能重复提交。
+                      学生用学号和考试码进入。倒计时到截止时间结束；开始得晚，剩下的时间就更短。离开考试页面会提醒，关闭页面前会再确认一次。未交卷可在截止前重新进入；已提交的答卷不能重复提交。
                     </p>
                     <div className="flex flex-col gap-3 border-t border-white/70 pt-4 sm:flex-row sm:items-center sm:justify-between">
                       <span className="text-xs text-muted-foreground">预计考试人数：{roster.length} 人</span>
@@ -1796,15 +2004,29 @@ function TeacherHome() {
                       <p className="mt-3 text-xs text-muted-foreground">请等 AI 审完，或点「再跑一遍 AI 审核」后再提交。</p>
                     )}
                     {pdfFindings.length > 0 && (
-                      <p className="mt-3 text-xs text-amber-800">AI 标出 {pdfFindings.length} 道题需要看一眼，其余题目可以直接用。</p>
+                      <p className="mt-3 text-xs text-amber-800">
+                        {pdfFindings.length >= items.length
+                          ? items.length === 1
+                            ? "AI 标出这道题需要看一眼。改完再提交。"
+                            : `AI 标出全部 ${pdfFindings.length} 道题需要看一眼。改完再提交。`
+                          : `AI 标出 ${pdfFindings.length} 道题需要看一眼，另外 ${items.length - pdfFindings.length} 道没有被标出。`}
+                      </p>
                     )}
                   </section>
+                  {pdfNotice && (
+                    <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-900">{pdfNotice}</p>
+                  )}
+                  {items.length === 0 && (
+                    <p className="rounded-xl border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">这份草稿里还没有题目。</p>
+                  )}
                   <PdfQuestionList
                     items={items}
                     findings={pdfFindings}
                     aiRan={pdfAiRan}
                     onChange={(idx, patch) => setItems((xs) => xs.map((x, i) => (i === idx ? { ...x, ...patch } : x)))}
                     onRemove={(idx) => setItems((xs) => xs.filter((_, i) => i !== idx))}
+                    onReplaceImage={(idx, file) => void replaceItemImage(idx, file)}
+                    onRecrop={(idx) => void recropItem(idx)}
                   />
                 </div>
               )}

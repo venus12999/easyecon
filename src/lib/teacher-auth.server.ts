@@ -23,17 +23,16 @@ export async function uploadTeacherAssignmentImage(jwt: string, path: string, fi
     if (!error) return { error: null, publicUrl: `${url}/storage/v1/object/public/question-images/${path}` };
   }
   const objectUrl = `${url}/storage/v1/object/question-images/${path}`;
-  const form = new FormData();
-  form.append("cacheControl", "3600");
-  form.append("", file);
+  const bytes = new Uint8Array(await file.arrayBuffer());
   const headers: Record<string, string> = {
     Authorization: `Bearer ${jwt}`,
     apikey: anon,
+    "Content-Type": file.type || "image/png",
     "x-upsert": "true",
   };
-  let res = await fetch(objectUrl, { method: "POST", headers, body: form });
+  let res = await fetch(objectUrl, { method: "POST", headers, body: bytes });
   if (!res.ok) {
-    res = await fetch(objectUrl, { method: "PUT", headers, body: form });
+    res = await fetch(objectUrl, { method: "PUT", headers, body: bytes });
   }
   if (!res.ok) {
     const text = await res.text();

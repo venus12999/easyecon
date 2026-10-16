@@ -16,6 +16,7 @@ import { clearSchoolExamSession, isExamLocalEmail, markExamExited } from "@/lib/
 import { authFetch } from "@/lib/auth-fetch";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { useAccountLabel } from "@/lib/display-name";
 
 export function TopNav() {
   const { user, loading, signOut } = useAuth();
@@ -27,7 +28,7 @@ export function TopNav() {
   const [showTeacher, setShowTeacher] = useState(false);
   const { session: examSession, locked: examLocked, refresh } = useSchoolExamLock();
   const nav = useNavigate();
-  const label = user?.email?.split("@")[0] ?? "";
+  const label = useAccountLabel();
 
   useEffect(() => {
     if (!user || user.email?.endsWith("@exam.easyecon.local")) {

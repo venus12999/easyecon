@@ -108,6 +108,20 @@ export const Route = createFileRoute("/api/teacher/assignments")({
           .select("id,title,exam_code,starts_at,ends_at,results_published,paper_id")
           .single();
         if (error || !data) return jsonErr(error?.message ?? "创建失败", 500);
+        if (process.env.SUPABASE_SERVICE_ROLE_KEY && paperId) {
+          const minutes = Math.max(10, Math.round((ends - starts) / 60000));
+          const { data: paper } = await db.from("mock_papers").select("slug").eq("id", paperId).maybeSingle();
+          if (paper?.slug?.startsWith("school-")) {
+            const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+            await supabaseAdmin
+              .from("mock_papers")
+              .update({
+                total_seconds: minutes * 60,
+                frq_seconds: Math.max(15 * 60, minutes * 60 - 10 * 60),
+              })
+              .eq("id", paperId);
+          }
+        }
         return Response.json({ assignment: data });
       },
       PATCH: async ({ request }) => {

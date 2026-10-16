@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { jsonErr } from "@/lib/json-api";
+import { packTeacherFrq, splitTeacherFrq, teacherGradingNote, withTeacherRubric } from "@/lib/frq-teacher-fields";
+import { fileToVisionPage, visionParseExamPages } from "@/lib/pdf-vision.server";
 import { ensureTeacherClass, getTeacherDb, uploadTeacherAssignmentImage, verifyTeacherRequest } from "@/lib/teacher-auth.server";
 import { isUuid } from "@/lib/school-exam-session";
 
@@ -24,6 +26,7 @@ type PdfItemIn = {
   reviewed?: boolean;
   needs_image?: boolean;
   image_url?: string | null;
+  rubric_note?: string | null;
 };
 
 function stripFences(s: string) {
@@ -186,6 +189,25 @@ export const Route = createFileRoute("/api/teacher/pdf")({
         const ctype = request.headers.get("content-type") ?? "";
         if (ctype.includes("multipart/form-data")) {
           const form = await request.formData();
+          if (String(form.get("action") ?? "") === "vision-parse") {
+            const importId = String(form.get("import_id") ?? "");
+            if (!isUuid(importId)) return jsonErr("missing import_id");
+            const packed = await loadImport(importId, cls.id, db);
+            if (!packed) return jsonErr("not found", 404);
+            const files = form.getAll("files").filter((f): f is File => f instanceof File).slice(0, 8);
+            if (files.length === 0) return jsonErr("没有页图");
+            const pages = [];
+            for (const file of files) {
+              if (!ALLOWED.has(file.type)) return jsonErr("页图格式不支持");
+              if (file.size > 3 * 1024 * 1024) return jsonErr("某一页图片太大，请换一份更小的 PDF");
+              const text = String(form.get(`text-${file.name.match(/page-(\d+)/i)?.[1] ?? ""}`) ?? "");
+              const page = await fileToVisionPage(file, text);
+              if (!page.page_number) return jsonErr("页码无效");
+              pages.push(page);
+            }
+            pages.sort((a, b) => a.page_number - b.page_number);
+            return Response.json(await visionParseExamPages(pages));
+          }
           const file = form.get("file");
           const importId = String(form.get("import_id") ?? "");
           if (!(file instanceof File)) return jsonErr("missing file");
@@ -310,7 +332,9 @@ export const Route = createFileRoute("/api/teacher/pdf")({
                 option_d: it.option_d ?? null,
                 option_e: it.option_e ?? null,
                 correct_answer: it.correct_answer ?? null,
-                content: it.content ?? null,
+                content: it.kind === "frq"
+                  ? packTeacherFrq(it.content, it.rubric_note ?? splitTeacherFrq(it.content).rubric_note)
+                  : (it.content ?? null),
                 max_score: it.max_score ?? 9,
                 reviewed: !!it.reviewed,
               })),
@@ -396,23 +420,41 @@ export const Route = createFileRoute("/api/teacher/pdf")({
             if (pqErr) return jsonErr(pqErr.message, 500);
           }
           if (frqs.length > 0) {
-            const { error: fErr } = await db.from("paper_frqs").insert(
-              frqs.map((it, i) => {
-                const page = pageMap.get(it.page_number);
-                const crop = images[`${it.kind}-${it.sort_order}`];
-                return {
-                  paper_id: paper.id,
-                  sort_order: i + 1,
-                  title: (it.stem ?? "").trim() || `FRQ ${i + 1}`,
-                  content: (it.content ?? it.stem ?? "").trim() || `见第 ${it.page_number} 页`,
-                  image_url: crop || null,
-                  image_text: page?.extracted_text ?? null,
-                  max_score: it.max_score ?? 9,
-                  exclude_from_pool: true,
-                };
-              }),
-            );
-            if (fErr) return jsonErr(fErr.message, 500);
+            const frqRows = frqs.map((it, i) => {
+              const page = pageMap.get(it.page_number);
+              const crop = images[`${it.kind}-${it.sort_order}`];
+              const unpacked = splitTeacherFrq(it.content);
+              const grading = teacherGradingNote(it.correct_answer, unpacked.rubric_note);
+              return {
+                paper_id: paper.id,
+                sort_order: i + 1,
+                title: (it.stem ?? "").trim() || `FRQ ${i + 1}`,
+                content: unpacked.content.trim() || (it.stem ?? "").trim() || `见第 ${it.page_number} 页`,
+                image_url: crop || null,
+                image_text: withTeacherRubric(page?.extracted_text, grading),
+                max_score: it.max_score ?? 9,
+                exclude_from_pool: true,
+                grading,
+              };
+            });
+            const { data: insertedFrqs, error: fErr } = await db.from("paper_frqs").insert(
+              frqRows.map((row) => ({
+                paper_id: row.paper_id,
+                sort_order: row.sort_order,
+                title: row.title,
+                content: row.content,
+                image_url: row.image_url,
+                image_text: row.image_text,
+                max_score: row.max_score,
+                exclude_from_pool: row.exclude_from_pool,
+              })),
+            ).select("id, sort_order");
+            if (fErr || !insertedFrqs) return jsonErr(fErr?.message ?? "大题写入失败", 500);
+            for (const frq of insertedFrqs) {
+              const grading = frqRows.find((row) => row.sort_order === frq.sort_order)?.grading ?? "";
+              if (!grading) continue;
+              await db.from("paper_frq_rubrics").upsert({ frq_id: frq.id, rubric_note: grading });
+            }
           }
 
           await db
