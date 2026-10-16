@@ -83,7 +83,7 @@ const LINES: Record<LineCategory, string[]> = {
   night: [
     "有点晚了，做完这一题就去睡吧 🌙",
     "熬夜刷题效率会掉的，早点休息更划算。",
-    "今天的额度用够了，明天再战 💤",
+    "今天先到这里也没关系，明天再战 💤",
     "晚安啦，梦里也别做经济题哦。",
   ],
 };
@@ -99,14 +99,18 @@ export function pickContextualLine(): string {
   const now = new Date();
   const hour = now.getHours();
   let daysAway = 0;
+  let firstVisit = false;
   try {
     const last = localStorage.getItem(LAST_SEEN_KEY);
+    firstVisit = !last;
     if (last) {
       const diff = (now.getTime() - Number(last)) / 86_400_000;
       if (Number.isFinite(diff)) daysAway = Math.floor(diff);
     }
     localStorage.setItem(LAST_SEEN_KEY, String(now.getTime()));
   } catch {}
+
+  if (firstVisit) return "接下来由我来陪伴你一起学习呀！先做一题热热身？";
 
   if (daysAway >= 3) return pick(LINES.comeback);
   if (hour >= 22 || hour < 5) return pick(LINES.night);

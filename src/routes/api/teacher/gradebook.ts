@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { jsonErr } from "@/lib/json-api";
-import { ensureTeacherClass, getTeacherDb, verifyTeacherRequest } from "@/lib/teacher-auth.server";
+import { accountNames, ensureTeacherClass, getTeacherDb, verifyTeacherRequest } from "@/lib/teacher-auth.server";
 import { isUuid } from "@/lib/school-exam-session";
 import { parseFrqAnswers } from "@/lib/school-exam.server";
 
@@ -26,7 +26,7 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
         const [{ data: roster }, { data: attempts }, { data: paper }] = await Promise.all([
           db
             .from("school_roster")
-            .select("id,student_id,student_name")
+            .select("id,student_id,student_name,user_id")
             .eq("class_id", cls.id)
             .order("student_id"),
           db
@@ -36,6 +36,7 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
           db.from("mock_papers").select("id,slug,title").eq("id", assignment.paper_id).maybeSingle(),
         ]);
         const attemptMap = new Map((attempts ?? []).map((a) => [a.roster_id, a]));
+        const names = await accountNames(db, (roster ?? []).map((row) => row.user_id));
         const rows = (roster ?? []).map((r) => {
           const a = attemptMap.get(r.id);
           const frq = a ? parseFrqAnswers(a.frq_answers) : { items: {}, progress: null };
@@ -43,6 +44,7 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
             roster_id: r.id,
             student_id: r.student_id,
             student_name: r.student_name,
+            account_name: r.user_id ? names.get(r.user_id) ?? null : null,
             started_at: a?.started_at ?? null,
             submitted_at: a?.submitted_at ?? null,
             mcq_total: a?.submitted_at ? a.mcq_total : null,

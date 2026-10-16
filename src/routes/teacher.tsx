@@ -67,7 +67,7 @@ export const Route = createFileRoute("/teacher")({
   component: TeacherHome,
 });
 
-type RosterRow = { id: string; student_id: string; student_name: string; user_id: string | null };
+type RosterRow = { id: string; student_id: string; student_name: string; user_id: string | null; account_name?: string | null };
 type Paper = { id: string; slug: string; title: string; year: number | null; created_at?: string | null };
 type Assignment = {
   id: string;
@@ -82,6 +82,7 @@ type Assignment = {
 type GradeRow = {
   student_id: string;
   student_name: string;
+  account_name?: string | null;
   status: string;
   submitted_at: string | null;
   mcq_correct: number | null;
@@ -1066,11 +1067,11 @@ function TeacherHome() {
   });
   const rosterQueryText = rosterQuery.trim().toLowerCase();
   const shownRoster = rosterQueryText
-    ? roster.filter((r) => `${r.student_id} ${r.student_name}`.toLowerCase().includes(rosterQueryText))
+    ? roster.filter((r) => `${r.student_id} ${r.student_name} ${r.account_name ?? ""}`.toLowerCase().includes(rosterQueryText))
     : roster;
   const scoreQueryText = scoreQuery.trim().toLowerCase();
   const shownGrades = scoreQueryText
-    ? gradeRows.filter((r) => `${r.student_id} ${r.student_name}`.toLowerCase().includes(scoreQueryText))
+    ? gradeRows.filter((r) => `${r.student_id} ${r.student_name} ${r.account_name ?? ""}`.toLowerCase().includes(scoreQueryText))
     : gradeRows;
   const submittedCount = gradeRows.filter((r) => r.status === "submitted").length;
   const inProgressCount = gradeRows.filter((r) => r.status === "in_progress").length;
@@ -1373,7 +1374,12 @@ function TeacherHome() {
                         {shownRoster.map((r) => (
                           <TableRow key={r.id}>
                             <TableCell className="font-mono">{r.student_id}</TableCell>
-                            <TableCell className="font-medium">{r.student_name}</TableCell>
+                            <TableCell className="font-medium">
+                              {r.student_name}
+                              {r.account_name && r.account_name !== r.student_name ? (
+                                <div className="text-[11px] font-normal text-muted-foreground">注册姓名：{r.account_name}</div>
+                              ) : null}
+                            </TableCell>
                             <TableCell>本班</TableCell>
                             <TableCell>
                               <Pill tone={r.user_id ? "ok" : "muted"}>{r.user_id ? "已绑定" : "未入场"}</Pill>
@@ -1643,6 +1649,9 @@ function TeacherHome() {
                                 <TableCell>
                                   <div className="font-medium">{row.student_name}</div>
                                   <div className="font-mono text-[11px] text-muted-foreground">{row.student_id}</div>
+                                  {row.account_name && row.account_name !== row.student_name ? (
+                                    <div className="text-[11px] text-muted-foreground">注册姓名：{row.account_name}</div>
+                                  ) : null}
                                 </TableCell>
                                 <TableCell className="tabular-nums">
                                   {row.mcq_correct != null ? `${row.mcq_correct}/${row.mcq_total}` : "—"}
@@ -1667,7 +1676,7 @@ function TeacherHome() {
                       <h3 className="text-sm font-semibold">大题原文</h3>
                       {gradeRows.filter((r) => r.status === "submitted" && Object.keys(r.frq_answers ?? {}).length > 0).map((r) => (
                         <div key={`frq-${r.student_id}`} className="glass space-y-2 rounded-2xl p-4 text-xs">
-                          <div className="font-medium">{r.student_id} {r.student_name}</div>
+                          <div className="font-medium">{r.student_id} {r.student_name}{r.account_name && r.account_name !== r.student_name ? `（注册姓名：${r.account_name}）` : ""}</div>
                           {Object.entries(r.frq_answers ?? {}).map(([id, ans]) => (
                             <pre key={id} className="whitespace-pre-wrap rounded-xl bg-white/60 p-3">{ans.text || (ans.fileUrl ? ans.fileUrl : "（空）")}</pre>
                           ))}

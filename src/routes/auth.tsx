@@ -41,6 +41,7 @@ function AuthPage() {
   const [tab, setTab] = useState<"login" | "register">("login");
   const [audience, setAudience] = useState<Audience>(role === "teacher" || redirect === "/teacher" ? "teacher" : "student");
   const [email, setEmail] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [forgot, setForgot] = useState(false);
@@ -120,13 +121,22 @@ function AuthPage() {
     setBusy(true);
     try {
       if (tab === "register") {
+        const name = displayName.trim();
+        if (!name) {
+          toast.error("请填写姓名");
+          return;
+        }
+        if (name.length > 40) {
+          toast.error("姓名不超过 40 字");
+          return;
+        }
         const nextPath = teacherEntry ? "/teacher" : studentPath();
         const { data, error } = await supabase.auth.signUp({
           email: parsed.data.email,
           password: parsed.data.password,
           options: {
             emailRedirectTo: `${window.location.origin}${nextPath}`,
-            data: { account_role: audience },
+            data: { account_role: audience, display_name: name },
           },
         });
         if (error) {
@@ -134,13 +144,14 @@ function AuthPage() {
           else toast.error(error.message);
           return;
         }
-        if (data.session) {
+        if (data.session && data.user) {
+          await supabase.from("profiles").update({ display_name: name }).eq("user_id", data.user.id);
           setRememberPreference(remember);
           announceAuth.current = null;
-          await goAfterAuth("注册成功", false, data.user?.email ?? parsed.data.email);
+          await goAfterAuth("注册成功", false, data.user.email ?? parsed.data.email);
         } else {
           setPendingEmail(parsed.data.email);
-          toast.success("验证邮件已发送，请前往邮箱点击链接完成注册");
+          toast.success("注册成功，验证邮件已发送");
         }
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({
@@ -182,7 +193,7 @@ function AuthPage() {
     const { error } = await supabase.auth.resend({
       type: "signup",
       email: pendingEmail,
-      options: { emailRedirectTo: `${window.location.origin}/` },
+      options: { emailRedirectTo: `${window.location.origin}${teacherEntry ? "/teacher" : "/"}` },
     });
     setBusy(false);
     if (error) return toast.error("发送失败，请稍后重试");
@@ -225,7 +236,7 @@ function AuthPage() {
             <div className="mb-4 text-center">
               <h1 className="text-lg font-semibold">
                 {pendingEmail
-                  ? "请验证你的邮箱"
+                  ? "注册成功，请验证邮箱"
                   : forgot
                     ? "找回密码"
                     : teacherEntry
@@ -234,7 +245,7 @@ function AuthPage() {
               </h1>
               <p className="mt-1 text-xs text-muted-foreground">
                 {pendingEmail
-                  ? "我们已把验证链接发送到你的邮箱，点击链接后即可登录"
+                  ? `验证邮件已发到 ${pendingEmail}。打开邮件里的链接后，再用这个邮箱登录。没看到邮件时，先看垃圾箱。`
                   : forgot
                     ? "输入注册邮箱，我们会发送重设链接"
                     : teacherEntry
@@ -288,6 +299,23 @@ function AuthPage() {
               </TabsList>
               <TabsContent value={tab} className="mt-4">
                 <form onSubmit={onSubmit} className="space-y-3">
+                  {tab === "register" && !forgot && (
+                    <Input
+                      type="text"
+                      placeholder="姓名"
+                      value={displayName}
+                      onChange={(e) => setDisplayName(e.target.value)}
+                      autoComplete="name"
+                      required
+                      maxLength={40}
+                      className="h-11"
+                    />
+                  )}
+                  {tab === "register" && !forgot && (
+                    <p className="text-[11px] text-muted-foreground">
+                      {teacherEntry ? "这个姓名会显示在教师工作台。" : "请填真实姓名，老师在成绩册里靠它认出你。"}
+                    </p>
+                  )}
                   <Input
                     type="email"
                     placeholder="邮箱"

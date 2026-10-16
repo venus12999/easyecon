@@ -49,6 +49,18 @@ export async function uploadTeacherAssignmentImage(jwt: string, path: string, fi
   return { error: null, publicUrl: `${url}/storage/v1/object/public/question-images/${path}` };
 }
 
+export async function accountNames(db: SupabaseClient, userIds: Array<string | null | undefined>) {
+  const ids = [...new Set(userIds.filter((id): id is string => !!id))];
+  const names = new Map<string, string>();
+  if (ids.length === 0) return names;
+  const { data } = await db.from("profiles").select("user_id, display_name").in("user_id", ids);
+  for (const row of data ?? []) {
+    const name = row.display_name?.trim();
+    if (name) names.set(row.user_id, name);
+  }
+  return names;
+}
+
 export async function verifyTeacherRequest(request: Request) {
   const u = await verifyUserRequestDetailed(request);
   if (u === "expired" || u === "unavailable") return u;

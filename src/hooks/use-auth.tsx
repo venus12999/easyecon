@@ -34,9 +34,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // 登录后异步迁移本地数据
       if (s?.user) {
         hadSession = true;
+        const registeredName = typeof s.user.user_metadata?.display_name === "string" ? s.user.user_metadata.display_name.trim() : "";
         setTimeout(() => {
           import("@/lib/migrate-local").then((m) => m.migrateLocalToCloud(s.user.id)).catch(() => {});
           import("@/lib/mascot-memory").then((m) => m.hydrateMascotFromCloud(s.user.id)).catch(() => {});
+          if (registeredName) {
+            void supabase.from("profiles").update({ display_name: registeredName }).eq("user_id", s.user.id).is("display_name", null);
+          }
         }, 0);
         return;
       }

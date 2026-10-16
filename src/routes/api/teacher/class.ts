@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { jsonErr } from "@/lib/json-api";
-import { ensureTeacherClass, getTeacherDb, verifyTeacherRequest } from "@/lib/teacher-auth.server";
+import { accountNames, ensureTeacherClass, getTeacherDb, verifyTeacherRequest } from "@/lib/teacher-auth.server";
 import { normalizeStudentName } from "@/lib/school-exam-session";
 
 export const Route = createFileRoute("/api/teacher/class")({
@@ -21,7 +21,14 @@ export const Route = createFileRoute("/api/teacher/class")({
           .select("id,student_id,student_name,user_id,created_at")
           .eq("class_id", cls.id)
           .order("student_id");
-        return Response.json({ class: cls, roster: roster ?? [] });
+        const names = await accountNames(db, (roster ?? []).map((row) => row.user_id));
+        return Response.json({
+          class: cls,
+          roster: (roster ?? []).map((row) => ({
+            ...row,
+            account_name: row.user_id ? names.get(row.user_id) ?? null : null,
+          })),
+        });
       },
       POST: async ({ request }) => {
         const u = await verifyTeacherRequest(request);
