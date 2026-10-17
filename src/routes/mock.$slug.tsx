@@ -45,7 +45,7 @@ import { consumeMockAccess } from "@/lib/mock-access-client";
 import { authFetch } from "@/lib/auth-fetch";
 import { ExamFigure } from "@/components/mock/ExamFigure";
 import { readExamAiGrade, readPageImage, readPointMarker, stripExamFlags, stripPointMarker, studentPaperNote } from "@/lib/exam-flags";
-import { clearSchoolExamSession, isExamLocalEmail, isUuid, markExamExited, markIntentionalSignOut, saveSchoolExamSession } from "@/lib/school-exam-session";
+import { clearSchoolExamSession, hasExitedExam, isExamLocalEmail, isUuid, loadSchoolExamSession, markExamExited, markIntentionalSignOut, saveSchoolExamSession } from "@/lib/school-exam-session";
 
 export const Route = createFileRoute("/mock/$slug")({
   head: () => ({ meta: [{ title: "真题卷 · AP 微观经济" }] }),
@@ -248,7 +248,7 @@ function PaperRunner() {
     if (!assignmentId) return;
     if (authLoading) return;
     if (!user) {
-      void nav({ to: "/exam" });
+      if (!hasExitedExam(assignmentId)) void nav({ to: "/exam" });
       return;
     }
     if (schoolHydratedRef.current) return;
@@ -732,6 +732,17 @@ function PaperRunner() {
     }, wait);
   }
 
+  async function leaveSchoolExam() {
+    if (assignmentId) markExamExited(assignmentId);
+    clearSchoolExamSession();
+    await nav({ to: "/", replace: true });
+    if (isExamLocalEmail(user?.email)) {
+      markIntentionalSignOut();
+      await signOut();
+    }
+    clearSchoolExamSession();
+  }
+
   async function finalizeSchoolExam() {
     if (finalizingRef.current) return false;
     finalizingRef.current = true;
@@ -755,13 +766,16 @@ function PaperRunner() {
       setSchoolSubmitted(true);
       scheduleClassGrade(j.assignment?.ends_at);
       setSchoolPublished(!!j.assignment?.results_published);
+      const previous = loadSchoolExamSession();
       saveSchoolExamSession({
         assignmentId: assignmentId!,
         paperSlug: slug,
-        title: schoolTitle || paper?.title || "",
-        endsAt: schoolEndsAt,
+        title: schoolTitle || paper?.title || previous?.title || "",
+        endsAt: j.assignment?.ends_at || schoolEndsAt || previous?.endsAt || "",
         submitted: true,
         resultsPublished: !!j.assignment?.results_published,
+        studentName: schoolStudentName || previous?.studentName,
+        studentId: previous?.studentId,
       });
       setFrqSubmitted(true);
       setPhase("done");
@@ -1379,7 +1393,7 @@ function PaperRunner() {
                   {user && !grade && (
                     <span className="ml-2 text-[11px] text-muted-foreground font-normal">
                       {isSchoolExam
-                        ? schoolSavedAt ? "已保存" : ans.text.trim() || ans.fileUrl ? "已恢复作答" : ""
+                        ? ans.text.trim() || ans.fileUrl ? (schoolSavedAt ? "已保存" : "已恢复作答") : ""
                         : saving ? "保存中…" : savedAt ? "已自动保存" : ans.text.trim() || ans.fileUrl ? "已恢复草稿" : ""}
                     </span>
                   )}
@@ -1932,18 +1946,7 @@ function PaperRunner() {
       <main className="mx-auto flex min-h-[70vh] max-w-lg flex-col items-center justify-center px-4 py-16 text-center">
         <h1 className="text-3xl font-bold">已交卷</h1>
         <p className="mt-3 text-sm text-muted-foreground">你已经交卷，可以离开了。</p>
-        <Button
-          className="mt-8"
-          onClick={() => {
-            if (assignmentId) markExamExited(assignmentId);
-            clearSchoolExamSession();
-            if (isExamLocalEmail(user?.email)) {
-              markIntentionalSignOut();
-              void signOut();
-            }
-            void nav({ to: "/", replace: true });
-          }}
-        >
+        <Button className="mt-8" onClick={() => void leaveSchoolExam()}>
           离开考场
         </Button>
       </main>
@@ -2050,18 +2053,7 @@ function PaperRunner() {
       <div className="flex flex-wrap gap-2">
         {!isSchoolExam && <Button onClick={() => { setPhase("idle"); }}>再做一遍</Button>}
         {isSchoolExam && (
-          <Button
-            variant="outline"
-            onClick={() => {
-              if (assignmentId) markExamExited(assignmentId);
-              clearSchoolExamSession();
-              if (isExamLocalEmail(user?.email)) {
-                markIntentionalSignOut();
-                void signOut();
-              }
-              void nav({ to: "/", replace: true });
-            }}
-          >
+          <Button variant="outline" onClick={() => void leaveSchoolExam()}>
             退出考场
           </Button>
         )}

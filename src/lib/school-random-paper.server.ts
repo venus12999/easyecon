@@ -109,7 +109,7 @@ export async function createFixedRandomSchoolPaper(title: string) {
         content: f.content,
         image_url: f.image_url,
         image_text: f.image_text,
-        max_score: f.max_score ?? 9,
+        max_score: f.max_score && f.max_score >= 1 ? f.max_score : 0,
         exclude_from_pool: true,
       })),
     );

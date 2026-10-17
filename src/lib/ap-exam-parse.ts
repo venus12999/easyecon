@@ -237,7 +237,7 @@ function parseFrqs(frqText: string): ParsedExamItem[] {
       option_e: "",
       correct_answer: "",
       content,
-      max_score: readPrintedScore(content, n === 1 ? 10 : 5),
+      max_score: readPrintedScore(content, 0),
       needs_image: IMAGE_HINT.test(content),
     });
     from = start + String(n).length + 1;

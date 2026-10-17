@@ -178,9 +178,11 @@ function PdfQuestionCard({
                           <ImageIcon className="h-3 w-3" /> {figureReady ? "已截图" : shot === "weak" ? "截图不完整" : "带图待补"}
                         </span>
                       )}
-                      <span className="text-xs text-muted-foreground">{it.max_score || 1} 分</span>
+                      <span className="text-xs text-muted-foreground">{it.kind === "frq" && it.max_score < 1 ? "未填分值" : `${it.max_score || 1} 分`}</span>
                       {reason ? (
                         <span className="text-xs px-1.5 py-0.5 rounded bg-warning/15 text-warning-foreground">需修改</span>
+                      ) : it.kind === "mcq" && !/^[A-E]$/.test((it.correct_answer ?? "").trim()) ? (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-900">待填答案</span>
                       ) : aiRan ? (
                         <span className="text-xs px-1.5 py-0.5 rounded bg-success/15 text-success">AI 通过</span>
                       ) : null}
@@ -207,7 +209,7 @@ function PdfQuestionCard({
                     <div className="flex flex-wrap items-center gap-2">
                       <Select value={it.kind} onValueChange={(v) => onChange(idx, {
                         kind: v as "mcq" | "frq",
-                        max_score: v === "mcq" && it.max_score === 9 ? 1 : it.max_score || (v === "mcq" ? 1 : 9),
+                        max_score: v === "mcq" ? (it.max_score >= 1 && it.max_score !== 9 ? it.max_score : 1) : it.max_score > 0 && it.max_score !== 9 ? it.max_score : 0,
                       })}>
                         <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
                         <SelectContent>
@@ -276,7 +278,7 @@ function PdfQuestionCard({
                         <Textarea placeholder="大题文字（学生看得到）" value={it.content} onChange={(e) => onChange(idx, { content: e.target.value })} />
                         <Textarea placeholder="参考答案（学生看不到，AI 批改会用）" value={it.correct_answer} onChange={(e) => onChange(idx, { correct_answer: e.target.value })} />
                         <Textarea placeholder="评分标准，一行一个得分点（学生看不到）" value={it.rubric_note ?? ""} onChange={(e) => onChange(idx, { rubric_note: e.target.value })} />
-                        <Input type="number" placeholder="满分" value={it.max_score} onChange={(e) => onChange(idx, { max_score: Number(e.target.value) })} />
+                        <Input type="number" min={1} max={20} placeholder="满分，卷面没认出时请填写" aria-label="大题满分" value={it.max_score > 0 ? it.max_score : ""} onChange={(e) => onChange(idx, { max_score: Math.min(20, Math.max(0, Number(e.target.value) || 0)) })} />
                       </div>
                     )}
                   </div>

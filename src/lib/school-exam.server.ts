@@ -313,9 +313,17 @@ export function readStoredGrades(raw: unknown): Record<string, StoredFrqGrade> {
 function explainGradeError(error: string, sort?: number | null) {
   const which = sort ? `Q${sort}` : "这一题";
   if (error === "ai_not_configured") return "AI 评分尚未配置，没能批改";
+  if (error === "missing_max_score") return `${which} 没有满分，请老师先填写再批改`;
   if (error === "rate_limited") return `${which} 没批完：AI 评分请求过多。已经批完的题目已保存，稍后再试会继续`;
   if (error === "credits_exhausted") return `${which} 没批完：AI 评分额度不足。已经批完的题目已保存`;
   return `${which} 没批完。已经批完的题目已保存，可以稍后重试这名学生`;
+}
+
+function positiveScore(...values: Array<number | null | undefined>) {
+  for (const value of values) {
+    if (typeof value === "number" && value >= 1) return value;
+  }
+  return 0;
 }
 
 function shownQuestionOrder(frq: { sort_order?: number | null; title?: string | null; content?: string | null; stem?: string | null }) {
@@ -424,7 +432,7 @@ export async function gradeNextSchoolFrq(attemptId: string, paperId: string, opt
     const frq = list.find((item) => item.id === id);
     const prev = grades[id];
     grades[id] = {
-      max_score: prev?.max_score || frq?.max_score || 9,
+      max_score: positiveScore(prev?.max_score, frq?.max_score),
       ai_score: 0,
       ai_comment: "未作答",
       ai_suggestions: null,
@@ -465,7 +473,7 @@ export async function gradeNextSchoolFrq(attemptId: string, paperId: string, opt
       const prev = grades[frq.id];
       const reason = explainGradeError(graded.error, shownQuestionOrder(full));
       grades[frq.id] = {
-        max_score: prev?.max_score || full.max_score || 9,
+        max_score: positiveScore(prev?.max_score, full.max_score),
         ai_score: null,
         ai_comment: null,
         ai_suggestions: null,
@@ -500,7 +508,7 @@ export async function gradeNextSchoolFrq(attemptId: string, paperId: string, opt
     const prev = saved[frq.id];
     const reason = explainGradeError("ai_failed", shownQuestionOrder(frq));
     saved[frq.id] = {
-      max_score: prev?.max_score || frq.max_score || 9,
+      max_score: positiveScore(prev?.max_score, frq.max_score),
       ai_score: null,
       ai_comment: null,
       ai_suggestions: null,
@@ -581,7 +589,7 @@ export async function saveManualFrqScores(
   comments: Record<string, string | null> = {},
 ): Promise<Json> {
   const { data: frqs } = await supabaseAdmin.from("paper_frqs").select("id,max_score").eq("paper_id", paperId);
-  const maxById = new Map((frqs ?? []).map((f) => [f.id, f.max_score ?? 9]));
+  const maxById = new Map((frqs ?? []).map((f) => [f.id, positiveScore(f.max_score)]));
   const grades = readStoredGrades(rawAnswers);
   for (const id of new Set([...Object.keys(manual), ...Object.keys(comments)])) {
     const max = maxById.get(id);
@@ -649,7 +657,7 @@ export function teacherFrqViews(
         frq_id: frq.id,
         title: frq.title,
         sort_order: frq.sort_order,
-        max_score: stored?.max_score || prior?.ai_max_score || frq.max_score || 9,
+        max_score: positiveScore(stored?.max_score, prior?.ai_max_score, frq.max_score),
         answer_text: answer?.text ?? "",
         file_url: answer?.fileUrl ?? null,
         ai_score: stored?.ai_score ?? prior?.ai_score ?? null,
@@ -728,6 +736,12 @@ export async function finalizeIfOverdue(attempt: AttemptRow, paperId: string, en
 }
 
 export type TeacherMcqView = { n: number; picked: string | null; is_correct: boolean | null };
+
+export function mcqSectionClosed(raw: unknown) {
+  const progress = parseFrqAnswers(raw).progress as Record<string, unknown> | null;
+  if (!progress) return false;
+  return progress.mcq_locked === true || phaseRank(progress.phase) >= 2;
+}
 
 export function teacherMcqViews(
   questions: { question_id: string; sort_order: number; correct_answer: string | null }[],

@@ -9,6 +9,7 @@ import {
   isSchoolExamLocked,
   loadSchoolExamSession,
   saveSchoolExamSession,
+  subscribeSchoolExamSession,
   type SchoolExamSession,
 } from "@/lib/school-exam-session";
 
@@ -75,6 +76,8 @@ export function useSchoolExamLock() {
     if (authLoading) return;
     void refresh();
   }, [authLoading, loc, refresh]);
+
+  useEffect(() => subscribeSchoolExamSession(() => setSession(loadSchoolExamSession())), []);
 
   useEffect(() => {
     if (!session?.endsAt) return;

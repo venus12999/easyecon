@@ -91,7 +91,7 @@ function sanitizeItems(raw: unknown, pages: VisionPage[]): VisionExamItem[] {
       option_e: clip(rec.option_e, 500),
       correct_answer: kind === "mcq" && /^[A-E]$/.test(answer) ? answer : "",
       content: kind === "frq" ? visible : "",
-      max_score: printed || fromModel || (kind === "frq" ? 9 : 1),
+      max_score: kind === "frq" ? printed || (fromModel > 0 && fromModel !== 9 ? fromModel : 0) : printed || fromModel || 1,
       needs_image: /graph|table|figure|图|表/i.test(blob),
     });
   }

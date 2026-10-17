@@ -103,7 +103,8 @@ export async function gradeFrqAnswer(input: {
   const { data: settings } = await supabaseAdmin.from("admin_settings").select("frq_grader_prompt").eq("id", 1).maybeSingle();
   const system = settings?.frq_grader_prompt?.trim() || "你是 AP 微观经济资深阅卷官，按官方 rubric 评分，输出 JSON。";
   const frq = input.frq;
-  const maxScore = frq.max_score ?? 9;
+  const maxScore = frq.max_score ?? 0;
+  if (maxScore < 1) return { ok: false, error: "missing_max_score" };
   const answerText = clipPrompt(input.answerText, 15000);
   const hasText = !!answerText;
   const fileUrl = httpsUrl(input.answerFileUrl);

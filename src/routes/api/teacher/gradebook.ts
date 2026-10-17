@@ -5,7 +5,7 @@ import { jsonErr } from "@/lib/json-api";
 import { accountNames, ensureTeacherClass, getTeacherDb, verifyTeacherRequest } from "@/lib/teacher-auth.server";
 import { isUuid } from "@/lib/school-exam-session";
 import { schoolExamAiOn } from "@/lib/exam-flags";
-import { alignFrqNumbers, closeSchoolAttempt, continueGradeBatch, gradeBatchToken, gradeFinishedExamStep, gradeNextSchoolFrq, readSubmittedAt, saveManualFrqScores, teacherFrqViews, teacherMcqViews } from "@/lib/school-exam.server";
+import { alignFrqNumbers, closeSchoolAttempt, continueGradeBatch, gradeBatchToken, gradeFinishedExamStep, gradeNextSchoolFrq, mcqSectionClosed, readSubmittedAt, saveManualFrqScores, teacherFrqViews, teacherMcqViews } from "@/lib/school-exam.server";
 
 async function teacherAssignment(userId: string, jwt: string, assignmentId: string) {
   const db = await getTeacherDb(jwt);
@@ -74,6 +74,8 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
           const a = attemptMap.get(r.id);
           const views = a ? teacherFrqViews(a.frq_answers, numberedFrqs, a.user_id ? byUser.get(a.user_id) ?? [] : []) : [];
           const mcqs = a ? teacherMcqViews(mcqPaper, a.mcq_detail) : [];
+          const mcqClosed = !!a && (!!a.submitted_at || mcqSectionClosed(a.frq_answers));
+          const scoredMcq = mcqs.filter((item) => item.is_correct != null);
           const scored = views.filter((v) => (v.manual_score ?? v.ai_score) != null);
           return {
             roster_id: r.id,
@@ -82,8 +84,9 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
             account_name: r.user_id ? names.get(r.user_id) ?? null : null,
             started_at: a?.started_at ?? null,
             submitted_at: a ? readSubmittedAt(a.frq_answers, a.submitted_at) : null,
-            mcq_total: a?.submitted_at ? a.mcq_total : null,
-            mcq_correct: a?.submitted_at ? a.mcq_correct : null,
+            mcq_closed: mcqClosed,
+            mcq_total: a?.submitted_at ? a.mcq_total : mcqClosed ? mcqs.length : null,
+            mcq_correct: a?.submitted_at ? a.mcq_correct : mcqClosed && scoredMcq.length > 0 ? scoredMcq.filter((item) => item.is_correct).length : null,
             duration_seconds: a?.duration_seconds ?? null,
             frq_answers: Object.fromEntries(views.map((v) => [v.frq_id, { text: v.answer_text, fileUrl: v.file_url }])),
             mcqs,

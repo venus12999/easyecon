@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { saveSchoolExamSession } from "@/lib/school-exam-session";
+import { clearExamExited, saveSchoolExamSession } from "@/lib/school-exam-session";
 
 export const Route = createFileRoute("/exam")({
   head: () => ({ meta: [{ title: "学校考试入场" }, { name: "robots", content: "noindex" }] }),
@@ -69,6 +69,7 @@ function ExamEntry() {
         toast.error(error.message, { id: "exam-enter" });
         return;
       }
+      clearExamExited(j.assignment.id);
       saveSchoolExamSession({
         assignmentId: j.assignment.id,
         paperSlug: j.paper.slug,

@@ -26,7 +26,7 @@ export function TopNav() {
   });
   const showAdmin = isAdminEmail(user?.email);
   const [showTeacher, setShowTeacher] = useState(false);
-  const { session: examSession, locked: examLocked, refresh } = useSchoolExamLock();
+  const { session: examSession, locked: examLocked } = useSchoolExamLock();
   const nav = useNavigate();
   const label = useAccountLabel();
 
@@ -52,12 +52,12 @@ export function TopNav() {
     if (!examSession) return;
     markExamExited(examSession.assignmentId);
     clearSchoolExamSession();
-    await refresh();
+    await nav({ to: "/", replace: true });
     if (isExamLocalEmail(user?.email)) {
       markIntentionalSignOut();
       await signOut();
     }
-    await nav({ to: "/", replace: true });
+    clearSchoolExamSession();
   }
 
   if (examLocked && examSession) {

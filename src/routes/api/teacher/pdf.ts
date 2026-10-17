@@ -367,7 +367,7 @@ export const Route = createFileRoute("/api/teacher/pdf")({
                 content: it.kind === "frq"
                   ? packTeacherFrq(it.content, it.rubric_note ?? splitTeacherFrq(it.content).rubric_note)
                   : (it.content ?? null),
-                max_score: it.max_score ?? (it.kind === "mcq" ? 1 : 9),
+                max_score: it.kind === "mcq" ? Number(it.max_score) || 1 : Number(it.max_score) > 0 ? Number(it.max_score) : 0,
                 reviewed: !!it.reviewed,
               })),
             );
@@ -402,6 +402,10 @@ export const Route = createFileRoute("/api/teacher/pdf")({
             if (!it.option_a || !it.option_b || !it.option_c || !it.option_d) return jsonErr(`第 ${it.sort_order} 题选项不完整`);
             if (!pageMap.get(it.page_number)?.image_url) return jsonErr(`第 ${it.page_number} 页还没有页图`);
           }
+          const numberedMcqs = withUniqueQuestionNumbers(mcqs);
+          const numberedFrqs = withUniqueQuestionNumbers(frqs);
+          const missingScore = numberedFrqs.find((it) => !(Number(it.max_score) >= 1));
+          if (missingScore) return jsonErr(`Q${missingScore.sort_order} 还没有满分。卷面没认出分值时请老师先填上，再提交。`);
 
           const title = (body.title ?? fresh.import.filename.replace(/\.pdf$/i, "")).trim().slice(0, 120) || "学校考试卷";
           const slug = `school-${crypto.randomUUID().slice(0, 8)}`;
@@ -424,8 +428,6 @@ export const Route = createFileRoute("/api/teacher/pdf")({
           if (inserted.error || !inserted.data) return jsonErr(inserted.error?.message ?? "无法创建试卷", 500);
           const paper = inserted.data;
 
-          const numberedMcqs = withUniqueQuestionNumbers(mcqs);
-          const numberedFrqs = withUniqueQuestionNumbers(frqs);
           if (numberedMcqs.length > 0) {
             const rows = numberedMcqs.map((it) => {
               const crop = images[`${it.kind}-${it.sort_order}`];
@@ -471,7 +473,7 @@ export const Route = createFileRoute("/api/teacher/pdf")({
                   || `见第 ${it.page_number} 页`,
                 image_url: crop || null,
                 image_text: withPageImage(withTeacherRubric(page?.extracted_text, grading), page?.image_url),
-                max_score: it.max_score ?? 9,
+                max_score: Number(it.max_score),
                 exclude_from_pool: true,
                 grading,
               };

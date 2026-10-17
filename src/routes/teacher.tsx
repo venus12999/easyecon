@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,6 +34,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useAuth } from "@/hooks/use-auth";
 import { authFetch } from "@/lib/auth-fetch";
 import { applyKnownApAnswerKey, looksLikeProvidedFigure, parseApExamPages, readPrintedScore, studentVisibleQuestion, withUniqueQuestionNumbers, type ParsedExamItem } from "@/lib/ap-exam-parse";
@@ -121,8 +131,20 @@ async function pageToJpeg(blob: Blob) {
   return jpeg;
 }
 
+type TeacherPage = "overview" | "roster" | "exam" | "scores" | "pdf";
+
+function readTeacherSearch(search: Record<string, unknown>): { page?: TeacherPage; exam?: string } {
+  const pages: TeacherPage[] = ["roster", "exam", "scores", "pdf"];
+  const page = pages.find((item) => item === search.page);
+  const exam = typeof search.exam === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(search.exam)
+    ? search.exam
+    : undefined;
+  return { ...(page ? { page } : {}), ...(exam ? { exam } : {}) };
+}
+
 export const Route = createFileRoute("/teacher")({
   head: () => ({ meta: [{ title: "教师端 · 学校考试" }, { name: "robots", content: "noindex" }] }),
+  validateSearch: readTeacherSearch,
   component: TeacherHome,
 });
 
@@ -164,6 +186,7 @@ type GradeRow = {
   submitted_at: string | null;
   mcq_correct: number | null;
   mcq_total: number | null;
+  mcq_closed?: boolean;
   frq_answers: Record<string, { text?: string; fileUrl?: string | null }>;
   mcqs: GradeMcq[];
   frqs: GradeFrq[];
@@ -184,6 +207,17 @@ function columnNumbers<T>(rows: GradeRow[], pick: (row: GradeRow) => T[] | null 
     for (const item of pick(row) ?? []) seen.add(numberOf(item));
   }
   return [...seen].sort((a, b) => a - b);
+}
+
+function mcqProgressLabel(row: GradeRow) {
+  if (row.mcq_correct != null && row.mcq_total) return `${row.mcq_correct}/${row.mcq_total}`;
+  if (row.mcq_closed) {
+    const answered = (row.mcqs ?? []).filter((item) => item.picked).length;
+    const total = row.mcq_total || row.mcqs?.length || 0;
+    return total ? `已交 ${answered}/${total}` : "已交";
+  }
+  if (row.status === "in_progress") return "作答中";
+  return "—";
 }
 
 function beijingTime(iso: string | null) {
@@ -302,8 +336,6 @@ function StatCard({
   );
 }
 
-type TeacherPage = "overview" | "roster" | "exam" | "scores" | "pdf";
-
 const PAGE_COPY: Record<TeacherPage, [string, string, string]> = {
   overview: ["工作台", "欢迎使用教师工作台", "先导入学生名册，再创建第一场考试。"],
   roster: ["学生名册", "学生名册", "导入一次即可复用，新增学生不会覆盖已有记录。"],
@@ -384,19 +416,30 @@ function emptyItem(page: number, order: number, kind: "mcq" | "frq"): PdfItem {
     option_e: "",
     correct_answer: "",
     content: "",
-    max_score: kind === "mcq" ? 1 : 9,
+    max_score: kind === "mcq" ? 1 : 0,
     reviewed: false,
     rubric_note: "",
   };
 }
 
+function frqScorePrompt(it: { kind: string; sort_order: number; max_score: number }, ack: number | undefined) {
+  if (it.kind !== "frq") return null;
+  if (!(it.max_score >= 1)) return `Q${it.sort_order} 没有认出卷面分值，请填写满分。`;
+  if (it.max_score === 1 && ack !== 1) return `Q${it.sort_order} 满分只有 1 分，请确认。`;
+  return null;
+}
+
 function TeacherHome() {
   const { user, loading: authLoading, signOut } = useAuth();
+  const search = Route.useSearch();
+  const navigate = useNavigate();
   const accountLabel = useAccountLabel("教师");
   const [denied, setDenied] = useState(false);
   const [checkFailed, setCheckFailed] = useState(false);
   const [ready, setReady] = useState(false);
   const [roster, setRoster] = useState<RosterRow[]>([]);
+  const [replaceRosterOpen, setReplaceRosterOpen] = useState(false);
+  const [collectTarget, setCollectTarget] = useState<GradeRow | null>(null);
   const [csvText, setCsvText] = useState("学号,姓名\n");
   const [papers, setPapers] = useState<Paper[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -410,7 +453,7 @@ function TeacherHome() {
   const [cropPick, setCropPick] = useState<{ index: number; pageUrl: string } | null>(null);
   const [endsAt, setEndsAt] = useState(() => toLocalInput(new Date(Date.now() + 70 * 60 * 1000)));
   const [creating, setCreating] = useState(false);
-  const [gradeId, setGradeId] = useState("");
+  const [gradeId, setGradeId] = useState(search.exam ?? "");
   const [gradeRows, setGradeRows] = useState<GradeRow[]>([]);
   const [gradeFocusId, setGradeFocusId] = useState<string | null>(null);
   const [manualDraft, setManualDraft] = useState<Record<string, string>>({});
@@ -437,7 +480,7 @@ function TeacherHome() {
   const [pdfAiRan, setPdfAiRan] = useState(false);
   const [pdfAiDone, setPdfAiDone] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
-  const [page, setPage] = useState<TeacherPage>("overview");
+  const page: TeacherPage = search.page ?? "overview";
   const [examStep, setExamStep] = useState<"edit" | "review" | "done">("edit");
   const [publishedExam, setPublishedExam] = useState<{ title: string; code: string } | null>(null);
   const [rosterQuery, setRosterQuery] = useState("");
@@ -538,9 +581,6 @@ function TeacherHome() {
   }, [simOpen, simStage]);
 
   async function importRoster(replace: boolean) {
-    if (replace && !window.confirm("覆盖会删除现有花名册。有未结束的考试时系统会拒绝覆盖。确定继续？")) {
-      return;
-    }
     const rows = parseRosterCsv(csvText);
     if (rows.length === 0) {
       toast.error("没有读到学号/姓名");
@@ -672,7 +712,7 @@ function TeacherHome() {
       setExamStep("done");
       await loadAssignments();
       setGradeId(j.assignment.id);
-      setPage("exam");
+      openTeacherPage("exam");
       try {
         await navigator.clipboard.writeText(j.assignment.exam_code);
         setCopied(j.assignment.exam_code);
@@ -702,7 +742,7 @@ function TeacherHome() {
     }
     const ticket = gradeTicket.current;
     setGradeId(id);
-    if (!opts?.keepPage) setPage("scores");
+    if (!opts?.keepPage) openTeacherPage("scores", id);
     const r = await authFetch(`/api/teacher/gradebook?assignment_id=${id}`);
     const j = await r.json();
     if (gradeTicket.current !== ticket) return;
@@ -959,10 +999,15 @@ function TeacherHome() {
     downloadText(`${gradeMeta?.title ?? "gradebook"}.csv`, `\uFEFF${[header.map(csvCell).join(","), ...lines.map((line) => line.join(","))].join("\n")}`);
   }
 
+  function askCollect(rosterId: string) {
+    const student = gradeRows.find((item) => item.roster_id === rosterId);
+    if (!student) return;
+    setCollectTarget(student);
+  }
+
   async function collectStudent(rosterId: string) {
     if (!gradeId) return;
-    const student = gradeRows.find((item) => item.roster_id === rosterId);
-    if (!window.confirm(`确定收「${student?.student_name ?? "这名学生"}」的卷吗？收卷后不能再改。`)) return;
+    setCollectTarget(null);
     setGradeBusy("collect");
     try {
       const r = await authFetch("/api/teacher/gradebook", {
@@ -1279,8 +1324,10 @@ function TeacherHome() {
         const blob = `${it.stem ?? ""} ${unpacked.content}`;
         const needs = it.needs_image ?? looksLikeProvidedFigure(blob);
         const printed = readPrintedScore(blob, 0);
-        const storedScore = Number(it.max_score) || (it.kind === "mcq" ? 1 : 9);
-        const max_score = printed && (it.kind === "frq" ? storedScore === 9 : storedScore === 1) ? printed : storedScore;
+        const storedScore = Number(it.max_score) || 0;
+        const max_score = it.kind === "mcq"
+          ? printed || storedScore || 1
+          : printed || (storedScore >= 1 && storedScore !== 9 ? storedScore : 0);
         const stored = it.image_url && !isPageShot(it.image_url) ? it.image_url : null;
         return {
           ...emptyItem(it.page_number, it.sort_order, it.kind),
@@ -1403,6 +1450,11 @@ function TeacherHome() {
       toast.error("请等 AI 审完这一遍再提交");
       return;
     }
+    const missingScore = items.find((it) => it.kind === "frq" && !(it.max_score >= 1));
+    if (missingScore) {
+      toast.error(`Q${missingScore.sort_order} 还没有满分，请先填写`);
+      return;
+    }
     if (pdfFindings.length > 0 && !window.confirm(`AI 还标了 ${pdfFindings.length} 道题。确认已经看过，仍然提交？`)) {
       return;
     }
@@ -1444,7 +1496,7 @@ function TeacherHome() {
       setPaperId(j.paper.id);
       setSource("existing");
       setExamStep("edit");
-      setPage("exam");
+      openTeacherPage("exam");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "提交失败");
     } finally {
@@ -1460,9 +1512,10 @@ function TeacherHome() {
   const alreadyPublished = imports.find((imp) => imp.id === activeImport)?.status === "published";
 
   useEffect(() => {
-    if (page !== "scores" || gradeId || assignments.length === 0) return;
-    void loadGradebook(assignments[0].id);
-  }, [page, gradeId, assignments]);
+    if (page !== "scores" || gradeMeta || assignments.length === 0) return;
+    const preferred = search.exam && assignments.some((item) => item.id === search.exam) ? search.exam : assignments[0].id;
+    void loadGradebook(preferred, { keepPage: true });
+  }, [page, gradeMeta, assignments, search.exam]);
 
   useEffect(() => {
     if (paperId) return;
@@ -1594,8 +1647,20 @@ function TeacherHome() {
       ? paperPickerLabel(selectedPaper)
       : "未选择";
 
+  function openTeacherPage(next: TeacherPage, examId?: string) {
+    const exam = examId || (next === "scores" ? gradeId || search.exam : undefined);
+    void navigate({
+      to: "/teacher",
+      search: {
+        ...(next === "overview" ? {} : { page: next }),
+        ...(exam ? { exam } : {}),
+      },
+      replace: true,
+    });
+  }
+
   function go(next: TeacherPage) {
-    setPage(next);
+    openTeacherPage(next);
     if (next === "exam" && examStep === "edit" && !title.trim()) {
       const start = new Date();
       setStartsAt(toLocalInput(start));
@@ -1711,7 +1776,15 @@ function TeacherHome() {
             <div className="min-w-0">
               <p className="mb-1 text-xs font-semibold tracking-wide text-primary">AP MICROECONOMICS</p>
               <h1 className="text-2xl font-bold tracking-tight md:text-[27px]">{copy[1]}</h1>
-              <p className="mt-1 text-sm text-muted-foreground">{copy[2]}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {page === "overview"
+                  ? roster.length > 0
+                    ? assignments.length > 0
+                      ? "名册和考试都已就绪，可以从最近考试进入成绩。"
+                      : "名册已导入，可以布置考试了。"
+                    : copy[2]
+                  : copy[2]}
+              </p>
             </div>
             <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
               {roster.length > 0 && assignments.length > 0 ? null : (
@@ -1768,7 +1841,7 @@ function TeacherHome() {
                     <Button variant="outline" onClick={() => go("pdf")}>上传 PDF</Button>
                   </div>
                   <p className="mt-4 rounded-xl bg-white/50 px-3 py-3 text-xs leading-relaxed text-muted-foreground">
-                    完成名册导入后，即可开始布置考试并查看成绩。
+                    {roster.length > 0 ? "名册已导入。可以布置考试，或从最近考试查看成绩。" : "完成名册导入后，即可开始布置考试并查看成绩。"}
                   </p>
                 </section>
               </div>
@@ -1855,7 +1928,18 @@ function TeacherHome() {
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                   <Button onClick={() => void importRoster(false)}>追加导入</Button>
                   <Button type="button" variant="outline" onClick={() => void importTestRoster()}>导入测试学号</Button>
-                  <Button variant="outline" onClick={() => void importRoster(true)}>覆盖导入</Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      if (parseRosterCsv(csvText).length === 0) {
+                        toast.error("没有读到学号/姓名");
+                        return;
+                      }
+                      setReplaceRosterOpen(true);
+                    }}
+                  >
+                    覆盖导入
+                  </Button>
                 </div>
               </section>
               <div className="flex flex-wrap items-center gap-2">
@@ -2264,7 +2348,7 @@ function TeacherHome() {
                                   <div className="font-mono text-[11px] text-muted-foreground">{row.student_id}</div>
                                 </TableCell>
                                 <TableCell className="tabular-nums">
-                                  {row.status === "in_progress" ? "作答中" : row.mcq_correct != null ? `${row.mcq_correct}/${row.mcq_total}` : "—"}
+                                  {mcqProgressLabel(row)}
                                 </TableCell>
                                 {mcqHeaders.map((n) => {
                                   const item = row.mcqs?.find((entry) => entry.n === n);
@@ -2421,6 +2505,11 @@ function TeacherHome() {
                     {!pdfAiDone && items.length > 0 && !aiBusy && !alreadyPublished && (
                       <p className="mt-3 text-xs text-muted-foreground">请等 AI 审完，或点「再跑一遍 AI 审核」后再提交。</p>
                     )}
+                    {items.filter((it) => it.kind === "mcq" && !/^[A-E]$/.test((it.correct_answer ?? "").trim())).length > 0 && (
+                      <p className="mt-3 text-xs text-amber-800">
+                        还有 {items.filter((it) => it.kind === "mcq" && !/^[A-E]$/.test((it.correct_answer ?? "").trim())).length} 道选择题没设正确答案。设好之前不会显示「通过」。
+                      </p>
+                    )}
                     {pdfFindings.length > 0 && (
                       <p className="mt-3 text-xs text-amber-800">
                         {pdfFindings.length >= items.length
@@ -2437,11 +2526,12 @@ function TeacherHome() {
                   {items.length === 0 && (
                     <p className="rounded-xl border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">这份草稿里还没有题目。</p>
                   )}
-                  {items.some((it) => it.kind === "frq" && (it.max_score <= 1 || readPrintedScore(`${it.stem} ${it.content}`, 0) === 0) && scoreAck[`${it.kind}-${it.sort_order}`] !== it.max_score) ? (
+                  {items.some((it) => frqScorePrompt(it, scoreAck[`${it.kind}-${it.sort_order}`])) ? (
                     <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-900">
-                      {items.filter((it) => it.kind === "frq" && (it.max_score <= 1 || readPrintedScore(`${it.stem} ${it.content}`, 0) === 0) && scoreAck[`${it.kind}-${it.sort_order}`] !== it.max_score).map((it) => (
-                        it.max_score <= 1 ? `Q${it.sort_order} 满分只有 ${it.max_score || 1} 分，请确认。` : `Q${it.sort_order} 没有认出卷面分值，请确认满分。`
-                      )).join("")}
+                      {items.flatMap((it) => {
+                        const note = frqScorePrompt(it, scoreAck[`${it.kind}-${it.sort_order}`]);
+                        return note ? [note] : [];
+                      }).join("")}
                     </p>
                   ) : null}
                   <PdfQuestionList
@@ -2465,6 +2555,43 @@ function TeacherHome() {
           )}
       </div>
 
+      <AlertDialog open={collectTarget !== null} onOpenChange={(open) => { if (!open) setCollectTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>收这名学生的卷</AlertDialogTitle>
+            <AlertDialogDescription>
+              将收取「{collectTarget?.student_name ?? "这名学生"}」{collectTarget?.student_id ? `（学号 ${collectTarget.student_id}）` : ""}的答卷。收卷后不能再改。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const id = collectTarget?.roster_id;
+                if (id) void collectStudent(id);
+              }}
+            >
+              确认收卷
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={replaceRosterOpen} onOpenChange={setReplaceRosterOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>覆盖导入名册</AlertDialogTitle>
+            <AlertDialogDescription>
+              将替换现有 {roster.length} 名学生。原来的名册会删掉。有未结束的考试时不能覆盖。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void importRoster(true)}>确认覆盖</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Dialog open={gradeFocusId !== null} onOpenChange={(open) => { if (!open && !gradeBusy) setGradeFocusId(null); }}>
         <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto rounded-2xl">
           {(() => {
@@ -2483,7 +2610,7 @@ function TeacherHome() {
                 </DialogHeader>
                 <div className="flex flex-wrap justify-end gap-2">
                   {row.status === "in_progress" ? (
-                    <Button variant="outline" disabled={gradeBusy !== null} onClick={() => void collectStudent(row.roster_id)}>
+                    <Button variant="outline" disabled={gradeBusy !== null} onClick={() => askCollect(row.roster_id)}>
                       {gradeBusy === "collect" ? "正在收卷" : "收这名学生的卷"}
                     </Button>
                   ) : (

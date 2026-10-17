@@ -27,23 +27,38 @@ export function loadSchoolExamSession(): SchoolExamSession | null {
   }
 }
 
+const SESSION_EVENT = "easyecon:school-exam-changed";
+
+function notifySchoolExamSession() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(SESSION_EVENT));
+}
+
+export function subscribeSchoolExamSession(onChange: () => void) {
+  if (typeof window === "undefined") return () => undefined;
+  window.addEventListener(SESSION_EVENT, onChange);
+  return () => window.removeEventListener(SESSION_EVENT, onChange);
+}
+
 export function saveSchoolExamSession(session: SchoolExamSession) {
   if (typeof window === "undefined") return;
   const raw = JSON.stringify(session);
   sessionStorage.setItem(KEY, raw);
   localStorage.setItem(KEY, raw);
+  notifySchoolExamSession();
 }
 
 export function clearSchoolExamSession() {
   if (typeof window === "undefined") return;
   sessionStorage.removeItem(KEY);
   localStorage.removeItem(KEY);
+  notifySchoolExamSession();
 }
 
 export function isSchoolExamLocked(session: SchoolExamSession | null, now = Date.now()) {
   if (!session) return false;
+  if (hasExitedExam(session.assignmentId)) return false;
   if (session.submitted && session.resultsPublished) return false;
-  if (session.submitted && hasExitedExam(session.assignmentId)) return false;
   return Date.parse(session.endsAt) + EXAM_LOCK_GRACE_MS > now;
 }
 
@@ -60,6 +75,16 @@ export function markExamExited(assignmentId: string) {
   if (typeof window === "undefined") return;
   try {
     sessionStorage.setItem(EXITED_PREFIX + assignmentId, "1");
+  } catch {
+    /* ignore */
+  }
+  notifySchoolExamSession();
+}
+
+export function clearExamExited(assignmentId: string) {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.removeItem(EXITED_PREFIX + assignmentId);
   } catch {
     /* ignore */
   }
