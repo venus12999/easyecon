@@ -38,7 +38,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { authFetch } from "@/lib/auth-fetch";
 import { applyKnownApAnswerKey, looksLikeProvidedFigure, parseApExamPages, readPrintedScore, type ParsedExamItem } from "@/lib/ap-exam-parse";
 import { splitTeacherFrq } from "@/lib/frq-teacher-fields";
-import { cropImageBlob, cropRectsForQuestions } from "@/lib/exam-page-crop";
+import { cropImageBlob, cropRectsForQuestions, cropUrlFromPage } from "@/lib/exam-page-crop";
 import { PageCropDialog } from "@/components/teacher/PageCropDialog";
 import { PdfQuestionList, type PdfAiFinding, type TeacherPdfItem } from "@/components/teacher/PdfQuestionList";
 import { Switch } from "@/components/ui/switch";
@@ -150,6 +150,7 @@ type GradeFrq = {
   ai_suggestions: string | null;
   breakdown: { point: string; awarded: boolean; comment: string }[];
   manual_score: number | null;
+  manual_comment: string | null;
 };
 type GradeMcq = { n: number; picked: string | null; is_correct: boolean | null };
 type GradeRow = {
@@ -186,10 +187,11 @@ function beijingTime(iso: string | null) {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
+    second: "2-digit",
     hourCycle: "h23",
   }).formatToParts(date);
   const pick = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
-  return `${pick("year")}-${pick("month")}-${pick("day")} ${pick("hour")}:${pick("minute")}`;
+  return `${pick("year")}-${pick("month")}-${pick("day")} ${pick("hour")}:${pick("minute")}:${pick("second")}`;
 }
 
 function toLocalInput(d: Date) {
@@ -321,7 +323,17 @@ function mcqRate(rows: GradeRow[]) {
 }
 
 function isPageShot(url: string | null | undefined) {
-  return !!url && /\/page-\d+\.(png|jpe?g|webp)$/i.test(url);
+  return !!url && /\/page-\d+\.(png|jpe?g|webp)(?:$|\?)/i.test(url);
+}
+
+function missingImageFinding(reason: string) {
+  return /has_image\s*=\s*false|缺图|缺少图表|没有配图|没有图表|未附图表|没有截图|需要补图/i.test(reason);
+}
+
+async function cropAlreadyStored(url: string) {
+  const res = await fetch(url, { cache: "no-store" });
+  await res.body?.cancel();
+  return res.ok;
 }
 
 function sortPdfItems(items: PdfItem[]) {
@@ -392,6 +404,7 @@ function TeacherHome() {
   const [gradeRows, setGradeRows] = useState<GradeRow[]>([]);
   const [gradeFocusId, setGradeFocusId] = useState<string | null>(null);
   const [manualDraft, setManualDraft] = useState<Record<string, string>>({});
+  const [commentDraft, setCommentDraft] = useState<Record<string, string>>({});
   const [gradeBusy, setGradeBusy] = useState<"save" | "ai" | "collect" | "end" | null>(null);
   const [endConfirm, setEndConfirm] = useState(false);
   const [gradeMeta, setGradeMeta] = useState<{ title: string; results_published: boolean; ends_at: string } | null>(null);
@@ -676,7 +689,25 @@ function TeacherHome() {
       return;
     }
     const rows = (j.rows ?? []) as GradeRow[];
-    setGradeRows(rows);
+    setGradeRows(
+      rows.length > 0
+        ? rows
+        : roster.map((student) => ({
+            roster_id: student.id,
+            student_id: student.student_id,
+            student_name: student.student_name,
+            account_name: student.account_name ?? null,
+            status: "missing",
+            submitted_at: null,
+            mcq_correct: null,
+            mcq_total: null,
+            frq_answers: {},
+            mcqs: [],
+            frqs: [],
+            frq_score: null,
+            frq_max: 0,
+          })),
+    );
     setGradeMeta({
       title: j.assignment.title,
       results_published: j.assignment.results_published,
@@ -692,16 +723,28 @@ function TeacherHome() {
     }
     setGradeFocusId(row.roster_id);
     const draft: Record<string, string> = {};
-    for (const frq of row.frqs ?? []) draft[frq.frq_id] = frq.manual_score == null ? "" : String(frq.manual_score);
+    const notes: Record<string, string> = {};
+    for (const frq of row.frqs ?? []) {
+      draft[frq.frq_id] = frq.manual_score == null ? "" : String(frq.manual_score);
+      notes[frq.frq_id] = frq.manual_comment ?? "";
+    }
     setManualDraft(draft);
+    setCommentDraft(notes);
   }
 
   async function saveManualScores() {
     const row = gradeRows.find((r) => r.roster_id === gradeFocusId);
     if (!gradeId || !row) return;
     const manual: Record<string, number | null> = {};
+    const comments: Record<string, string | null> = {};
     for (const frq of row.frqs ?? []) {
       const raw = (manualDraft[frq.frq_id] ?? "").trim();
+      const note = (commentDraft[frq.frq_id] ?? "").trim();
+      if (note.length > 2000) {
+        toast.error(`第 ${frq.sort_order} 题的评语不超过 2000 字`);
+        return;
+      }
+      comments[frq.frq_id] = note || null;
       if (!raw) {
         manual[frq.frq_id] = null;
         continue;
@@ -717,7 +760,7 @@ function TeacherHome() {
     try {
       const r = await authFetch("/api/teacher/gradebook", {
         method: "POST",
-        body: JSON.stringify({ assignment_id: gradeId, roster_id: row.roster_id, manual }),
+        body: JSON.stringify({ assignment_id: gradeId, roster_id: row.roster_id, manual, comments }),
       });
       const j = await r.json();
       if (!r.ok) {
@@ -727,7 +770,7 @@ function TeacherHome() {
       const rows = await loadGradebook(gradeId);
       const next = rows?.find((item) => item.roster_id === row.roster_id);
       if (next) openGrade(next);
-      toast.success("分数已保存");
+      toast.success("分数和评语已保存");
     } finally {
       setGradeBusy(null);
     }
@@ -743,13 +786,13 @@ function TeacherHome() {
         body: JSON.stringify({ assignment_id: gradeId, roster_id: row.roster_id, action: "ai" }),
       });
       const j = await r.json();
+      const rows = await loadGradebook(gradeId);
+      const next = rows?.find((item) => item.roster_id === row.roster_id);
+      if (next) openGrade(next);
       if (!r.ok) {
         toast.error(j.error ?? "AI 批改失败");
         return;
       }
-      const rows = await loadGradebook(gradeId);
-      const next = rows?.find((item) => item.roster_id === row.roster_id);
-      if (next) openGrade(next);
       toast.success("AI 批改已写入");
     } finally {
       setGradeBusy(null);
@@ -774,7 +817,7 @@ function TeacherHome() {
 
   function exportCsv() {
     const frqCountInSheet = gradeRows.reduce((max, row) => Math.max(max, row.frqs?.length ?? 0), 0);
-    const frqHeaders = Array.from({ length: frqCountInSheet }, (_, index) => [`第${index + 1}题得分`, `第${index + 1}题作答`]).flat();
+    const frqHeaders = Array.from({ length: frqCountInSheet }, (_, index) => [`第${index + 1}题得分`, `第${index + 1}题作答`, `第${index + 1}题评语`]).flat();
     const header = ["学号", "姓名", "状态", "选择题得分", "选择题满分", "选择题作答", ...frqHeaders, "交卷时间（北京时间）"];
     const lines = gradeRows.map((row) => {
       const mcqText = (row.mcqs ?? []).map((item) => `${item.n}${item.picked ?? "-"}`).join(" ");
@@ -782,7 +825,7 @@ function TeacherHome() {
         const frq = row.frqs?.[index];
         if (!frq) return ["", ""];
         const score = frq.manual_score ?? frq.ai_score;
-        return [score == null ? "" : String(score), frq.answer_text || ""];
+        return [score == null ? "" : String(score), frq.answer_text || "", frq.manual_comment || frq.ai_comment || ""];
       }).flat();
       return [
         row.student_id,
@@ -865,7 +908,12 @@ function TeacherHome() {
         toast.message("AI 未配置，切题结果可直接查看；有问题再点编辑。");
         return;
       }
-      const findings = (j.findings ?? []) as PdfAiFinding[];
+      const findings = ((j.findings ?? []) as PdfAiFinding[]).filter((finding) => {
+        const item = current.find((it) => `${it.kind}-${it.sort_order}` === finding.key);
+        const url = (item?.image_url ?? "").trim();
+        const hasFigure = !!url && !isPageShot(url);
+        return !(hasFigure && missingImageFinding(finding.reason));
+      });
       setPdfFindings(findings);
       setPdfAiRan(true);
       setPdfAiDone(true);
@@ -987,7 +1035,19 @@ function TeacherHome() {
           }
           setPdfBusy(`从整页截取第 ${it.sort_order} 题图表…`);
           try {
-            const crop = await cropImageBlob(page.blob, { ...plan, mode: "figure" });
+            let crop: Blob;
+            try {
+              crop = await cropImageBlob(page.blob, { ...plan, mode: "figure" });
+            } catch {
+              const band = plan.slices[0];
+              if (!band) throw new Error("没有图表范围");
+              crop = await cropImageBlob(page.blob, {
+                page_number: plan.page_number,
+                mode: "figure",
+                hinted: true,
+                slices: [{ x: Math.max(0, band.x - 36), y: 0, w: band.w + 72, h: 20000, prefer: "largest" }],
+              });
+            }
             figures++;
             imageByKey[key] = URL.createObjectURL(crop);
             if (classId) {
@@ -1119,6 +1179,15 @@ function TeacherHome() {
         };
       });
     const applied = sortPdfItems(applyKnownApAnswerKey(nextItems, j.import?.filename ?? ""));
+    await Promise.all(
+      applied.map(async (it) => {
+        if (it.image_url || !it.needs_image) return;
+        const page = loadedPages.find((p) => p.page_number === it.page_number);
+        if (!page?.image_url) return;
+        const url = cropUrlFromPage(page.image_url, it.kind, it.sort_order);
+        if (await cropAlreadyStored(url).catch(() => false)) it.image_url = url;
+      }),
+    );
     const published = j.import?.status === "published";
     setItems(applied);
     setPdfFindings([]);
@@ -1181,6 +1250,8 @@ function TeacherHome() {
     const it = items[index];
     if (!it) return;
     const local = URL.createObjectURL(file);
+    const key = `${it.kind}-${it.sort_order}`;
+    setPdfFindings((findings) => findings.filter((finding) => !(finding.key === key && missingImageFinding(finding.reason))));
     setItems((xs) => xs.map((row, i) => (i === index ? { ...row, image_url: local, needs_image: true } : row)));
     if (!pdfClassId || !activeImport) return;
     try {
@@ -1261,7 +1332,7 @@ function TeacherHome() {
   const alreadyPublished = imports.find((imp) => imp.id === activeImport)?.status === "published";
 
   useEffect(() => {
-    if (page !== "scores" || gradeId || assignments.length !== 1) return;
+    if (page !== "scores" || gradeId || assignments.length === 0) return;
     void loadGradebook(assignments[0].id);
   }, [page, gradeId, assignments]);
 
@@ -2003,7 +2074,11 @@ function TeacherHome() {
                   </div>
                   <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                     <StatCard label="班级正确率" value={gradeRate == null ? "—" : `${gradeRate}%`} hint={gradeRate == null ? "暂无成绩数据" : "已交卷选择题"} />
-                    <StatCard label="已提交" value={gradeId ? `${submittedCount} / ${gradeRows.length}` : "0 / 0"} hint={gradeId ? `${inProgressCount} 人作答中` : "请选择一场考试"} />
+                    <StatCard
+                      label="已提交"
+                      value={gradeId ? `${submittedCount} / ${gradeRows.length || roster.length}` : roster.length ? `0 / ${roster.length}` : "—"}
+                      hint={gradeId ? `${inProgressCount} 人作答中` : roster.length ? "名册人数，选择考试后显示交卷数" : "请选择一场考试"}
+                    />
                     <StatCard label="最高正确率" value={bestScore < 0 ? "—" : `${Math.round(bestScore * 100)}%`} hint={bestScore < 0 ? "暂无成绩数据" : "单份已交答卷"} />
                     <StatCard label="已交大题" value={frqCount} hint={frqCount ? "点学生姓名查看评语和改分" : "暂无大题作答"} />
                   </div>
@@ -2051,6 +2126,9 @@ function TeacherHome() {
                                   <Pill tone={row.status === "submitted" ? "ok" : row.status === "in_progress" ? "live" : "muted"}>
                                     {row.status === "submitted" ? "已提交" : row.status === "in_progress" ? "作答中" : "未交"}
                                   </Pill>
+                                  {row.status === "submitted" && row.submitted_at ? (
+                                    <div className="mt-1 text-[11px] text-muted-foreground">{beijingTime(row.submitted_at)}</div>
+                                  ) : null}
                                 </TableCell>
                               </TableRow>
                             ))}
@@ -2213,6 +2291,7 @@ function TeacherHome() {
                   <DialogTitle>{row.student_name} 的答卷</DialogTitle>
                   <DialogDescription>
                     {row.student_id}
+                    {row.status === "submitted" && row.submitted_at ? ` · 交卷 ${beijingTime(row.submitted_at)}` : ""}
                     {row.status === "in_progress" ? " · 还在作答，下面是目前已保存的内容" : row.frq_score == null ? " · 大题还没有分数" : ` · 大题 ${row.frq_score}/${row.frq_max}`}
                   </DialogDescription>
                 </DialogHeader>
@@ -2276,16 +2355,28 @@ function TeacherHome() {
                         </ul>
                       ) : null}
                       {row.status === "submitted" ? (
-                        <div className="flex items-center gap-2">
-                          <Label htmlFor={`manual-${frq.frq_id}`} className="shrink-0 text-xs">教师给分</Label>
-                          <Input
-                            id={`manual-${frq.frq_id}`}
-                            inputMode="numeric"
-                            value={manualDraft[frq.frq_id] ?? ""}
-                            placeholder="留空则用 AI 分数"
-                            className="max-w-40"
-                            onChange={(e) => setManualDraft((current) => ({ ...current, [frq.frq_id]: e.target.value }))}
-                          />
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Label htmlFor={`manual-${frq.frq_id}`} className="shrink-0 text-xs">教师给分</Label>
+                            <Input
+                              id={`manual-${frq.frq_id}`}
+                              inputMode="numeric"
+                              value={manualDraft[frq.frq_id] ?? ""}
+                              placeholder="留空则用 AI 分数"
+                              className="max-w-40"
+                              onChange={(e) => setManualDraft((current) => ({ ...current, [frq.frq_id]: e.target.value }))}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor={`comment-${frq.frq_id}`} className="text-xs">教师评语</Label>
+                            <Textarea
+                              id={`comment-${frq.frq_id}`}
+                              value={commentDraft[frq.frq_id] ?? ""}
+                              placeholder="写给这道题的批注，可以空着"
+                              rows={3}
+                              onChange={(e) => setCommentDraft((current) => ({ ...current, [frq.frq_id]: e.target.value }))}
+                            />
+                          </div>
                         </div>
                       ) : null}
                     </section>
@@ -2296,7 +2387,7 @@ function TeacherHome() {
                   <Button variant="outline" disabled={gradeBusy !== null} onClick={() => setGradeFocusId(null)}>关闭</Button>
                   {row.status === "submitted" ? (
                     <Button disabled={gradeBusy !== null || !(row.frqs ?? []).length} onClick={() => void saveManualScores()}>
-                      {gradeBusy === "save" ? "正在保存" : "保存分数"}
+                      {gradeBusy === "save" ? "正在保存" : "保存分数和评语"}
                     </Button>
                   ) : null}
                 </div>

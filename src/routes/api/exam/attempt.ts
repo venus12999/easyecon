@@ -121,7 +121,7 @@ export const Route = createFileRoute("/api/exam/attempt")({
           const merged = mergeSavedAttempt(attempt, {
             mcq_detail: body.mcq_detail,
             frq_answers: body.frq_answers,
-          });
+          }, { submit: true });
           const closed = await closeSchoolAttempt(attempt.id, bundle.paper.id, {
             mcq_detail: merged.mcq_detail,
             frq_answers: merged.frq_answers,

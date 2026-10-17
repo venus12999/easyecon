@@ -4,7 +4,7 @@ import type { Json } from "@/integrations/supabase/types";
 import { jsonErr } from "@/lib/json-api";
 import { accountNames, ensureTeacherClass, getTeacherDb, verifyTeacherRequest } from "@/lib/teacher-auth.server";
 import { isUuid } from "@/lib/school-exam-session";
-import { attachSchoolAiGrades, closeSchoolAttempt, saveManualFrqScores, teacherFrqViews, teacherMcqViews } from "@/lib/school-exam.server";
+import { attachSchoolAiGrades, closeSchoolAttempt, readSubmittedAt, saveManualFrqScores, teacherFrqViews, teacherMcqViews } from "@/lib/school-exam.server";
 
 async function teacherAssignment(userId: string, jwt: string, assignmentId: string) {
   const db = await getTeacherDb(jwt);
@@ -79,7 +79,7 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
             student_name: r.student_name,
             account_name: r.user_id ? names.get(r.user_id) ?? null : null,
             started_at: a?.started_at ?? null,
-            submitted_at: a?.submitted_at ?? null,
+            submitted_at: a ? readSubmittedAt(a.frq_answers, a.submitted_at) : null,
             mcq_total: a?.submitted_at ? a.mcq_total : null,
             mcq_correct: a?.submitted_at ? a.mcq_correct : null,
             duration_seconds: a?.duration_seconds ?? null,
@@ -104,6 +104,7 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
           roster_id?: string;
           action?: string;
           manual?: Record<string, number | null>;
+          comments?: Record<string, string | null>;
         };
         const assignmentId = body.assignment_id ?? "";
         const rosterId = body.roster_id ?? "";
@@ -136,11 +137,13 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
           return Response.json({ ok: true });
         }
         if (!attempt.submitted_at) return jsonErr("学生还没交卷");
-        const next = body.action === "ai"
-          ? await attachSchoolAiGrades(owned.assignment.paper_id, attempt.frq_answers, { force: true })
-          : await saveManualFrqScores(owned.assignment.paper_id, attempt.frq_answers, body.manual ?? {});
+        const graded = body.action === "ai" ? await attachSchoolAiGrades(owned.assignment.paper_id, attempt.frq_answers, { force: true }) : null;
+        const next = graded
+          ? graded.answers
+          : await saveManualFrqScores(owned.assignment.paper_id, attempt.frq_answers, body.manual ?? {}, body.comments ?? {});
         const { error } = await supabaseAdmin.from("school_attempts").update({ frq_answers: next }).eq("id", attempt.id);
         if (error) return jsonErr(error.message, 500);
+        if (graded?.error) return jsonErr(graded.error, 502);
         return Response.json({ ok: true });
       },
     },

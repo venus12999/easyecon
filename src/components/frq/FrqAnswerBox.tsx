@@ -68,7 +68,7 @@ export function FrqAnswerBox({
   }
 
   return (
-    <div className="space-y-3 border border-border rounded-lg p-4 bg-card">
+    <div className="space-y-3 border border-border rounded-lg p-4 bg-card" data-frq-id={frqId}>
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-semibold">你的答案</h4>
         <span className="text-xs text-muted-foreground">支持打字、上传图片或文件（图片优先）</span>

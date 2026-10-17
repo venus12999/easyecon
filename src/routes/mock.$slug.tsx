@@ -133,6 +133,17 @@ function PaperRunner() {
   const progressRef = useRef({ phase: "idle" as string, mcqLocked: false });
   const saveSeq = useRef(0);
   const latestSave = useRef<(override?: { phase?: string; mcqLocked?: boolean }) => Promise<void>>(async () => {});
+  const saveTail = useRef(Promise.resolve());
+  const submittingRef = useRef(false);
+  const finalizingRef = useRef(false);
+  const draftRef = useRef({
+    answers: {} as Record<string, OptKey>,
+    frqAnswers: {} as Record<string, FrqAnswerState>,
+    seconds: 0,
+    idx: 0,
+    phase: "idle",
+    breakSeconds: 0,
+  });
   const [breakSeconds, setBreakSeconds] = useState(0);
   const [frqSeconds, setFrqSeconds] = useState(0);
   const [frqAnswers, setFrqAnswers] = useState<Record<string, FrqAnswerState>>({});
@@ -624,18 +635,34 @@ function PaperRunner() {
     beginPaper();
   }
 
+  draftRef.current = { answers, frqAnswers, seconds, idx, phase, breakSeconds };
+
+  function captureActiveAnswer() {
+    const el = document.activeElement;
+    if (!(el instanceof HTMLTextAreaElement)) return;
+    const id = el.closest("[data-frq-id]")?.getAttribute("data-frq-id");
+    if (!id) return;
+    const current = draftRef.current.frqAnswers[id] ?? EMPTY_ANSWER;
+    if (el.value === current.text) return;
+    draftRef.current = {
+      ...draftRef.current,
+      frqAnswers: { ...draftRef.current.frqAnswers, [id]: { ...current, text: el.value } },
+    };
+  }
+
   function schoolPayload(override?: { phase?: string; mcqLocked?: boolean }) {
-    const phaseNow = override?.phase ?? phase;
+    const draft = draftRef.current;
+    const phaseNow = override?.phase ?? draft.phase;
     const locked = override?.mcqLocked ?? (progressRef.current.mcqLocked || phaseNow === "frq" || phaseNow === "break");
     if (locked) progressRef.current = { phase: phaseNow === "running" ? "frq" : phaseNow, mcqLocked: true };
     return {
       assignment_id: assignmentId,
-      mcq_detail: questions.map((q) => ({ question_id: q.id, picked: answers[q.id] ?? null })),
+      mcq_detail: questions.map((q) => ({ question_id: q.id, picked: draft.answers[q.id] ?? null })),
       frq_answers: {
-        items: frqAnswers,
-        progress: { phase: locked && phaseNow === "running" ? "frq" : phaseNow, seconds, breakSeconds, idx, mcq_locked: locked, save_seq: saveSeq.current },
+        items: draft.frqAnswers,
+        progress: { phase: locked && phaseNow === "running" ? "frq" : phaseNow, seconds: draft.seconds, breakSeconds: draft.breakSeconds, idx: draft.idx, mcq_locked: locked, save_seq: saveSeq.current },
       },
-      duration_seconds: seconds,
+      duration_seconds: draft.seconds,
     };
   }
 
@@ -662,9 +689,18 @@ function PaperRunner() {
     };
   }, [isSchoolExam, phase, schoolSubmitted]);
 
-  async function saveSchoolProgress(override?: { phase?: string; mcqLocked?: boolean }) {
-    if (!isSchoolExam || schoolSubmitted || !schoolHydratedRef.current) return;
-    const phaseNow = override?.phase ?? phase;
+  function saveSchoolProgress(override?: { phase?: string; mcqLocked?: boolean; force?: boolean }) {
+    const job = saveTail.current.then(() => persistSchoolDraft(override));
+    saveTail.current = job.then(() => undefined, () => undefined);
+    return job;
+  }
+
+  async function persistSchoolDraft(override?: { phase?: string; mcqLocked?: boolean; force?: boolean }) {
+    if (!isSchoolExam || !schoolHydratedRef.current) return;
+    if (submittingRef.current && !override?.force) return;
+    if (!override?.force && schoolSubmitted) return;
+    captureActiveAnswer();
+    const phaseNow = override?.phase ?? draftRef.current.phase;
     if (phaseNow === "idle" || phaseNow === "done") return;
     saveSeq.current += 1;
     const r = await authFetch("/api/exam/attempt", {
@@ -677,33 +713,50 @@ function PaperRunner() {
       setSchoolSavedAt(Date.now());
       return;
     }
-    if (j.error === "已交卷，不能再改" || j.error === "考试已截止，请交卷") void finalizeSchoolExam();
+    if (!finalizingRef.current && (j.error === "已交卷，不能再改" || j.error === "考试已截止，请交卷")) void finalizeSchoolExam();
   }
   latestSave.current = saveSchoolProgress;
 
   async function finalizeSchoolExam() {
-    const r = await authFetch("/api/exam/attempt", {
-      method: "POST",
-      body: JSON.stringify({ ...schoolPayload(), action: "submit" }),
-    });
-    const j = await r.json();
-    if (!r.ok && j.error !== "已交卷，不能再改") {
-      toast.error(j.error ?? "交卷失败");
+    if (finalizingRef.current) return false;
+    finalizingRef.current = true;
+    submittingRef.current = true;
+    let submitted = false;
+    try {
+      captureActiveAnswer();
+      await saveSchoolProgress({ force: true });
+      captureActiveAnswer();
+      saveSeq.current += 1;
+      const r = await authFetch("/api/exam/attempt", {
+        method: "POST",
+        body: JSON.stringify({ ...schoolPayload(), action: "submit" }),
+      });
+      const j = await r.json();
+      if (!r.ok && j.error !== "已交卷，不能再改") {
+        toast.error(j.error ?? "交卷失败");
+        return false;
+      }
+      submitted = true;
+      setSchoolSubmitted(true);
+      setSchoolPublished(!!j.assignment?.results_published);
+      saveSchoolExamSession({
+        assignmentId: assignmentId!,
+        paperSlug: slug,
+        title: schoolTitle || paper?.title || "",
+        endsAt: schoolEndsAt,
+        submitted: true,
+        resultsPublished: !!j.assignment?.results_published,
+      });
+      setFrqSubmitted(true);
+      setPhase("done");
+      return true;
+    } catch {
+      toast.error("交卷失败");
       return false;
+    } finally {
+      submittingRef.current = false;
+      if (!submitted) finalizingRef.current = false;
     }
-    setSchoolSubmitted(true);
-    setSchoolPublished(!!j.assignment?.results_published);
-    saveSchoolExamSession({
-      assignmentId: assignmentId!,
-      paperSlug: slug,
-      title: schoolTitle || paper?.title || "",
-      endsAt: schoolEndsAt,
-      submitted: true,
-      resultsPublished: !!j.assignment?.results_published,
-    });
-    setFrqSubmitted(true);
-    setPhase("done");
-    return true;
   }
 
   function persistPendingPaper() {
@@ -1263,7 +1316,7 @@ function PaperRunner() {
             <h1 className="text-2xl font-bold">{questions.length === 0 ? "大题练习 · FRQ" : "Section II · FRQ"}</h1>
             <p className="text-xs text-muted-foreground">
               {isSchoolExam
-                ? "写完全部大题后交卷。本场考试不展示得分点解析。"
+                ? "没写完也可以交卷。交卷后不能再改，本场不展示得分点解析。"
                 : isFrqOnly
                 ? mode === "exam"
                   ? "仿真模式：到点自动交卷"

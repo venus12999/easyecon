@@ -26,6 +26,18 @@ function ExamEntry() {
 
   async function enter(e: React.FormEvent) {
     e.preventDefault();
+    if (!studentId.trim()) {
+      toast.error("请填写学号");
+      return;
+    }
+    if (!studentName.trim()) {
+      toast.error("请填写姓名");
+      return;
+    }
+    if (!examCode.trim()) {
+      toast.error("请填写考试码");
+      return;
+    }
     setBusy(true);
     try {
       const r = await fetch("/api/exam/enter", {
@@ -85,14 +97,14 @@ function ExamEntry() {
       <p className="text-sm text-muted-foreground mb-6">填写花名册上的学号、姓名，以及老师公布的考试码。同一学号可再次入场继续未交卷。</p>
       <Card>
         <CardContent className="p-5">
-          <form className="space-y-3" onSubmit={(e) => void enter(e)}>
+          <form noValidate className="space-y-3" onSubmit={(e) => void enter(e)}>
             <div>
               <label className="text-xs text-muted-foreground">学号</label>
-              <Input value={studentId} onChange={(e) => setStudentId(e.target.value)} autoComplete="off" required />
+              <Input value={studentId} onChange={(e) => setStudentId(e.target.value)} autoComplete="off" />
             </div>
             <div>
               <label className="text-xs text-muted-foreground">姓名（须与花名册一致）</label>
-              <Input value={studentName} onChange={(e) => setStudentName(e.target.value)} required />
+              <Input value={studentName} onChange={(e) => setStudentName(e.target.value)} />
             </div>
             <div>
               <label className="text-xs text-muted-foreground">考试码（6 位字母和数字，例如 K7PGAD）</label>
@@ -102,7 +114,6 @@ function ExamEntry() {
                 placeholder="例如 K7PGAD"
                 className="tracking-[0.3em] font-mono uppercase"
                 maxLength={8}
-                required
               />
             </div>
             <Button type="submit" className="w-full" disabled={busy}>

@@ -42,6 +42,17 @@ function claimsMissingOptions(reason: string) {
   return /缺少\s*A|A\s*[–—-]\s*D|任一选项|选项不完整|没有\s*[A-D]\s*选项|missing option/i.test(reason);
 }
 
+function claimsMissingImage(reason: string) {
+  return /has_image\s*=\s*false|缺图|缺少图表|没有配图|没有图表|未附图表|没有截图|需要补图/i.test(reason);
+}
+
+function itemHasFigure(it: PdfItemIn) {
+  const url = (it.image_url ?? "").trim();
+  if (!url) return false;
+  if (url.startsWith("blob:")) return true;
+  return !/\/page-\d+\.(png|jpe?g|webp)(?:$|\?)/i.test(url);
+}
+
 async function aiReviewItems(items: PdfItemIn[]) {
   const apiKey = process.env.LOVABLE_API_KEY;
   if (!apiKey) {
@@ -58,7 +69,7 @@ async function aiReviewItems(items: PdfItemIn[]) {
       : undefined,
     options_ok: optionsComplete(it),
     content: it.kind === "frq" ? (it.content ?? "").slice(0, 500) : undefined,
-    has_image: !!it.image_url,
+    has_image: itemHasFigure(it),
     needs_image: !!it.needs_image,
     has_answer: !!(it.correct_answer ?? "").trim(),
   }));
@@ -68,7 +79,7 @@ async function aiReviewItems(items: PdfItemIn[]) {
 - 题干被切到下一题，或选项里混进了下一题题号
 - 仅当 options_ok 为 false 时，才可以说选择题缺少 A–D。options_ok 为 true 时，禁止写「缺少选项」或「缺少 A–D」
 - 选项文本明显不是选项（例如整段题干被塞进某一个选项）
-- 题干提到 graph/table/figure/见图 但 has_image=false
+- 仅当 needs_image 为 true 且 has_image 为 false，题干又明确提到已经印出的 graph/table/figure/见图 时，才报告缺图。理由写「题干提到图表，但没有配图」。has_image 为 true 时禁止报告缺图，也不要写出 has_image=false
 - 大题正文过短（明显没切全）
 
 不要：
@@ -137,7 +148,15 @@ async function aiReviewItems(items: PdfItemIn[]) {
       parsed = { findings: [] };
     }
     const allowed = new Set(slice.map((p) => p.key));
-    findings.push(...(parsed.findings ?? []).filter((f) => allowed.has(f.key) && !(complete.has(f.key) && claimsMissingOptions(f.reason ?? ""))));
+    const imaged = new Set(slice.filter((p) => p.has_image).map((p) => p.key));
+    findings.push(
+      ...(parsed.findings ?? []).filter((f) => {
+        if (!allowed.has(f.key)) return false;
+        if (complete.has(f.key) && claimsMissingOptions(f.reason ?? "")) return false;
+        if (imaged.has(f.key) && claimsMissingImage(f.reason ?? "")) return false;
+        return true;
+      }),
+    );
   }
   return Response.json({ findings, total: items.length });
 }

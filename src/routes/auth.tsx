@@ -154,6 +154,17 @@ function AuthPage() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (tab === "register" && !forgot) {
+      const name = displayName.trim();
+      if (!name) {
+        toast.error("请填写姓名");
+        return;
+      }
+      if (name.length > 40) {
+        toast.error("姓名不超过 40 字");
+        return;
+      }
+    }
     const parsed = schema.safeParse({ email, password });
     if (!parsed.success) {
       toast.error(parsed.error.issues[0]?.message ?? "输入错误");
@@ -163,14 +174,6 @@ function AuthPage() {
     try {
       if (tab === "register") {
         const name = displayName.trim();
-        if (!name) {
-          toast.error("请填写姓名");
-          return;
-        }
-        if (name.length > 40) {
-          toast.error("姓名不超过 40 字");
-          return;
-        }
         const nextPath = teacherEntry ? "/teacher" : studentPath();
         const { data, error } = await supabase.auth.signUp({
           email: parsed.data.email,
@@ -351,7 +354,7 @@ function AuthPage() {
                 <TabsTrigger value="register">注册</TabsTrigger>
               </TabsList>
               <TabsContent value={tab} className="mt-4">
-                <form onSubmit={onSubmit} className="space-y-3">
+                <form noValidate onSubmit={onSubmit} className="space-y-3">
                   {tab === "register" && !forgot && (
                     <Input
                       type="text"
@@ -359,7 +362,6 @@ function AuthPage() {
                       value={displayName}
                       onChange={(e) => setDisplayName(e.target.value)}
                       autoComplete="name"
-                      required
                       maxLength={40}
                       className="h-11"
                     />
@@ -400,7 +402,7 @@ function AuthPage() {
                     </div>
                   )}
                   {forgot ? <Button type="button" className="w-full h-11" disabled={busy} onClick={() => void sendReset()}>{busy && <Loader2 className="h-4 w-4 animate-spin" />}发送重设邮件</Button> : <Button type="submit" className="w-full h-11" disabled={busy}>
-                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : tab === "register" ? "注册并发送验证邮件" : "登录"}
+                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : tab === "register" ? "注册" : "登录"}
                   </Button>}
                   {tab === "login" && <Button type="button" variant="link" className="h-auto w-full p-0 text-xs" onClick={() => setForgot((value) => !value)}>{forgot ? "返回密码登录" : "忘记密码？"}</Button>}
                 </form>

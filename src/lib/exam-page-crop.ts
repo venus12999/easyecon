@@ -41,8 +41,8 @@ function clampSlice(page: RasterPageCrop, slice: CropSlice): CropSlice {
 }
 
 function questionMarkers(page: RasterPageCrop): Marker[] {
-  const top = page.height * 0.06;
-  const bottom = page.height * 0.92;
+  const top = page.height * 0.035;
+  const bottom = page.height * 0.94;
   const leftMax = page.width * 0.22;
   const rightMin = page.width * 0.45;
   const rightMax = page.width * 0.68;
@@ -50,8 +50,15 @@ function questionMarkers(page: RasterPageCrop): Marker[] {
   for (const box of page.boxes) {
     if (box.y < top || box.y > bottom) continue;
     const t = box.str.trim();
-    const m = t.match(/^(\d{1,2})\./) || t.match(/^(\d{1,2})$/);
+    // "7. When…" is a question. A lone "50" or "1" is a table cell, not a question number.
+    const m = t.match(/^(\d{1,2})\.(?!\d)\s*(\S[\s\S]*)?$/);
     if (!m) continue;
+    if (!m[2]) {
+      const decimalTail = page.boxes.some(
+        (b) => b !== box && Math.abs(b.y - box.y) < 8 && box.x > b.x && box.x - (b.x + b.w) < 16 && /[\d.−-]$/.test(b.str.trim()),
+      );
+      if (decimalTail) continue;
+    }
     const n = Number(m[1]);
     if (n < 1 || n > 60) continue;
     let col: "L" | "R" | null = null;

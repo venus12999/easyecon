@@ -180,10 +180,11 @@ function picksFrom(detail: unknown): McqPick[] {
   }).filter((p) => p.question_id);
 }
 
-/** Keep the furthest section and never replace a saved answer with a blank. */
+/** Keep the furthest section and never replace a saved answer with a blank. A submit still merges, even if an autosave took a newer sequence number. */
 export function mergeSavedAttempt(
   existing: { mcq_detail: unknown; frq_answers: unknown },
   incoming: { mcq_detail?: McqPick[]; frq_answers?: unknown },
+  opts?: { submit?: boolean },
 ) {
   const prev = parseFrqAnswers(existing.frq_answers);
   const next = parseFrqAnswers(incoming.frq_answers);
@@ -191,7 +192,7 @@ export function mergeSavedAttempt(
   const nextProgress = (next.progress ?? {}) as Record<string, unknown>;
   const prevSeq = Number(prevProgress.save_seq) || 0;
   const nextSeq = Number(nextProgress.save_seq) || 0;
-  if (nextSeq > 0 && prevSeq > 0 && nextSeq < prevSeq) {
+  if (!opts?.submit && nextSeq > 0 && prevSeq > 0 && nextSeq < prevSeq) {
     return {
       mcq_detail: picksFrom(existing.mcq_detail),
       frq_answers: existing.frq_answers ?? { items: prev.items, progress: prevProgress },
@@ -270,6 +271,7 @@ export type StoredFrqGrade = {
   ai_suggestions: string | null;
   ai_breakdown?: FrqBreakdown[];
   manual_score: number | null;
+  manual_comment: string | null;
 };
 
 export function readStoredGrades(raw: unknown): Record<string, StoredFrqGrade> {
@@ -294,9 +296,33 @@ export function readStoredGrades(raw: unknown): Record<string, StoredFrqGrade> {
       ai_suggestions: typeof g.ai_suggestions === "string" ? g.ai_suggestions : null,
       ai_breakdown: breakdown,
       manual_score: typeof g.manual_score === "number" ? g.manual_score : null,
+      manual_comment: typeof g.manual_comment === "string" ? g.manual_comment : null,
     };
   }
   return out;
+}
+
+function explainGradeError(error: string) {
+  if (error === "ai_not_configured") return "AI 评分尚未配置，有答案的大题没能批改";
+  if (error === "rate_limited") return "AI 评分请求过多，有答案的大题没能批完，请稍后再试";
+  if (error === "credits_exhausted") return "AI 评分额度不足，有答案的大题没能批完";
+  return "有答案的大题没能批完，请再试一次";
+}
+
+export type SchoolAiGradeResult = { answers: Json; missed: number; error: string | null };
+
+export function readSubmittedAt(raw: unknown, column: string | null) {
+  const progress = parseFrqAnswers(raw).progress;
+  const stamped = progress && typeof progress.submitted_at === "string" ? progress.submitted_at : "";
+  return stamped || column;
+}
+
+function withSubmitStamp(raw: unknown, at: string) {
+  const parsed = parseFrqAnswers(raw);
+  const base = raw && typeof raw === "object" && !Array.isArray(raw) ? { ...(raw as Record<string, unknown>) } : {};
+  const progress = { ...(parsed.progress ?? {}) };
+  if (typeof progress.submitted_at !== "string" || !progress.submitted_at) progress.submitted_at = at;
+  return { ...base, items: parsed.items, progress };
 }
 
 function packFrqAnswers(raw: unknown, grades: Record<string, StoredFrqGrade>): Json {
@@ -308,11 +334,11 @@ function packFrqAnswers(raw: unknown, grades: Record<string, StoredFrqGrade>): J
   } as unknown as Json;
 }
 
-export async function attachSchoolAiGrades(paperId: string, rawAnswers: unknown, opts?: { force?: boolean }): Promise<Json> {
+export async function attachSchoolAiGrades(paperId: string, rawAnswers: unknown, opts?: { force?: boolean }): Promise<SchoolAiGradeResult> {
   const existing = readStoredGrades(rawAnswers);
   if (!opts?.force) {
     const { data: paper } = await supabaseAdmin.from("mock_papers").select("description").eq("id", paperId).maybeSingle();
-    if (!schoolExamAiOn(paper?.description)) return packFrqAnswers(rawAnswers, existing);
+    if (!schoolExamAiOn(paper?.description)) return { answers: packFrqAnswers(rawAnswers, existing), missed: 0, error: null };
   }
   const parsed = parseFrqAnswers(rawAnswers);
   const { data: frqs } = await supabaseAdmin
@@ -326,6 +352,8 @@ export async function attachSchoolAiGrades(paperId: string, rawAnswers: unknown,
     : { data: [] as { frq_id: string; rubric_note: string | null }[] };
   const rubricMap = new Map((rubrics ?? []).map((r) => [r.frq_id, r.rubric_note]));
   const grades: Record<string, StoredFrqGrade> = { ...existing };
+  let missed = 0;
+  let lastError: string | null = null;
   for (const frq of frqs ?? []) {
     const prev = grades[frq.id];
     if (!opts?.force && prev?.ai_score != null) continue;
@@ -339,6 +367,7 @@ export async function attachSchoolAiGrades(paperId: string, rawAnswers: unknown,
         ai_comment: "未作答",
         ai_suggestions: null,
         manual_score: prev?.manual_score ?? null,
+        manual_comment: prev?.manual_comment ?? null,
       };
       continue;
     }
@@ -350,7 +379,11 @@ export async function attachSchoolAiGrades(paperId: string, rawAnswers: unknown,
         answerFileUrl: file,
         answerFileKind: answer?.fileKind ?? null,
       });
-      if (!graded.ok) continue;
+      if (!graded.ok) {
+        missed += 1;
+        lastError = graded.error;
+        continue;
+      }
       grades[frq.id] = {
         max_score: graded.grade.max_score,
         ai_score: graded.grade.total_score,
@@ -358,22 +391,36 @@ export async function attachSchoolAiGrades(paperId: string, rawAnswers: unknown,
         ai_suggestions: graded.grade.suggestions,
         ai_breakdown: graded.grade.breakdown,
         manual_score: prev?.manual_score ?? null,
+        manual_comment: prev?.manual_comment ?? null,
       };
     } catch (error) {
+      missed += 1;
+      lastError = "ai_failed";
       console.error("school frq grade", frq.id, error);
     }
   }
-  return packFrqAnswers(rawAnswers, grades);
+  return {
+    answers: packFrqAnswers(rawAnswers, grades),
+    missed,
+    error: missed ? explainGradeError(lastError ?? "ai_failed") : null,
+  };
 }
 
-export async function saveManualFrqScores(paperId: string, rawAnswers: unknown, manual: Record<string, number | null>): Promise<Json> {
+export async function saveManualFrqScores(
+  paperId: string,
+  rawAnswers: unknown,
+  manual: Record<string, number | null>,
+  comments: Record<string, string | null> = {},
+): Promise<Json> {
   const { data: frqs } = await supabaseAdmin.from("paper_frqs").select("id,max_score").eq("paper_id", paperId);
   const maxById = new Map((frqs ?? []).map((f) => [f.id, f.max_score ?? 9]));
   const grades = readStoredGrades(rawAnswers);
-  for (const [id, score] of Object.entries(manual)) {
+  for (const id of new Set([...Object.keys(manual), ...Object.keys(comments)])) {
     const max = maxById.get(id);
     if (max == null) continue;
     const prev = grades[id];
+    const score = Object.prototype.hasOwnProperty.call(manual, id) ? manual[id] : prev?.manual_score ?? null;
+    const note = Object.prototype.hasOwnProperty.call(comments, id) ? (comments[id] ?? "").trim() : prev?.manual_comment ?? null;
     grades[id] = {
       max_score: prev?.max_score || max,
       ai_score: prev?.ai_score ?? null,
@@ -381,6 +428,7 @@ export async function saveManualFrqScores(paperId: string, rawAnswers: unknown, 
       ai_suggestions: prev?.ai_suggestions ?? null,
       ai_breakdown: prev?.ai_breakdown,
       manual_score: score == null ? null : Math.max(0, Math.min(max, Math.round(score))),
+      manual_comment: note || null,
     };
   }
   return packFrqAnswers(rawAnswers, grades);
@@ -398,6 +446,7 @@ export type TeacherFrqView = {
   ai_suggestions: string | null;
   breakdown: FrqBreakdown[];
   manual_score: number | null;
+  manual_comment: string | null;
 };
 
 export function teacherFrqViews(
@@ -436,6 +485,7 @@ export function teacherFrqViews(
         ai_suggestions: stored?.ai_suggestions ?? prior?.ai_suggestions ?? null,
         breakdown,
         manual_score: stored?.manual_score ?? null,
+        manual_comment: stored?.manual_comment ?? null,
       };
     });
 }
@@ -477,12 +527,13 @@ export async function closeSchoolAttempt(
   const { data: current } = await supabaseAdmin.from("school_attempts").select(ATTEMPT_FIELDS).eq("id", attemptId).maybeSingle();
   if (!current || current.submitted_at) return current;
   const scored = await scorePaperMcq(paperId, picksFrom(patch?.mcq_detail ?? current.mcq_detail));
+  const submittedAt = new Date().toISOString();
   const { data } = await supabaseAdmin
     .from("school_attempts")
     .update({
-      submitted_at: new Date().toISOString(),
+      submitted_at: submittedAt,
       mcq_detail: scored.detail as Json,
-      frq_answers: (patch?.frq_answers ?? current.frq_answers) as Json,
+      frq_answers: withSubmitStamp(patch?.frq_answers ?? current.frq_answers, submittedAt) as Json,
       duration_seconds: patch?.duration_seconds ?? current.duration_seconds,
       mcq_total: scored.total,
       mcq_correct: scored.correct,
@@ -494,7 +545,8 @@ export async function closeSchoolAttempt(
   if (!data) return current;
   try {
     const graded = await attachSchoolAiGrades(paperId, data.frq_answers);
-    const saved = await supabaseAdmin.from("school_attempts").update({ frq_answers: graded }).eq("id", attemptId).select(ATTEMPT_FIELDS).maybeSingle();
+    const saved = await supabaseAdmin.from("school_attempts").update({ frq_answers: graded.answers }).eq("id", attemptId).select(ATTEMPT_FIELDS).maybeSingle();
+    if (graded.error) console.error("close school attempt", graded.error);
     return saved.data ?? data;
   } catch (error) {
     console.error("close school attempt", error);
