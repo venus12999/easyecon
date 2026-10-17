@@ -41,9 +41,65 @@ export function readPrintedScore(text: string, fallback: number) {
   return fallback;
 }
 
+/** Printed question number at the start of a stem, such as "Question 3" or "3." */
+export function printedQuestionNumber(text: string): number | null {
+  const head = text.replace(/\s+/g, " ").trim().slice(0, 80);
+  if (!head) return null;
+  const match = head.match(/^(?:question|q)\s*\.?\s*(\d{1,2})\b/i)
+    ?? head.match(/^第\s*(\d{1,2})\s*题/)
+    ?? head.match(/^(\d{1,2})\s*[.、.)]/);
+  if (!match) return null;
+  const n = Number(match[1]);
+  return n >= 1 && n <= 80 ? n : null;
+}
+
+/** Keep each question's printed number. Numbers stay unique within the same kind. */
+export function withUniqueQuestionNumbers<T extends { kind?: string; sort_order: number; stem?: string | null; content?: string | null; title?: string | null }>(items: T[]): T[] {
+  const used = new Map<string, Set<number>>();
+  const seen = new Map<string, number>();
+  return items.map((item) => {
+    const kind = item.kind ?? "item";
+    const taken = used.get(kind) ?? new Set<number>();
+    used.set(kind, taken);
+    const printed = printedQuestionNumber(`${item.title ?? ""}\n${item.stem ?? ""}\n${item.content ?? ""}`);
+    const next = (seen.get(kind) ?? 0) + 1;
+    let n = printed ?? (item.sort_order >= 1 ? item.sort_order : next);
+    while (taken.has(n)) n += 1;
+    taken.add(n);
+    seen.set(kind, n);
+    return n === item.sort_order ? item : { ...item, sort_order: n };
+  });
+}
+
 /** True when the stem/content refers to a printed table/graph, not “draw a graph”. */
 export function looksLikeProvidedFigure(text: string) {
   return IMAGE_HINT.test(text);
+}
+
+const FIGURE_GIVEAWAY =
+  /\(\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*\)|(?:curves?\s+)?(?:intersect|cross|meet)s?(?:\s+\w+){0,4}\s+at\b|(?:the\s+)?(?:graph|figure|diagram)\s+(?:shows|depicts|illustrates|has|indicates)\b|equilibrium\s+(?:price|quantity|point)\s+(?:is|of|at|equals)\s+[$]?\d|交点|相交|交于|均衡(?:点|价格|数量)(?:是|为|在)\s*\d/i;
+
+function compact(text: string) {
+  return text.toLowerCase().replace(/[‐-−]/g, "").replace(/[^a-z0-9\u4e00-\u9fff()]+/g, "");
+}
+
+function printedSentence(sentence: string, page: string) {
+  const n = compact(sentence);
+  if (!page || n.length < 16) return false;
+  const head = n.slice(0, Math.min(40, n.length));
+  const tail = n.slice(Math.max(0, n.length - 40));
+  return page.includes(head) || page.includes(tail);
+}
+
+/** Drop a model-written graph description. Printed question sentences stay. */
+export function studentVisibleQuestion(text: string, pageText = "") {
+  const page = compact(pageText);
+  const kept = text
+    .split(/\n+|(?<=[.!?。])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .filter((s) => !FIGURE_GIVEAWAY.test(s) || printedSentence(s, page));
+  return kept.join("\n").replace(/[ \t]+\n/g, "\n").trim();
 }
 
 function clean(s: string) {

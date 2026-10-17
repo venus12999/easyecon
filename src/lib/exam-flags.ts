@@ -6,6 +6,13 @@ export function stripExamFlags(description: string | null | undefined) {
   return (description ?? "").replace(/\n?\[\[exam-ai:[01]\]\]/g, "").trim();
 }
 
+/** Hide staff notes such as the question-bank review line from the student intro. */
+export function studentPaperNote(description: string | null | undefined) {
+  const text = stripExamFlags(description);
+  if (!text || /等待管理员审核|列入题库|教师 PDF 导入/.test(text)) return null;
+  return text;
+}
+
 export function readExamAiGrade(description: string | null | undefined) {
   const marks = [...(description ?? "").matchAll(AI_MARK)];
   const last = marks.at(-1);

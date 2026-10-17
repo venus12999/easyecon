@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { jsonErr } from "@/lib/json-api";
+import { studentVisibleQuestion, withUniqueQuestionNumbers } from "@/lib/ap-exam-parse";
 import { withPageImage, withPointMarker } from "@/lib/exam-flags";
 import { packTeacherFrq, splitTeacherFrq, teacherGradingNote, withTeacherRubric } from "@/lib/frq-teacher-fields";
 import { fileToVisionPage, visionParseExamPages } from "@/lib/pdf-vision.server";
@@ -423,8 +424,10 @@ export const Route = createFileRoute("/api/teacher/pdf")({
           if (inserted.error || !inserted.data) return jsonErr(inserted.error?.message ?? "无法创建试卷", 500);
           const paper = inserted.data;
 
-          if (mcqs.length > 0) {
-            const rows = mcqs.map((it) => {
+          const numberedMcqs = withUniqueQuestionNumbers(mcqs);
+          const numberedFrqs = withUniqueQuestionNumbers(frqs);
+          if (numberedMcqs.length > 0) {
+            const rows = numberedMcqs.map((it) => {
               const crop = images[`${it.kind}-${it.sort_order}`];
               return {
                 knowledge_point_id: kp.id,
@@ -449,21 +452,23 @@ export const Route = createFileRoute("/api/teacher/pdf")({
             const { data: qs, error: qErr } = await db.from("questions").insert(rows).select("id");
             if (qErr || !qs) return jsonErr(qErr?.message ?? "题目写入失败", 500);
             const { error: pqErr } = await db.from("paper_questions").insert(
-              qs.map((q, i) => ({ paper_id: paper.id, question_id: q.id, sort_order: i + 1 })),
+              qs.map((q, i) => ({ paper_id: paper.id, question_id: q.id, sort_order: numberedMcqs[i]?.sort_order ?? i + 1 })),
             );
             if (pqErr) return jsonErr(pqErr.message, 500);
           }
-          if (frqs.length > 0) {
-            const frqRows = frqs.map((it, i) => {
+          if (numberedFrqs.length > 0) {
+            const frqRows = numberedFrqs.map((it) => {
               const page = pageMap.get(it.page_number);
               const crop = images[`${it.kind}-${it.sort_order}`];
               const unpacked = splitTeacherFrq(it.content);
               const grading = teacherGradingNote(it.correct_answer, unpacked.rubric_note);
               return {
                 paper_id: paper.id,
-                sort_order: i + 1,
-                title: (it.stem ?? "").trim() || `FRQ ${i + 1}`,
-                content: unpacked.content.trim() || (it.stem ?? "").trim() || `见第 ${it.page_number} 页`,
+                sort_order: it.sort_order,
+                title: (it.stem ?? "").trim() || `Q${it.sort_order}`,
+                content: studentVisibleQuestion(unpacked.content, page?.extracted_text ?? "")
+                  || studentVisibleQuestion(it.stem ?? "", page?.extracted_text ?? "")
+                  || `见第 ${it.page_number} 页`,
                 image_url: crop || null,
                 image_text: withPageImage(withTeacherRubric(page?.extracted_text, grading), page?.image_url),
                 max_score: it.max_score ?? 9,

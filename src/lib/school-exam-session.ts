@@ -65,6 +65,28 @@ export function markExamExited(assignmentId: string) {
   }
 }
 
+const INTENTIONAL_SIGNOUT = "easyecon:intentional-signout";
+
+export function markIntentionalSignOut() {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(INTENTIONAL_SIGNOUT, "1");
+  } catch {
+    /* ignore */
+  }
+}
+
+export function consumeIntentionalSignOut() {
+  if (typeof window === "undefined") return false;
+  try {
+    const on = sessionStorage.getItem(INTENTIONAL_SIGNOUT) === "1";
+    if (on) sessionStorage.removeItem(INTENTIONAL_SIGNOUT);
+    return on;
+  } catch {
+    return false;
+  }
+}
+
 export function isExamLocalEmail(email: string | null | undefined) {
   return !!email?.toLowerCase().endsWith("@exam.easyecon.local");
 }

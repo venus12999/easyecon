@@ -44,8 +44,8 @@ import { clearPendingMock, loadPendingMock, savePendingMock } from "@/lib/pendin
 import { consumeMockAccess } from "@/lib/mock-access-client";
 import { authFetch } from "@/lib/auth-fetch";
 import { ExamFigure } from "@/components/mock/ExamFigure";
-import { readExamAiGrade, readPageImage, readPointMarker, stripExamFlags, stripPointMarker } from "@/lib/exam-flags";
-import { clearSchoolExamSession, isExamLocalEmail, isUuid, markExamExited, saveSchoolExamSession } from "@/lib/school-exam-session";
+import { readExamAiGrade, readPageImage, readPointMarker, stripExamFlags, stripPointMarker, studentPaperNote } from "@/lib/exam-flags";
+import { clearSchoolExamSession, isExamLocalEmail, isUuid, markExamExited, markIntentionalSignOut, saveSchoolExamSession } from "@/lib/school-exam-session";
 
 export const Route = createFileRoute("/mock/$slug")({
   head: () => ({ meta: [{ title: "真题卷 · AP 微观经济" }] }),
@@ -136,6 +136,7 @@ function PaperRunner() {
   const saveTail = useRef(Promise.resolve());
   const submittingRef = useRef(false);
   const finalizingRef = useRef(false);
+  const schoolGradeRef = useRef(false);
   const draftRef = useRef({
     answers: {} as Record<string, OptKey>,
     frqAnswers: {} as Record<string, FrqAnswerState>,
@@ -294,7 +295,7 @@ function PaperRunner() {
         total_seconds: j.paper.total_seconds,
         frq_seconds: j.paper.frq_seconds,
         break_seconds: j.paper.break_seconds,
-        description: stripExamFlags(j.paper.description) || null,
+        description: studentPaperNote(j.paper.description),
       });
       setQuestions((j.questions ?? []) as Q[]);
       setFrqs((j.frqs ?? []) as Frq[]);
@@ -610,6 +611,7 @@ function PaperRunner() {
         setSchoolPublished(!!j.assignment?.results_published);
         setFrqSubmitted(true);
         setPhase("done");
+        scheduleClassGrade(j.assignment?.ends_at);
         return;
       }
       const saved = j.attempt?.frq_answers as { items?: Record<string, FrqAnswerState>; progress?: { phase?: string; mcq_locked?: boolean } } | undefined;
@@ -717,6 +719,19 @@ function PaperRunner() {
   }
   latestSave.current = saveSchoolProgress;
 
+  function scheduleClassGrade(endsAt?: string) {
+    if (schoolGradeRef.current || !assignmentId) return;
+    schoolGradeRef.current = true;
+    const ends = Date.parse(endsAt || schoolEndsAt);
+    const wait = Number.isFinite(ends) ? Math.max(0, ends - Date.now() + 1000) : 0;
+    window.setTimeout(() => {
+      void authFetch("/api/exam/attempt", {
+        method: "POST",
+        body: JSON.stringify({ assignment_id: assignmentId, action: "grade" }),
+      }).catch(() => undefined);
+    }, wait);
+  }
+
   async function finalizeSchoolExam() {
     if (finalizingRef.current) return false;
     finalizingRef.current = true;
@@ -738,6 +753,7 @@ function PaperRunner() {
       }
       submitted = true;
       setSchoolSubmitted(true);
+      scheduleClassGrade(j.assignment?.ends_at);
       setSchoolPublished(!!j.assignment?.results_published);
       saveSchoolExamSession({
         assignmentId: assignmentId!,
@@ -921,6 +937,7 @@ function PaperRunner() {
           setSchoolSubmitted(true);
           setFrqSubmitted(true);
           setPhase("done");
+          scheduleClassGrade(j.assignment?.ends_at);
         }
       })();
     }, 8000);
@@ -1356,7 +1373,7 @@ function PaperRunner() {
             <Card key={f.id}>
               <CardContent className="p-5 space-y-4">
                 <div className="font-semibold">
-                  Question {i + 1}
+                  {isSchoolExam ? `Q${f.sort_order}` : `Question ${i + 1}`}
                   {shortFrqTitle(f.title, f.content) ? ` · ${shortFrqTitle(f.title, f.content)}` : ""}
                   <span className="ml-2 text-xs text-muted-foreground">满分 {f.max_score} 分</span>
                   {user && !grade && (
@@ -1913,14 +1930,17 @@ function PaperRunner() {
   if (isSchoolExam && phase === "done") {
     return (
       <main className="mx-auto flex min-h-[70vh] max-w-lg flex-col items-center justify-center px-4 py-16 text-center">
-        <h1 className="text-3xl font-bold">Congratulations</h1>
+        <h1 className="text-3xl font-bold">已交卷</h1>
         <p className="mt-3 text-sm text-muted-foreground">你已经交卷，可以离开了。</p>
         <Button
           className="mt-8"
           onClick={() => {
             if (assignmentId) markExamExited(assignmentId);
             clearSchoolExamSession();
-            if (isExamLocalEmail(user?.email)) void signOut();
+            if (isExamLocalEmail(user?.email)) {
+              markIntentionalSignOut();
+              void signOut();
+            }
             void nav({ to: "/", replace: true });
           }}
         >
@@ -1977,7 +1997,7 @@ function PaperRunner() {
                     <Card key={f.id}>
                       <CardContent className="p-5 space-y-3">
                         <div className="font-semibold">
-                          Question {i + 1}
+                          {isSchoolExam ? `Q${f.sort_order}` : `Question ${i + 1}`}
                           {shortFrqTitle(f.title, f.content) ? ` · ${shortFrqTitle(f.title, f.content)}` : ""}
                           <span className="ml-2 text-xs text-muted-foreground">满分 {f.max_score} 分</span>
                         </div>
@@ -2035,7 +2055,10 @@ function PaperRunner() {
             onClick={() => {
               if (assignmentId) markExamExited(assignmentId);
               clearSchoolExamSession();
-              if (isExamLocalEmail(user?.email)) void signOut();
+              if (isExamLocalEmail(user?.email)) {
+                markIntentionalSignOut();
+                void signOut();
+              }
               void nav({ to: "/", replace: true });
             }}
           >

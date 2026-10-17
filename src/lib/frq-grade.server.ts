@@ -138,9 +138,8 @@ export async function gradeFrqAnswer(input: {
   );
   const userText = userTextParts.join("\n\n");
   const attempts: Array<{ model: string; figure: boolean; answerImage: boolean; jsonMode: boolean; timeoutMs: number }> = [
-    { model: "google/gemini-2.5-pro", figure: true, answerImage: true, jsonMode: true, timeoutMs: 40000 },
-    { model: "google/gemini-2.5-flash", figure: false, answerImage: true, jsonMode: false, timeoutMs: 30000 },
-    { model: "google/gemini-2.5-flash", figure: false, answerImage: false, jsonMode: false, timeoutMs: 30000 },
+    { model: "google/gemini-2.5-flash", figure: true, answerImage: true, jsonMode: true, timeoutMs: 18000 },
+    { model: "google/gemini-2.5-flash", figure: false, answerImage: false, jsonMode: false, timeoutMs: 15000 },
   ];
   let lastError = "ai_failed";
   const tried = new Set<string>();

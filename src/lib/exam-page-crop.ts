@@ -9,7 +9,7 @@ export type RasterPageCrop = {
   boxes: TextBox[];
 };
 
-export type CropSlice = { x: number; y: number; w: number; h: number; prefer?: "end" | "largest" };
+export type CropSlice = { x: number; y: number; w: number; h: number; prefer?: "end" | "largest" | "caption" };
 
 export type CropPlan = {
   page_number: number;
@@ -24,6 +24,7 @@ type ParsedLike = {
   page_number: number;
   needs_image?: boolean;
   stem?: string;
+  content?: string;
 };
 
 type Marker = { n: number; x: number; y: number; h: number; col: "L" | "R" };
@@ -128,6 +129,77 @@ function choiceMarkerY(page: RasterPageCrop, col: "L" | "R", afterY: number, spl
   return best;
 }
 
+function mentionedFigures(text: string) {
+  const nums: number[] = [];
+  const re = /fig(?:ure|\.)\s*(\d+)|图\s*(\d+)/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    const n = Number(m[1] || m[2]);
+    if (n >= 1 && n <= 20 && !nums.includes(n)) nums.push(n);
+  }
+  return nums;
+}
+
+type TextLine = { text: string; y: number; h: number };
+
+function textLines(page: RasterPageCrop): TextLine[] {
+  const boxes = [...page.boxes].sort((a, b) => a.y - b.y || a.x - b.x);
+  const groups: TextBox[][] = [];
+  for (const box of boxes) {
+    const last = groups.at(-1);
+    if (last && Math.abs(last[0].y - box.y) < 10) last.push(box);
+    else groups.push([box]);
+  }
+  return groups.map((g) => {
+    const y = Math.min(...g.map((b) => b.y));
+    const bottom = Math.max(...g.map((b) => b.y + b.h));
+    return { text: g.map((b) => b.str).join(" ").replace(/\s+/g, " ").trim(), y, h: Math.max(8, bottom - y) };
+  });
+}
+
+function pureFigureNumbers(page: RasterPageCrop) {
+  const nums: number[] = [];
+  for (const line of textLines(page)) {
+    const m = /^(?:figure|fig\.|图)\s*(\d+)\b/i.exec(line.text.trim());
+    if (!m) continue;
+    const n = Number(m[1]);
+    if (n >= 1 && n <= 20 && !nums.includes(n)) nums.push(n);
+  }
+  return nums;
+}
+
+function captionLine(page: RasterPageCrop, n: number): TextLine | null {
+  const re = new RegExp(`(?:fig(?:ure|\\.)|图)\\s*${n}\\b`, "i");
+  const hits = textLines(page).filter((line) => re.test(line.text));
+  const pure = hits.filter((line) => /^(?:figure|fig\.|图)\s*\d+\b/i.test(line.text) && line.text.length <= 40);
+  const pool = pure.length ? pure : hits.filter((line) => line.text.length <= 32);
+  return pool.sort((a, b) => a.text.length - b.text.length)[0] ?? null;
+}
+
+function isAxisLabel(line: TextLine) {
+  const t = line.text.trim();
+  if (/^(?:figure|fig\.|图)\s*\d+\b/i.test(t)) return true;
+  if (t.length <= 14 && !/[.?!]/.test(t)) return true;
+  return false;
+}
+
+function captionSlices(page: RasterPageCrop, caption: TextLine): CropSlice[] {
+  const lines = textLines(page).filter((line) => line.y !== caption.y && !isAxisLabel(line));
+  const prev = lines.filter((line) => line.y + line.h < caption.y - 2).sort((a, b) => b.y - a.y)[0];
+  const next = lines.filter((line) => line.y > caption.y + caption.h + 2).sort((a, b) => a.y - b.y)[0];
+  const x = Math.round(page.width * 0.06);
+  const w = Math.round(page.width * 0.88);
+  const above0 = prev ? prev.y + prev.h + 4 : Math.round(page.height * 0.05);
+  const above1 = caption.y - 2;
+  const below0 = caption.y + caption.h + 4;
+  const below1 = next ? next.y - 4 : Math.round(page.height * 0.92);
+  const gaps = [
+    { y: above0, h: above1 - above0 },
+    { y: below0, h: below1 - below0 },
+  ].filter((gap) => gap.h >= 72);
+  return gaps.map((gap) => clampSlice(page, { x, y: gap.y, w, h: gap.h, prefer: "caption" }));
+}
+
 function pushWindow(page: RasterPageCrop, slices: CropSlice[], band: { x: number; w: number }, y0: number, y1: number, prefer: CropSlice["prefer"]) {
   const h = y1 - y0;
   if (h < 48) return;
@@ -147,6 +219,26 @@ export function cropRectsForQuestions(pages: RasterPageCrop[], items: ParsedLike
     if (!it.needs_image) continue;
     const page = byPage.get(it.page_number);
     if (!page) continue;
+    const named = mentionedFigures(`${it.stem ?? ""} ${it.content ?? ""}`);
+    const onPage = pureFigureNumbers(page);
+    const figureNums = named.length ? named : onPage.length === 1 ? onPage : [];
+    if (figureNums.length) {
+      const hosts = [page, ...pages.filter((p) => Math.abs(p.page_number - page.page_number) === 1)];
+      for (const host of hosts) {
+        const caption = captionLine(host, figureNums[0]);
+        if (!caption) continue;
+        const slices = captionSlices(host, caption);
+        if (!slices.length) continue;
+        out.set(itemKey(it.kind, it.sort_order), {
+          page_number: host.page_number,
+          mode: "figure",
+          hinted: true,
+          slices,
+        });
+        break;
+      }
+      if (out.has(itemKey(it.kind, it.sort_order))) continue;
+    }
     const markers = questionMarkers(page);
     const split = it.kind === "mcq" && twoColumn(markers);
     const mine = markers.filter((m) => m.n === it.sort_order).sort((a, b) => a.y - b.y)[0];
@@ -156,7 +248,7 @@ export function cropRectsForQuestions(pages: RasterPageCrop[], items: ParsedLike
         page_number: page.page_number,
         mode: "figure",
         hinted: true,
-        slices: [clampSlice(page, { x: Math.round(page.width * 0.04), y: top, w: Math.round(page.width * 0.92), h: page.height * 0.5, prefer: "largest" })],
+        slices: [clampSlice(page, { x: Math.round(page.width * 0.04), y: top, w: Math.round(page.width * 0.92), h: page.height * 0.86, prefer: "largest" })],
       });
       continue;
     }
@@ -632,6 +724,75 @@ async function blobFromSlice(bmp: ImageBitmap, slice: CropSlice): Promise<Blob> 
   });
 }
 
+function trimCaptionSlice(ctx: CanvasRenderingContext2D, slice: CropSlice): CropSlice | null {
+  const x = Math.max(0, Math.floor(slice.x));
+  const y = Math.max(0, Math.floor(slice.y));
+  const w = Math.max(1, Math.floor(slice.w));
+  const h = Math.max(1, Math.floor(slice.h));
+  const img = ctx.getImageData(x, y, w, h);
+  const box = inkBounds(img.data, w, h, 0, h - 1, 1);
+  if (!box) return null;
+  const rw = box.maxX - box.minX;
+  const bh = box.maxY - box.minY;
+  if (rw < 80 || bh < 72) return null;
+  const edge = 10;
+  return { x: x + box.minX - edge, y: y + box.minY - edge, w: rw + edge * 2, h: bh + edge * 2 };
+}
+
+function paragraphAt(kinds: RowKind[], i: number) {
+  return kinds[i] === "text" && kinds[i + 1] === "text" && kinds[i + 2] === "text";
+}
+
+function largestGraphicGap(ctx: CanvasRenderingContext2D, slice: CropSlice): CropSlice | null {
+  const x = Math.max(0, Math.floor(slice.x));
+  const y = Math.max(0, Math.floor(slice.y));
+  const w = Math.max(1, Math.floor(slice.w));
+  const h = Math.max(1, Math.floor(slice.h));
+  const img = ctx.getImageData(x, y, w, h);
+  const step = 2;
+  const kinds: RowKind[] = [];
+  for (let py = 0; py < h; py += step) kinds.push(classifyRow(img.data, w, h, py, step));
+  let best: CropSlice | null = null;
+  let bestArea = 0;
+  let i = 0;
+  while (i < kinds.length) {
+    while (i < kinds.length && paragraphAt(kinds, i)) i++;
+    const start = i;
+    while (i < kinds.length && !paragraphAt(kinds, i)) i++;
+    const y0 = start * step;
+    const y1 = Math.min(h - 1, i * step);
+    if (y1 - y0 < 72) continue;
+    let textRows = 0;
+    let core = 0;
+    for (let k = start; k < i; k++) {
+      if (kinds[k] === "text") textRows++;
+      else if (kinds[k] === "rule" || kinds[k] === "figure") core++;
+    }
+    if (textRows > 6 && textRows > core) continue;
+    const box = inkBounds(img.data, w, h, y0, y1, 1);
+    if (!box) continue;
+    const rw = box.maxX - box.minX;
+    const bh = box.maxY - box.minY;
+    if (rw < 80 || rw < w * 0.22 || bh < 72) continue;
+    let ink = 0;
+    let samples = 0;
+    for (let py = box.minY; py <= box.maxY; py += 2) {
+      for (let px = box.minX; px <= box.maxX; px += 2) {
+        samples++;
+        if (isInk(img.data, (py * w + px) * 4)) ink++;
+      }
+    }
+    const density = ink / Math.max(1, samples);
+    if (density < 0.004 || density > 0.45) continue;
+    const area = rw * bh;
+    if (area <= bestArea) continue;
+    bestArea = area;
+    const edge = 8;
+    best = { x: x + box.minX - edge, y: y + box.minY - edge, w: rw + edge * 2, h: bh + edge * 2 };
+  }
+  return best;
+}
+
 export async function cropImageBlob(blob: Blob, plan: CropPlan): Promise<Blob> {
   const bmp = await createImageBitmap(blob);
   try {
@@ -641,21 +802,27 @@ export async function cropImageBlob(blob: Blob, plan: CropPlan): Promise<Blob> {
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("无法裁切页图");
     ctx.drawImage(bmp, 0, 0);
-    let best: CropSlice | null = null;
-    let bestArea = -1;
+    const pageBox = { width: bmp.width, height: bmp.height, page_number: 0, boxes: [] as TextBox[] };
+    const captions: CropSlice[] = [];
+    const clusters: CropSlice[] = [];
     for (const slice of plan.slices) {
-      const cluster = bestInkCluster(
-        ctx,
-        clampSlice({ width: bmp.width, height: bmp.height, page_number: 0, boxes: [] }, slice),
-        bmp.height,
-        !!plan.hinted,
-      );
-      if (!cluster) continue;
-      const area = cluster.w * cluster.h;
-      if (area > bestArea) {
-        bestArea = area;
-        best = cluster;
+      const clamped = clampSlice(pageBox, slice);
+      if (slice.prefer === "caption") {
+        const trimmed = trimCaptionSlice(ctx, clamped);
+        if (trimmed) captions.push(trimmed);
+        continue;
       }
+      const cluster = bestInkCluster(ctx, clamped, bmp.height, !!plan.hinted);
+      if (cluster) clusters.push(cluster);
+    }
+    let best: CropSlice | null = captions.sort((a, b) => b.w * b.h - a.w * a.h)[0] ?? null;
+    if (!best) best = clusters.sort((a, b) => b.w * b.h - a.w * a.h)[0] ?? null;
+    if (!best && plan.hinted) {
+      const gaps = plan.slices
+        .filter((slice) => slice.prefer !== "caption")
+        .map((slice) => largestGraphicGap(ctx, clampSlice(pageBox, slice)))
+        .filter((gap): gap is CropSlice => !!gap);
+      best = gaps.sort((a, b) => b.w * b.h - a.w * a.h)[0] ?? null;
     }
     if (!best) throw new Error("没有找到图表区域");
     const out = await blobFromSlice(bmp, best);

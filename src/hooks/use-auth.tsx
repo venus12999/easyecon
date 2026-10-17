@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { hydrateSessionOnlyToken, installSessionOnlyPersistence } from "@/lib/remember-session";
+import { consumeIntentionalSignOut } from "@/lib/school-exam-session";
 import { useRouter } from "@tanstack/react-router";
 import { toast } from "sonner";
 
@@ -46,6 +47,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       // 会话失效：SIGNED_OUT 或 TOKEN_REFRESHED 返回空 session
       if ((event === "SIGNED_OUT" || event === "TOKEN_REFRESHED" || event === "USER_UPDATED") && !s) {
+        if (consumeIntentionalSignOut()) {
+          hadSession = false;
+          return;
+        }
         if (hadSession && !isPublic()) {
           toast.error("登录已过期，请重新登录");
           const from = window.location.pathname + window.location.search;

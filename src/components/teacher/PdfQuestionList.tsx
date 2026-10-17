@@ -170,7 +170,7 @@ function PdfQuestionCard({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <span className="text-xs px-1.5 py-0.5 rounded bg-primary text-primary-foreground font-bold font-mono">
-                        {it.kind === "mcq" ? `#${it.sort_order}` : `FRQ ${it.sort_order}`}
+                        {it.kind === "mcq" ? `#${it.sort_order}` : `Q${it.sort_order}`}
                       </span>
                       <span className="text-xs px-1.5 py-0.5 rounded bg-secondary">{it.kind === "mcq" ? "选择题" : "大题"}</span>
                       {it.needs_image && (
@@ -249,7 +249,26 @@ function PdfQuestionCard({
                         {(["option_a", "option_b", "option_c", "option_d", "option_e"] as const).map((k, n) => (
                           <Input key={k} placeholder={`选项 ${"ABCDE"[n]}`} value={it[k]} onChange={(e) => onChange(idx, { [k]: e.target.value })} />
                         ))}
-                        <Input placeholder="正确答案 A-E（选填）" value={it.correct_answer} onChange={(e) => onChange(idx, { correct_answer: e.target.value.toUpperCase() })} />
+                        <div className="flex flex-wrap items-center gap-2 sm:col-span-2" role="radiogroup" aria-label="正确答案">
+                          <span className="text-xs text-muted-foreground">正确答案</span>
+                          {(["A", "B", "C", "D", "E"] as const).map((letter) => {
+                            const selected = it.correct_answer === letter;
+                            return (
+                              <button
+                                key={letter}
+                                type="button"
+                                role="radio"
+                                aria-checked={selected}
+                                className={selected
+                                  ? "grid h-9 w-9 place-items-center rounded-full border border-primary bg-primary text-sm font-semibold text-primary-foreground"
+                                  : "grid h-9 w-9 place-items-center rounded-full border border-border bg-white text-sm font-semibold"}
+                                onClick={() => onChange(idx, { correct_answer: selected ? "" : letter })}
+                              >
+                                {letter}
+                              </button>
+                            );
+                          })}
+                        </div>
                         <Input type="number" min={1} max={20} aria-label="选择题分值" placeholder="分值" value={it.max_score || 1} onChange={(e) => onChange(idx, { max_score: Math.min(20, Math.max(1, Number(e.target.value) || 1)) })} />
                       </div>
                     ) : (

@@ -22,11 +22,13 @@ export function PageCropDialog({
   const start = useRef<{ x: number; y: number } | null>(null);
   const [box, setBox] = useState<Box | null>(null);
   const [busy, setBusy] = useState(false);
+  const [zoom, setZoom] = useState(1);
 
   useEffect(() => {
     if (!open) return;
     setBox(null);
     setBusy(false);
+    setZoom(1);
     start.current = null;
   }, [open, pageUrl]);
 
@@ -88,16 +90,22 @@ export function PageCropDialog({
       <DialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>在本页框选图表</DialogTitle>
-          <DialogDescription>按住拖动，框住整张 Figure。松开后点「保存这个范围」。不会再自动截一条标题。</DialogDescription>
+          <DialogDescription>按住拖动，框住整张 Figure。图太小可以先放大，再松开后点「保存这个范围」。</DialogDescription>
         </DialogHeader>
+        <div className="flex items-center gap-2">
+          <Button type="button" size="sm" variant="outline" disabled={zoom <= 1} onClick={() => { setZoom((value) => Math.max(1, Math.round((value - 0.5) * 10) / 10)); setBox(null); }}>缩小</Button>
+          <span className="w-12 text-center text-xs tabular-nums text-muted-foreground">{Math.round(zoom * 100)}%</span>
+          <Button type="button" size="sm" variant="outline" disabled={zoom >= 3} onClick={() => { setZoom((value) => Math.min(3, Math.round((value + 0.5) * 10) / 10)); setBox(null); }}>放大</Button>
+        </div>
+        <div className="max-h-[70vh] overflow-auto rounded border border-border bg-muted/30">
         <div
-          className="relative inline-block max-w-full cursor-crosshair touch-none select-none"
+          className="relative inline-block cursor-crosshair touch-none select-none"
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
         >
           {pageUrl ? (
-            <img ref={imgRef} src={pageUrl} alt="试卷这一页" draggable={false} className="max-h-[70vh] max-w-full rounded border border-border bg-white" />
+            <img ref={imgRef} src={pageUrl} alt="试卷这一页" draggable={false} className="block max-w-none rounded bg-white" style={{ width: `${Math.round(zoom * 640)}px` }} />
           ) : null}
           {box && box.w > 0 && box.h > 0 ? (
             <div
@@ -105,6 +113,7 @@ export function PageCropDialog({
               style={{ left: box.x, top: box.y, width: box.w, height: box.h }}
             />
           ) : null}
+        </div>
         </div>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>取消</Button>

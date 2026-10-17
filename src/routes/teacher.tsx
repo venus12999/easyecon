@@ -36,7 +36,7 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/use-auth";
 import { authFetch } from "@/lib/auth-fetch";
-import { applyKnownApAnswerKey, looksLikeProvidedFigure, parseApExamPages, readPrintedScore, type ParsedExamItem } from "@/lib/ap-exam-parse";
+import { applyKnownApAnswerKey, looksLikeProvidedFigure, parseApExamPages, readPrintedScore, studentVisibleQuestion, withUniqueQuestionNumbers, type ParsedExamItem } from "@/lib/ap-exam-parse";
 import { splitTeacherFrq } from "@/lib/frq-teacher-fields";
 import { cropImageBlob, cropRectsForQuestions, cropUrlFromPage } from "@/lib/exam-page-crop";
 import { PageCropDialog } from "@/components/teacher/PageCropDialog";
@@ -146,6 +146,8 @@ type GradeFrq = {
   answer_text: string;
   file_url: string | null;
   ai_score: number | null;
+  ai_failed?: boolean;
+  ai_error?: string | null;
   ai_comment: string | null;
   ai_suggestions: string | null;
   breakdown: { point: string; awarded: boolean; comment: string }[];
@@ -173,7 +175,15 @@ type PdfPage = { id: string; page_number: number; image_url: string; extracted_t
 type PdfItem = TeacherPdfItem;
 
 function csvCell(value: string | number | null | undefined) {
-  return `"${String(value ?? "").replace(/"/g, '""')}"`;
+  return `"${String(value ?? "").replace(/\r?\n+/g, " ").replace(/"/g, '""')}"`;
+}
+
+function columnNumbers<T>(rows: GradeRow[], pick: (row: GradeRow) => T[] | null | undefined, numberOf: (item: T) => number) {
+  const seen = new Set<number>();
+  for (const row of rows) {
+    for (const item of pick(row) ?? []) seen.add(numberOf(item));
+  }
+  return [...seen].sort((a, b) => a - b);
 }
 
 function beijingTime(iso: string | null) {
@@ -407,7 +417,12 @@ function TeacherHome() {
   const [commentDraft, setCommentDraft] = useState<Record<string, string>>({});
   const [gradeBusy, setGradeBusy] = useState<"save" | "ai" | "collect" | "end" | null>(null);
   const [endConfirm, setEndConfirm] = useState(false);
-  const [gradeMeta, setGradeMeta] = useState<{ title: string; results_published: boolean; ends_at: string } | null>(null);
+  const [gradeMeta, setGradeMeta] = useState<{ title: string; results_published: boolean; ends_at: string; ai_grade: boolean } | null>(null);
+  const [gradeNote, setGradeNote] = useState("");
+  const gradingLock = useRef(false);
+  const autoQueued = useRef("");
+  const gradeTicket = useRef(0);
+  const gradeNotice = useRef("");
   const [imports, setImports] = useState<PdfImport[]>([]);
   const [activeImport, setActiveImport] = useState<string>("");
   const [pages, setPages] = useState<PdfPage[]>([]);
@@ -415,6 +430,7 @@ function TeacherHome() {
   const [pdfTitle, setPdfTitle] = useState("");
   const [pdfBusy, setPdfBusy] = useState("");
   const [pdfNotice, setPdfNotice] = useState("");
+  const [scoreAck, setScoreAck] = useState<Record<string, number>>({});
   const [pdfClassId, setPdfClassId] = useState("");
   const pageBlobs = useRef(new Map<number, Blob>());
   const [pdfFindings, setPdfFindings] = useState<PdfAiFinding[]>([]);
@@ -679,11 +695,17 @@ function TeacherHome() {
     }
   }
 
-  async function loadGradebook(id: string) {
+  async function loadGradebook(id: string, opts?: { keepPage?: boolean }) {
+    if (!opts?.keepPage) {
+      gradeTicket.current += 1;
+      setGradeNote("");
+    }
+    const ticket = gradeTicket.current;
     setGradeId(id);
-    setPage("scores");
+    if (!opts?.keepPage) setPage("scores");
     const r = await authFetch(`/api/teacher/gradebook?assignment_id=${id}`);
     const j = await r.json();
+    if (gradeTicket.current !== ticket) return;
     if (!r.ok) {
       toast.error(j.error ?? "无法加载成绩册");
       return;
@@ -712,6 +734,7 @@ function TeacherHome() {
       title: j.assignment.title,
       results_published: j.assignment.results_published,
       ends_at: j.assignment.ends_at,
+      ai_grade: j.assignment.ai_grade !== false,
     });
     return rows;
   }
@@ -776,28 +799,118 @@ function TeacherHome() {
     }
   }
 
+  function pendingAiRows(rows: GradeRow[]) {
+    return rows.filter((row) => row.status === "submitted" && (row.frqs ?? []).some((frq) => frq.ai_score == null && !frq.ai_failed && (frq.answer_text.trim() || frq.file_url)));
+  }
+
+  async function runGradeQueue(rosterIds: string[], manual: boolean) {
+    if (!gradeId || rosterIds.length === 0) return;
+    const ticket = gradeTicket.current;
+    if (gradingLock.current && autoQueued.current === `${gradeId}:${ticket}`) return;
+    autoQueued.current = `${gradeId}:${ticket}`;
+    gradingLock.current = true;
+    if (manual) setGradeBusy("ai");
+    setGradeNote("正在逐题批改，每题写完就保存");
+    let failed = false;
+    try {
+      for (const rosterId of rosterIds) {
+        let busyWaits = 0;
+        for (let step = 0; step < 8; step++) {
+          if (gradeTicket.current !== ticket) return;
+          let response: Response;
+          try {
+            response = await authFetch("/api/teacher/gradebook", {
+              method: "POST",
+              signal: AbortSignal.timeout(38000),
+              body: JSON.stringify({ assignment_id: gradeId, roster_id: rosterId, action: "ai" }),
+            });
+          } catch {
+            toast.error("批改请求中断了。已经批完的题目已保存，再点一次会继续。");
+            failed = true;
+            break;
+          }
+          const body = (await response.json().catch(() => null)) as { error?: string; done?: boolean; pending?: number; busy?: boolean; graded_sort?: number | null } | null;
+          if (gradeTicket.current !== ticket) return;
+          await loadGradebook(gradeId, { keepPage: true });
+          if (!body) {
+            toast.error("批改请求中断了。已经批完的题目已保存，再点一次会继续。");
+            failed = true;
+            break;
+          }
+          if (body.busy) {
+            busyWaits += 1;
+            if (busyWaits > 8) {
+              toast.message("另一边正在批改这名学生，请稍后再试");
+              failed = true;
+              break;
+            }
+            setGradeNote("另一边正在批这一题，稍等后继续");
+            await new Promise((resolve) => window.setTimeout(resolve, 2500));
+            step -= 1;
+            continue;
+          }
+          busyWaits = 0;
+          if (!response.ok) {
+            toast.error(body.error ?? "这一题没批完。已经批完的题目已保存，再点一次会继续。");
+            failed = true;
+            break;
+          }
+          if (body.done || body.pending === 0) break;
+          setGradeNote(body.graded_sort ? `第 ${body.graded_sort} 题已写入，还剩 ${body.pending} 题` : `还剩 ${body.pending} 题`);
+        }
+        if (failed) break;
+      }
+      if (!failed && gradeTicket.current === ticket) {
+        setGradeNote("");
+        toast.success("AI 批改已写入");
+      }
+    } finally {
+      if (autoQueued.current === `${gradeId}:${ticket}`) {
+        gradingLock.current = false;
+        setGradeBusy(null);
+      }
+    }
+  }
+
   async function gradeStudentWithAi() {
     const row = gradeRows.find((r) => r.roster_id === gradeFocusId);
     if (!gradeId || !row) return;
-    setGradeBusy("ai");
-    try {
-      const r = await authFetch("/api/teacher/gradebook", {
-        method: "POST",
-        body: JSON.stringify({ assignment_id: gradeId, roster_id: row.roster_id, action: "ai" }),
-      });
-      const j = await r.json();
-      const rows = await loadGradebook(gradeId);
-      const next = rows?.find((item) => item.roster_id === row.roster_id);
-      if (next) openGrade(next);
-      if (!r.ok) {
-        toast.error(j.error ?? "AI 批改失败");
-        return;
-      }
-      toast.success("AI 批改已写入");
-    } finally {
-      setGradeBusy(null);
+    if (gradingLock.current && autoQueued.current === `${gradeId}:${gradeTicket.current}`) {
+      toast.message("正在逐题批改，完成的分数会马上出现");
+      return;
     }
+    void runGradeQueue([row.roster_id], true);
   }
+
+  const classGradeDue = !!gradeId && gradeMeta?.ai_grade !== false && !!gradeMeta && Date.parse(gradeMeta.ends_at) <= Date.now() && (gradeRows.some((row) => row.status === "in_progress") || pendingAiRows(gradeRows).length > 0);
+
+  useEffect(() => {
+    if (!classGradeDue) return;
+    setGradeNote("考试已结束，正在批改全班大题");
+    const kickClassGrade = () => {
+      void authFetch("/api/teacher/gradebook", {
+        method: "POST",
+        body: JSON.stringify({ assignment_id: gradeId, action: "batch" }),
+      }).then(async (response) => {
+        const body = await response.json().catch(() => ({} as { notice?: string; error?: string }));
+        const message = body.notice || (!response.ok ? body.error : "");
+        if (!message || message === gradeNotice.current) return;
+        gradeNotice.current = message;
+        toast.error(message);
+      }).catch(() => undefined);
+    };
+    kickClassGrade();
+    const timer = window.setInterval(() => {
+      kickClassGrade();
+      void loadGradebook(gradeId, { keepPage: true });
+    }, 8000);
+    return () => {
+      window.clearInterval(timer);
+      setGradeNote("");
+    };
+    // Refresh the roster while the server finishes the class. Opening this page is only a backup if nobody was online at the deadline.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [classGradeDue, gradeId]);
 
   async function togglePublish(published: boolean) {
     if (!gradeId) return;
@@ -816,23 +929,28 @@ function TeacherHome() {
   }
 
   function exportCsv() {
-    const frqCountInSheet = gradeRows.reduce((max, row) => Math.max(max, row.frqs?.length ?? 0), 0);
-    const frqHeaders = Array.from({ length: frqCountInSheet }, (_, index) => [`第${index + 1}题得分`, `第${index + 1}题作答`, `第${index + 1}题评语`]).flat();
-    const header = ["学号", "姓名", "状态", "选择题得分", "选择题满分", "选择题作答", ...frqHeaders, "交卷时间（北京时间）"];
+    const frqCols = columnNumbers(gradeRows, (row) => row.frqs, (frq) => frq.sort_order);
+    const frqHeaders = frqCols.flatMap((n) => [`Q${n}得分`, `Q${n}作答`, `Q${n}评语`]);
+    const header = ["学号", "姓名", "状态", "选择题得分", "选择题满分", "总分", "选择题作答", ...frqHeaders, "交卷时间（北京时间）"];
     const lines = gradeRows.map((row) => {
-      const mcqText = (row.mcqs ?? []).map((item) => `${item.n}${item.picked ?? "-"}`).join(" ");
-      const frqCells = Array.from({ length: frqCountInSheet }, (_, index) => {
-        const frq = row.frqs?.[index];
-        if (!frq) return ["", ""];
+      const mcqText = (row.mcqs ?? []).map((item) => `Q${item.n}${item.picked ?? "-"}`).join(" ");
+      const frqByNumber = new Map((row.frqs ?? []).map((frq) => [frq.sort_order, frq]));
+      const frqCells = frqCols.flatMap((n) => {
+        const frq = frqByNumber.get(n);
+        if (!frq) return ["", "", ""];
         const score = frq.manual_score ?? frq.ai_score;
-        return [score == null ? "" : String(score), frq.answer_text || "", frq.manual_comment || frq.ai_comment || ""];
-      }).flat();
+        const comment = frq.manual_comment || frq.ai_comment || frq.ai_error || "";
+        return [score == null ? "" : String(score), frq.answer_text || "", comment];
+      });
+      const frqSum = (row.frqs ?? []).reduce((sum, frq) => sum + (frq.manual_score ?? frq.ai_score ?? 0), 0);
+      const total = row.status === "submitted" ? (row.mcq_correct ?? 0) + frqSum : "";
       return [
         row.student_id,
         row.student_name,
         row.status === "submitted" ? "已交卷" : row.status === "in_progress" ? "作答中" : "未交",
         row.mcq_correct ?? "",
         row.mcq_total ?? "",
+        total,
         mcqText,
         ...frqCells,
         beijingTime(row.submitted_at),
@@ -843,6 +961,8 @@ function TeacherHome() {
 
   async function collectStudent(rosterId: string) {
     if (!gradeId) return;
+    const student = gradeRows.find((item) => item.roster_id === rosterId);
+    if (!window.confirm(`确定收「${student?.student_name ?? "这名学生"}」的卷吗？收卷后不能再改。`)) return;
     setGradeBusy("collect");
     try {
       const r = await authFetch("/api/teacher/gradebook", {
@@ -1028,7 +1148,7 @@ function TeacherHome() {
           if (!it.needs_image) continue;
           const key = `${it.kind}-${it.sort_order}`;
           const plan = rects.get(key);
-          const page = raster.find((p) => p.page_number === it.page_number);
+          const page = raster.find((p) => p.page_number === (plan?.page_number ?? it.page_number));
           if (!plan || !page) {
             cropFails++;
             continue;
@@ -1081,18 +1201,20 @@ function TeacherHome() {
         const nextItems: PdfItem[] = parsed.map((it) => {
           const pageUrl = opened?.pages.find((p) => p.page_number === it.page_number)?.image_url ?? null;
           const crop = imageByKey[`${it.kind}-${it.sort_order}`] ?? null;
+          const pageText = raster.find((p) => p.page_number === it.page_number)?.extracted_text ?? "";
+          const visible = it.kind === "frq" ? studentVisibleQuestion(it.content, pageText) || studentVisibleQuestion(it.stem, pageText) : it.content;
           return {
             kind: it.kind,
             sort_order: it.sort_order,
             page_number: it.page_number,
-            stem: it.stem,
+            stem: it.kind === "frq" ? studentVisibleQuestion(it.stem, pageText) || visible.slice(0, 80) : it.stem,
             option_a: it.option_a,
             option_b: it.option_b,
             option_c: it.option_c,
             option_d: it.option_d,
             option_e: it.option_e,
             correct_answer: it.correct_answer || "",
-            content: it.content,
+            content: visible,
             max_score: it.max_score,
             reviewed: true,
             rubric_note: "",
@@ -1101,7 +1223,7 @@ function TeacherHome() {
             page_image_url: pageUrl,
           };
         });
-        setItems(nextItems);
+        setItems(withUniqueQuestionNumbers(nextItems));
         const mcq = parsed.filter((it) => it.kind === "mcq").length;
         const frq = parsed.filter((it) => it.kind === "frq").length;
         const storageNote = storageNotes.length ? `页图没有保存：${storageNotes.join("；")}。` : "";
@@ -1189,7 +1311,7 @@ function TeacherHome() {
       }),
     );
     const published = j.import?.status === "published";
-    setItems(applied);
+    setItems(withUniqueQuestionNumbers(applied));
     setPdfFindings([]);
     setPdfAiRan(false);
     setPdfAiDone(published);
@@ -1286,7 +1408,7 @@ function TeacherHome() {
     }
     setPdfBusy("保存并提交到后台…");
     try {
-      const ready = applyKnownApAnswerKey(items, pdfTitle || "2022");
+      const ready = withUniqueQuestionNumbers(applyKnownApAnswerKey(items, pdfTitle || "2022"));
       const saved = await authFetch("/api/teacher/pdf", {
         method: "POST",
         body: JSON.stringify({ action: "save-items", import_id: activeImport, items: ready }),
@@ -1311,7 +1433,13 @@ function TeacherHome() {
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? "提交失败");
-      toast.success(`已提交「${j.paper.title}」。班级可布置这场考试；是否进入题库由管理员在后台决定。`);
+      toast.success(`已提交「${j.paper.title}」。可以去布置这场考试。`);
+      if (roster.length === 0) {
+        toast.message("先导入学生", {
+          description: "名册还是空的，导入后才能把考试码发给学生。",
+          action: { label: "去导入", onClick: () => go("roster") },
+        });
+      }
       await Promise.all([loadPdfs(), loadAssignments()]);
       setPaperId(j.paper.id);
       setSource("existing");
@@ -1448,7 +1576,9 @@ function TeacherHome() {
     return Math.max(best, row.mcq_correct / row.mcq_total);
   }, -1);
   const examStillOpen = !!gradeMeta && Date.parse(gradeMeta.ends_at) > Date.now();
-  const frqWaiting = gradeRows.some((row) => row.status === "submitted" && (row.frqs?.length ?? 0) > 0 && row.frq_score == null);
+  const mcqHeaders = columnNumbers(gradeRows, (row) => row.mcqs, (item) => item.n);
+  const frqHeaders = columnNumbers(gradeRows, (row) => row.frqs, (frq) => frq.sort_order);
+  const frqWaiting = gradeRows.some((row) => row.status === "submitted" && (row.frqs ?? []).some((frq) => (frq.answer_text.trim() || frq.file_url) && frq.manual_score == null && frq.ai_score == null));
   const publishBlock = !gradeMeta
     ? ""
     : examStillOpen
@@ -1584,10 +1714,12 @@ function TeacherHome() {
               <p className="mt-1 text-sm text-muted-foreground">{copy[2]}</p>
             </div>
             <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-              <Button type="button" size="sm" className="theme-toggle" aria-pressed={minecraft} onClick={toggleMinecraft}>
-                <span aria-hidden="true">{minecraft ? "☀️" : "🟩"}</span>
-                {minecraft ? "切换回简约风格" : "切换到 Minecraft 风格"}
-              </Button>
+              {roster.length > 0 && assignments.length > 0 ? null : (
+                <Button type="button" size="sm" className="theme-toggle" aria-pressed={minecraft} onClick={toggleMinecraft}>
+                  <span aria-hidden="true">{minecraft ? "☀️" : "🟩"}</span>
+                  {minecraft ? "切换回简约风格" : "切换到 Minecraft 风格"}
+                </Button>
+              )}
               <span className="hidden rounded-full border border-white/80 bg-white/55 px-3 py-2 text-xs text-muted-foreground sm:inline-flex">
                 {todayLabel}
               </span>
@@ -1602,7 +1734,8 @@ function TeacherHome() {
                 <StatCard label="平均正确率" value={overviewRate == null ? "—" : `${overviewRate}%`} hint={overviewRate == null ? "暂无成绩数据" : "最近一场已交卷的选择题"} icon={BarChart3} />
                 <StatCard label="待处理" value={pendingCount} hint={snapshot ? "最近一场尚未交卷" : "暂无待处理事项"} icon={Clock} />
               </div>
-              <div className="grid gap-4 lg:grid-cols-[1.35fr_1fr]">
+              <div className={cn("grid gap-4", roster.length > 0 && assignments.length > 0 ? "" : "lg:grid-cols-[1.35fr_1fr]")}>
+                {roster.length > 0 && assignments.length > 0 ? null : (
                 <section className="glass rounded-2xl p-5">
                   <h2 className="text-[15px] font-semibold">开始使用</h2>
                   <p className="mt-0.5 text-xs text-muted-foreground">完成以下步骤即可开始管理课程</p>
@@ -1625,6 +1758,7 @@ function TeacherHome() {
                     </div>
                   </div>
                 </section>
+                )}
                 <section className="glass rounded-2xl p-5">
                   <h2 className="text-[15px] font-semibold">快捷操作</h2>
                   <p className="mt-0.5 text-xs text-muted-foreground">常用教学入口</p>
@@ -1787,6 +1921,12 @@ function TeacherHome() {
                 <h2 className="text-lg font-semibold">布置一场考试</h2>
                 <p className="mt-1 text-xs text-muted-foreground">设置考试信息，确认后即可生成学生考试码。</p>
               </div>
+              {roster.length === 0 ? (
+                <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-sm text-amber-900">
+                  先导入学生。名册还是空的，导入后才能把考试码发给学生。
+                  <button type="button" className="ml-2 font-semibold underline" onClick={() => go("roster")}>去导入学生</button>
+                </p>
+              ) : null}
               <section className="glass max-w-3xl rounded-2xl p-5 md:p-6">
                 <div className="mb-6 flex items-center gap-3 text-xs">
                   <div className={cn("flex items-center gap-2", examStep === "edit" ? "font-semibold text-primary" : "text-foreground")}>
@@ -1964,9 +2104,13 @@ function TeacherHome() {
                         />
                       </Field>
                     </div>
-                    <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-900">
-                      学生用学号、姓名和考试码进入。考试码是 6 位字母和数字，例如 K7PGAD。倒计时到截止时间结束；开始得晚，剩下的时间就更短。离开考试页面会提醒，关闭页面前会再确认一次。未交卷可在截止前重新进入；已提交的答卷不能重复提交。选择题交卷后不能再改。
-                    </p>
+                    <ul className="list-disc space-y-1 rounded-xl bg-amber-500/10 px-6 py-2 text-xs leading-relaxed text-amber-900">
+                      <li>学生用学号、姓名和考试码进入。考试码是 6 位字母和数字，例如 K7PGAD。</li>
+                      <li>倒计时到统一截止时间。开始得晚，剩下的时间就更短。</li>
+                      <li>离开考试页面会提醒，关闭页面前会再确认一次。</li>
+                      <li>未交卷可以在截止前重新进入。已提交的答卷不能重复提交。</li>
+                      <li>选择题交卷后不能再改。</li>
+                    </ul>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="flex items-start justify-between gap-3 rounded-xl border border-border bg-white/70 px-3 py-3">
                         <span>
@@ -1978,7 +2122,7 @@ function TeacherHome() {
                       <div className="flex items-start justify-between gap-3 rounded-xl border border-border bg-white/70 px-3 py-3">
                         <span>
                           <span className="block text-sm font-medium">大题用 AI 批改</span>
-                          <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">学生交卷后按参考答案和评分标准批大题。分数和评语只在教师端查看。</span>
+                          <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">考试截止并且答卷都收齐后，自动批完全部大题。不用等老师点批改。</span>
                         </span>
                         <Switch checked={aiGradeFrq} onCheckedChange={setAiGradeFrq} aria-label="大题用 AI 批改" />
                       </div>
@@ -2036,7 +2180,8 @@ function TeacherHome() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <h2 className="text-lg font-semibold">成绩分析</h2>
-                  <p className="mt-1 text-xs text-muted-foreground">考试发布并收到学生答卷后，成绩会显示在这里。</p>
+                  <p className="mt-1 text-xs text-muted-foreground">先看全班成绩。考试截止后会自动批完全部大题，点某一行再看这名学生的答卷。</p>
+                  {gradeNote ? <p className="mt-1 text-sm text-muted-foreground">{gradeNote}</p> : null}
                 </div>
                 <Button variant="outline" disabled={!gradeRows.length} onClick={exportCsv}>导出成绩</Button>
               </div>
@@ -2084,8 +2229,8 @@ function TeacherHome() {
                   </div>
                   <section className="glass overflow-hidden rounded-2xl">
                     <div className="px-5 py-4">
-                      <h2 className="text-[15px] font-semibold">学生成绩</h2>
-                      <p className="text-xs text-muted-foreground">{gradeMeta ? gradeMeta.title : "成绩会在学生提交答卷后显示"}</p>
+                      <h2 className="text-[15px] font-semibold">成绩花名册</h2>
+                      <p className="text-xs text-muted-foreground">{gradeMeta ? `${gradeMeta.title} · 点一行查看答卷` : "选择考试后显示全班成绩"}</p>
                     </div>
                     {!gradeId ? (
                       <EmptyState icon={BarChart3} title="请选择一场考试" hint="从上方选择考试，或从工作台点进一场考试。" />
@@ -2096,10 +2241,15 @@ function TeacherHome() {
                         <Table>
                           <TableHeader>
                             <TableRow className="hover:bg-transparent">
-                              <TableHead>学生</TableHead>
+                              <TableHead className="sticky left-0 z-10 bg-white">学生</TableHead>
                               <TableHead>选择题</TableHead>
-                              <TableHead>大题</TableHead>
-                              <TableHead>提交状态</TableHead>
+                              {mcqHeaders.map((n) => (
+                                <TableHead key={`mcq-${n}`} className="px-1 text-center">{n}</TableHead>
+                              ))}
+                              {frqHeaders.map((n) => (
+                                <TableHead key={`frq-${n}`}>Q{n}</TableHead>
+                              ))}
+                              <TableHead>状态</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
@@ -2109,26 +2259,48 @@ function TeacherHome() {
                                 className={row.status === "missing" ? undefined : "cursor-pointer"}
                                 onClick={() => openGrade(row)}
                               >
-                                <TableCell>
+                                <TableCell className="sticky left-0 z-10 bg-white">
                                   <div className="font-medium">{row.student_name}</div>
                                   <div className="font-mono text-[11px] text-muted-foreground">{row.student_id}</div>
-                                  {row.account_name && row.account_name !== row.student_name ? (
-                                    <div className="text-[11px] text-muted-foreground">注册姓名：{row.account_name}</div>
-                                  ) : null}
                                 </TableCell>
                                 <TableCell className="tabular-nums">
                                   {row.status === "in_progress" ? "作答中" : row.mcq_correct != null ? `${row.mcq_correct}/${row.mcq_total}` : "—"}
                                 </TableCell>
-                                <TableCell className="tabular-nums">
-                                  {row.status === "in_progress" ? "作答中" : row.status !== "submitted" ? "—" : row.frq_score == null ? "待批改" : `${row.frq_score}/${row.frq_max || "—"}`}
-                                </TableCell>
+                                {mcqHeaders.map((n) => {
+                                  const item = row.mcqs?.find((entry) => entry.n === n);
+                                  return (
+                                    <TableCell
+                                      key={`${row.roster_id}-mcq-${n}`}
+                                      className={cn(
+                                        "px-1 text-center font-mono text-[11px]",
+                                        item?.is_correct === true && "text-emerald-700",
+                                        item?.is_correct === false && "text-red-600",
+                                      )}
+                                    >
+                                      {item?.picked ?? "·"}
+                                    </TableCell>
+                                  );
+                                })}
+                                {frqHeaders.map((n) => {
+                                  const frq = row.frqs?.find((entry) => entry.sort_order === n);
+                                  const score = frq ? (frq.manual_score ?? frq.ai_score) : null;
+                                  const label = row.status !== "submitted" || !frq
+                                    ? "—"
+                                    : score != null
+                                      ? `${score}/${frq.max_score}`
+                                      : frq.ai_failed
+                                        ? "未完成"
+                                        : frq.answer_text.trim() || frq.file_url
+                                          ? "批改中"
+                                          : "未作答";
+                                  return (
+                                    <TableCell key={`${row.roster_id}-frq-${n}`} className="tabular-nums" title={frq?.ai_error ?? undefined}>{label}</TableCell>
+                                  );
+                                })}
                                 <TableCell>
                                   <Pill tone={row.status === "submitted" ? "ok" : row.status === "in_progress" ? "live" : "muted"}>
-                                    {row.status === "submitted" ? "已提交" : row.status === "in_progress" ? "作答中" : "未交"}
+                                    {row.status === "submitted" ? "已交" : row.status === "in_progress" ? "作答中" : "未交"}
                                   </Pill>
-                                  {row.status === "submitted" && row.submitted_at ? (
-                                    <div className="mt-1 text-[11px] text-muted-foreground">{beijingTime(row.submitted_at)}</div>
-                                  ) : null}
                                 </TableCell>
                               </TableRow>
                             ))}
@@ -2137,7 +2309,7 @@ function TeacherHome() {
                       </div>
                     )}
                   </section>
-                  <p className="text-xs text-muted-foreground">点学生姓名可以看选择题选项和大题原文。作答中的学生也能打开，并可以单独收卷。</p>
+                  <p className="text-xs text-muted-foreground">绿色是选择题选对，红色是选错。点某一行打开这名学生的答卷、评语和改分。</p>
                 </>
               )}
             </div>
@@ -2265,11 +2437,24 @@ function TeacherHome() {
                   {items.length === 0 && (
                     <p className="rounded-xl border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">这份草稿里还没有题目。</p>
                   )}
+                  {items.some((it) => it.kind === "frq" && (it.max_score <= 1 || readPrintedScore(`${it.stem} ${it.content}`, 0) === 0) && scoreAck[`${it.kind}-${it.sort_order}`] !== it.max_score) ? (
+                    <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-900">
+                      {items.filter((it) => it.kind === "frq" && (it.max_score <= 1 || readPrintedScore(`${it.stem} ${it.content}`, 0) === 0) && scoreAck[`${it.kind}-${it.sort_order}`] !== it.max_score).map((it) => (
+                        it.max_score <= 1 ? `Q${it.sort_order} 满分只有 ${it.max_score || 1} 分，请确认。` : `Q${it.sort_order} 没有认出卷面分值，请确认满分。`
+                      )).join("")}
+                    </p>
+                  ) : null}
                   <PdfQuestionList
                     items={items}
                     findings={pdfFindings}
                     aiRan={pdfAiRan}
-                    onChange={(idx, patch) => setItems((xs) => xs.map((x, i) => (i === idx ? { ...x, ...patch } : x)))}
+                    onChange={(idx, patch) => {
+                      if (typeof patch.max_score === "number") {
+                        const current = items[idx];
+                        if (current) setScoreAck((prev) => ({ ...prev, [`${current.kind}-${current.sort_order}`]: patch.max_score as number }));
+                      }
+                      setItems((xs) => xs.map((x, i) => (i === idx ? { ...x, ...patch } : x)));
+                    }}
                     onRemove={(idx) => setItems((xs) => xs.filter((_, i) => i !== idx))}
                     onReplaceImage={(idx, file) => void replaceItemImage(idx, file)}
                     onRecrop={(idx) => void recropItem(idx)}
@@ -2292,6 +2477,7 @@ function TeacherHome() {
                   <DialogDescription>
                     {row.student_id}
                     {row.status === "submitted" && row.submitted_at ? ` · 交卷 ${beijingTime(row.submitted_at)}` : ""}
+                    {gradeNote ? ` · ${gradeNote}` : ""}
                     {row.status === "in_progress" ? " · 还在作答，下面是目前已保存的内容" : row.frq_score == null ? " · 大题还没有分数" : ` · 大题 ${row.frq_score}/${row.frq_max}`}
                   </DialogDescription>
                 </DialogHeader>
@@ -2301,9 +2487,9 @@ function TeacherHome() {
                       {gradeBusy === "collect" ? "正在收卷" : "收这名学生的卷"}
                     </Button>
                   ) : (
-                    <Button variant="outline" disabled={gradeBusy !== null} onClick={() => void gradeStudentWithAi()}>
+                    <Button variant="outline" disabled={gradeBusy !== null || examStillOpen} onClick={() => void gradeStudentWithAi()}>
                       {gradeBusy === "ai" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                      {gradeBusy === "ai" ? "正在批改" : "用 AI 批改这名学生"}
+                      {examStillOpen ? "结束后自动批改" : gradeBusy === "ai" ? "正在重试" : "重试这名学生"}
                     </Button>
                   )}
                 </div>
@@ -2332,10 +2518,10 @@ function TeacherHome() {
                 </section>
                 <div className="space-y-4">
                   <h3 className="text-sm font-semibold">大题原文</h3>
-                  {(row.frqs ?? []).map((frq, index) => (
+                  {(row.frqs ?? []).map((frq) => (
                     <section key={frq.frq_id} className="space-y-2 rounded-xl border border-border/70 p-3">
                       <div className="flex items-baseline justify-between gap-3">
-                        <h3 className="text-sm font-semibold">第 {index + 1} 题{frq.title ? ` · ${frq.title}` : ""}</h3>
+                        <h3 className="text-sm font-semibold">Q{frq.sort_order}{frq.title ? ` · ${frq.title}` : ""}</h3>
                         <span className="text-xs text-muted-foreground">满分 {frq.max_score}</span>
                       </div>
                       <pre className="whitespace-pre-wrap rounded-lg bg-muted/60 p-3 text-xs">{frq.answer_text.trim() || "（没有文字答案）"}</pre>
@@ -2343,8 +2529,9 @@ function TeacherHome() {
                         <a href={frq.file_url} target="_blank" rel="noreferrer" className="text-xs text-primary underline">查看上传的答案</a>
                       ) : null}
                       <p className="text-sm">
-                        AI 分数：{frq.ai_score == null ? "还没有" : `${frq.ai_score}/${frq.max_score}`}
+                        AI 分数：{frq.ai_score == null ? (frq.ai_failed ? "没批完" : "还没有") : `${frq.ai_score}/${frq.max_score}`}
                       </p>
+                      {frq.ai_failed && frq.ai_error ? <p className="text-sm text-amber-800">{frq.ai_error}</p> : null}
                       {frq.ai_comment ? <p className="whitespace-pre-wrap text-sm text-muted-foreground">{frq.ai_comment}</p> : null}
                       {frq.ai_suggestions ? <p className="whitespace-pre-wrap text-sm text-muted-foreground">{frq.ai_suggestions}</p> : null}
                       {frq.breakdown?.length ? (

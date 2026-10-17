@@ -12,7 +12,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { isAdminEmail } from "@/lib/admin-emails";
 import { useSchoolExamLock } from "@/hooks/use-school-exam-lock";
-import { clearSchoolExamSession, isExamLocalEmail, markExamExited } from "@/lib/school-exam-session";
+import { clearSchoolExamSession, isExamLocalEmail, markExamExited, markIntentionalSignOut } from "@/lib/school-exam-session";
 import { authFetch } from "@/lib/auth-fetch";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
@@ -54,6 +54,7 @@ export function TopNav() {
     clearSchoolExamSession();
     await refresh();
     if (isExamLocalEmail(user?.email)) {
+      markIntentionalSignOut();
       await signOut();
     }
     await nav({ to: "/", replace: true });
