@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { withExamAiGrade } from "@/lib/exam-flags";
 import { jsonErr } from "@/lib/json-api";
-import { teacherFrqViews } from "@/lib/school-exam.server";
+import { collectFinishedExam, continueGradeBatch, teacherFrqViews } from "@/lib/school-exam.server";
 import { ensureTeacherClass, getTeacherDb, verifyTeacherRequest } from "@/lib/teacher-auth.server";
 import { createFixedRandomSchoolPaper, makeExamCode } from "@/lib/school-random-paper.server";
 import { isUuid } from "@/lib/school-exam-session";
@@ -42,16 +42,48 @@ export const Route = createFileRoute("/api/teacher/assignments")({
           .select("id,title,exam_code,starts_at,ends_at,results_published,paper_id,created_at")
           .eq("class_id", cls.id)
           .order("created_at", { ascending: false });
+        const now = Date.now();
+        for (const exam of data ?? []) {
+          if (exam.results_published || now < Date.parse(exam.ends_at)) continue;
+          await collectFinishedExam(exam.id, { endsAt: exam.ends_at, paperId: exam.paper_id });
+          continueGradeBatch(request, exam.id);
+        }
         const paperIds = [...new Set((data ?? []).map((a) => a.paper_id))];
-        const { data: papers } = paperIds.length
-          ? await db.from("mock_papers").select("id,slug,title").in("id", paperIds)
-          : { data: [] as { id: string; slug: string; title: string }[] };
+        const assignmentIds = (data ?? []).map((a) => a.id);
+        const [{ data: papers }, rosterCount, { data: attempts }] = await Promise.all([
+          paperIds.length
+            ? db.from("mock_papers").select("id,slug,title").in("id", paperIds)
+            : Promise.resolve({ data: [] as { id: string; slug: string; title: string }[] }),
+          db.from("school_roster").select("id", { count: "exact", head: true }).eq("class_id", cls.id),
+          assignmentIds.length
+            ? db.from("school_attempts").select("assignment_id,submitted_at,mcq_correct,mcq_total").in("assignment_id", assignmentIds)
+            : Promise.resolve({ data: [] as { assignment_id: string; submitted_at: string | null; mcq_correct: number | null; mcq_total: number | null }[] }),
+        ]);
         const paperMap = new Map((papers ?? []).map((p) => [p.id, p]));
+        const stats = new Map<string, { submitted_count: number; mcq_correct: number; mcq_total: number }>();
+        for (const row of attempts ?? []) {
+          const cur = stats.get(row.assignment_id) ?? { submitted_count: 0, mcq_correct: 0, mcq_total: 0 };
+          if (row.submitted_at) {
+            cur.submitted_count += 1;
+            if (typeof row.mcq_correct === "number" && typeof row.mcq_total === "number" && row.mcq_total > 0) {
+              cur.mcq_correct += row.mcq_correct;
+              cur.mcq_total += row.mcq_total;
+            }
+          }
+          stats.set(row.assignment_id, cur);
+        }
         return Response.json({
-          assignments: (data ?? []).map((a) => ({
-            ...a,
-            paper: paperMap.get(a.paper_id) ?? null,
-          })),
+          assignments: (data ?? []).map((a) => {
+            const stat = stats.get(a.id);
+            return {
+              ...a,
+              paper: paperMap.get(a.paper_id) ?? null,
+              roster_count: rosterCount.count ?? 0,
+              submitted_count: stat?.submitted_count ?? 0,
+              mcq_correct: stat?.mcq_correct ?? 0,
+              mcq_total: stat?.mcq_total ?? 0,
+            };
+          }),
         });
       },
       POST: async ({ request }) => {
@@ -151,11 +183,12 @@ export const Route = createFileRoute("/api/teacher/assignments")({
             .maybeSingle();
           if (!current) return jsonErr("not found", 404);
           if (Date.now() < Date.parse(current.ends_at)) return jsonErr("考试还没结束，不能公布");
+          await collectFinishedExam(current.id, { endsAt: current.ends_at, paperId: current.paper_id });
           const [{ data: attempts }, { data: frqs }] = await Promise.all([
             supabaseAdmin.from("school_attempts").select("submitted_at,user_id,frq_answers").eq("assignment_id", current.id),
             supabaseAdmin.from("paper_frqs").select("id,title,sort_order,max_score").eq("paper_id", current.paper_id),
           ]);
-          if ((attempts ?? []).some((row) => !row.submitted_at)) return jsonErr("还有学生在作答，请先收卷");
+          if ((attempts ?? []).some((row) => !row.submitted_at)) return jsonErr("还有已开考的答卷没能收上来，请稍后再公布");
           if ((frqs ?? []).length > 0) {
             const userIds = (attempts ?? []).map((row) => row.user_id).filter((id): id is string => !!id);
             const submissionQuery = userIds.length

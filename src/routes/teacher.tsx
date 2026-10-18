@@ -159,6 +159,10 @@ type Assignment = {
   results_published: boolean;
   paper_id: string;
   paper: { id: string; slug: string; title: string } | null;
+  roster_count?: number;
+  submitted_count?: number;
+  mcq_correct?: number;
+  mcq_total?: number;
 };
 type GradeFrq = {
   frq_id: string;
@@ -172,7 +176,7 @@ type GradeFrq = {
   ai_error?: string | null;
   ai_comment: string | null;
   ai_suggestions: string | null;
-  breakdown: { point: string; awarded: boolean; comment: string }[];
+  breakdown: { point: string; awarded: boolean; comment: string; points?: number; earned?: number }[];
   manual_score: number | null;
   manual_comment: string | null;
 };
@@ -209,15 +213,23 @@ function columnNumbers<T>(rows: GradeRow[], pick: (row: GradeRow) => T[] | null 
   return [...seen].sort((a, b) => a - b);
 }
 
+function mcqHandedIn(row: GradeRow) {
+  if (row.status === "submitted" || row.mcq_closed) return true;
+  return (row.frqs ?? []).some((frq) => frq.answer_text.trim() || frq.file_url);
+}
+
 function mcqProgressLabel(row: GradeRow) {
-  if (row.mcq_correct != null && row.mcq_total) return `${row.mcq_correct}/${row.mcq_total}`;
-  if (row.mcq_closed) {
-    const answered = (row.mcqs ?? []).filter((item) => item.picked).length;
-    const total = row.mcq_total || row.mcqs?.length || 0;
-    return total ? `已交 ${answered}/${total}` : "已交";
-  }
-  if (row.status === "in_progress") return "作答中";
-  return "—";
+  if (!mcqHandedIn(row)) return row.status === "in_progress" ? "作答中" : "—";
+  if (row.mcq_correct != null && row.mcq_total) return `已交 ${row.mcq_correct}/${row.mcq_total}`;
+  const answered = (row.mcqs ?? []).filter((item) => item.picked).length;
+  const total = row.mcq_total || row.mcqs?.length || 0;
+  return total ? `已交 ${answered}/${total}` : "已交";
+}
+
+function rowStatusLabel(row: GradeRow) {
+  if (row.status === "submitted") return "已交";
+  if (row.status !== "in_progress") return "未交";
+  return mcqHandedIn(row) ? "选择题已交" : "作答中";
 }
 
 function beijingTime(iso: string | null) {
@@ -586,6 +598,10 @@ function TeacherHome() {
       toast.error("没有读到学号/姓名");
       return;
     }
+    if (replace && assignments.some((item) => Date.parse(item.ends_at) > Date.now())) {
+      toast.error("有考试还没结束，不能覆盖名册");
+      return;
+    }
     const r = await authFetch("/api/teacher/class", {
       method: "POST",
       body: JSON.stringify({ rows, replace }),
@@ -596,6 +612,7 @@ function TeacherHome() {
       return;
     }
     setRoster(j.roster ?? []);
+    setReplaceRosterOpen(false);
     toast.success(`花名册 ${j.roster?.length ?? 0} 人`);
   }
 
@@ -704,7 +721,7 @@ function TeacherHome() {
         return;
       }
       if (aiGradeFrq && j.ai_grade_saved === false) {
-        toast.message("答案开关已保存。这份卷没能记下 AI 批改，交卷后不会自动批大题。");
+        toast.message("答案开关已保存。这份卷没能记下 AI 批改，截止后不会自动批大题。");
       }
       toast.success(`考试码 ${j.assignment.exam_code} 已复制`);
       setPublishedExam({ title, code: j.assignment.exam_code });
@@ -971,7 +988,10 @@ function TeacherHome() {
   function exportCsv() {
     const frqCols = columnNumbers(gradeRows, (row) => row.frqs, (frq) => frq.sort_order);
     const frqHeaders = frqCols.flatMap((n) => [`Q${n}得分`, `Q${n}作答`, `Q${n}评语`]);
-    const header = ["学号", "姓名", "状态", "选择题得分", "选择题满分", "总分", "选择题作答", ...frqHeaders, "交卷时间（北京时间）"];
+    const mcqFull = gradeRows.reduce((max, row) => Math.max(max, row.mcq_total ?? row.mcqs?.length ?? 0), 0);
+    const frqFull = gradeRows.reduce((max, row) => Math.max(max, row.frq_max || 0), 0);
+    const totalFull = mcqFull + frqFull;
+    const header = ["学号", "姓名", "状态", "选择题得分", "选择题满分", "总分", "总分满分", "选择题作答", ...frqHeaders, "交卷时间（北京时间）"];
     const lines = gradeRows.map((row) => {
       const mcqText = (row.mcqs ?? []).map((item) => `Q${item.n}${item.picked ?? "-"}`).join(" ");
       const frqByNumber = new Map((row.frqs ?? []).map((frq) => [frq.sort_order, frq]));
@@ -987,10 +1007,11 @@ function TeacherHome() {
       return [
         row.student_id,
         row.student_name,
-        row.status === "submitted" ? "已交卷" : row.status === "in_progress" ? "作答中" : "未交",
+        row.status === "submitted" ? "已交卷" : row.status === "in_progress" ? (mcqHandedIn(row) ? "选择题已交" : "作答中") : "未交",
         row.mcq_correct ?? "",
         row.mcq_total ?? "",
         total,
+        totalFull || "",
         mcqText,
         ...frqCells,
         beijingTime(row.submitted_at),
@@ -1619,6 +1640,16 @@ function TeacherHome() {
     : gradeRows;
   const submittedCount = gradeRows.filter((r) => r.status === "submitted").length;
   const inProgressCount = gradeRows.filter((r) => r.status === "in_progress").length;
+  const unfinishedExam = assignments.find((item) => Date.parse(item.ends_at) > Date.now()) ?? null;
+  const mcqDoneCount = gradeRows.filter((r) => r.status === "in_progress" && mcqHandedIn(r)).length;
+  const stillOnMcqCount = inProgressCount - mcqDoneCount;
+  const inProgressHint = !inProgressCount
+    ? "没有人还在作答"
+    : mcqDoneCount && stillOnMcqCount
+      ? `${mcqDoneCount} 人已交选择题，${stillOnMcqCount} 人还在做选择题`
+      : mcqDoneCount
+        ? `${mcqDoneCount} 人已交选择题`
+        : `${inProgressCount} 人作答中`;
   const liveCount = assignments.filter((a) => examWindow(a.starts_at, a.ends_at).label === "进行中").length;
   const overviewRate = mcqRate(snapshot?.rows ?? []);
   const pendingCount = snapshot ? snapshot.rows.filter((r) => r.status !== "submitted").length : 0;
@@ -1637,7 +1668,7 @@ function TeacherHome() {
     : examStillOpen
       ? "考试还在进行，先不要公布"
       : inProgressCount > 0
-        ? "还有学生在作答，收卷后才能公布"
+        ? "还有已开考的答卷没能收上。刷新后会再收一次，收完才能公布"
         : frqWaiting
           ? "大题还没有分数，批完再公布"
           : "";
@@ -1695,10 +1726,14 @@ function TeacherHome() {
     setExamStep("review");
   }
 
-  function submitProgress(id: string) {
-    if (snapshot?.id !== id || snapshot.rows.length === 0) return "—";
-    const done = snapshot.rows.filter((r) => r.status === "submitted").length;
-    return `${done} / ${snapshot.rows.length}`;
+  function submitProgress(exam: Assignment) {
+    if (typeof exam.roster_count !== "number") return "—";
+    return `${exam.submitted_count ?? 0} / ${exam.roster_count}`;
+  }
+
+  function accuracyLabel(exam: Assignment) {
+    if (!exam.mcq_total) return "—";
+    return `${Math.round(((exam.mcq_correct ?? 0) / exam.mcq_total) * 100)}%`;
   }
 
   return (
@@ -1887,8 +1922,8 @@ function TeacherHome() {
                                   {copied === a.exam_code ? "已复制" : a.exam_code}
                                 </button>
                               </TableCell>
-                              <TableCell>{submitProgress(a.id)}</TableCell>
-                              <TableCell>{snapshot?.id === a.id && overviewRate != null ? `${overviewRate}%` : "—"}</TableCell>
+                              <TableCell>{submitProgress(a)}</TableCell>
+                              <TableCell>{accuracyLabel(a)}</TableCell>
                               <TableCell><Pill tone={win.tone}>{win.label}</Pill></TableCell>
                             </TableRow>
                           );
@@ -2001,10 +2036,6 @@ function TeacherHome() {
 
           {page === "exam" && (
             <div className="space-y-4">
-              <div>
-                <h2 className="text-lg font-semibold">布置一场考试</h2>
-                <p className="mt-1 text-xs text-muted-foreground">设置考试信息，确认后即可生成学生考试码。</p>
-              </div>
               {roster.length === 0 ? (
                 <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-sm text-amber-900">
                   先导入学生。名册还是空的，导入后才能把考试码发给学生。
@@ -2066,7 +2097,7 @@ function TeacherHome() {
                         <dt className="text-muted-foreground">公布答案</dt>
                         <dd className="font-medium">{publishAnswers ? "交卷后公布答案和解析" : "交卷后不公布，之后可在成绩册公布"}</dd>
                         <dt className="text-muted-foreground">AI 批改</dt>
-                        <dd className="font-medium">{aiGradeFrq ? "交卷后用 AI 批改大题" : "只收答卷，不自动批大题"}</dd>
+                        <dd className="font-medium">{aiGradeFrq ? "截止后批改" : "只收答卷，不自动批大题"}</dd>
                       </dl>
                     </div>
                     <div className="flex flex-col gap-2 border-t border-white/70 pt-4 sm:flex-row sm:justify-between">
@@ -2306,7 +2337,7 @@ function TeacherHome() {
                     <StatCard
                       label="已提交"
                       value={gradeId ? `${submittedCount} / ${gradeRows.length || roster.length}` : roster.length ? `0 / ${roster.length}` : "—"}
-                      hint={gradeId ? `${inProgressCount} 人作答中` : roster.length ? "名册人数，选择考试后显示交卷数" : "请选择一场考试"}
+                      hint={gradeId ? inProgressHint : roster.length ? "名册人数，选择考试后显示交卷数" : "请选择一场考试"}
                     />
                     <StatCard label="最高正确率" value={bestScore < 0 ? "—" : `${Math.round(bestScore * 100)}%`} hint={bestScore < 0 ? "暂无成绩数据" : "单份已交答卷"} />
                     <StatCard label="已交大题" value={frqCount} hint={frqCount ? "点学生姓名查看评语和改分" : "暂无大题作答"} />
@@ -2375,15 +2406,15 @@ function TeacherHome() {
                                       : frq.ai_failed
                                         ? "未完成"
                                         : frq.answer_text.trim() || frq.file_url
-                                          ? "批改中"
+                                          ? "截止后批改"
                                           : "未作答";
                                   return (
                                     <TableCell key={`${row.roster_id}-frq-${n}`} className="tabular-nums" title={frq?.ai_error ?? undefined}>{label}</TableCell>
                                   );
                                 })}
                                 <TableCell>
-                                  <Pill tone={row.status === "submitted" ? "ok" : row.status === "in_progress" ? "live" : "muted"}>
-                                    {row.status === "submitted" ? "已交" : row.status === "in_progress" ? "作答中" : "未交"}
+                                  <Pill tone={row.status === "submitted" || (row.status === "in_progress" && mcqHandedIn(row)) ? "ok" : row.status === "in_progress" ? "live" : "muted"}>
+                                    {rowStatusLabel(row)}
                                   </Pill>
                                 </TableCell>
                               </TableRow>
@@ -2582,12 +2613,25 @@ function TeacherHome() {
           <AlertDialogHeader>
             <AlertDialogTitle>覆盖导入名册</AlertDialogTitle>
             <AlertDialogDescription>
-              将替换现有 {roster.length} 名学生。原来的名册会删掉。有未结束的考试时不能覆盖。
+              {unfinishedExam
+                ? `「${unfinishedExam.title}」还没结束，现在不能覆盖名册。`
+                : `将替换现有 ${roster.length} 名学生。原来的名册会删掉。有未结束的考试时不能覆盖。`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void importRoster(true)}>确认覆盖</AlertDialogAction>
+            <AlertDialogAction
+              disabled={!!unfinishedExam}
+              onClick={(event) => {
+                if (unfinishedExam) {
+                  event.preventDefault();
+                  return;
+                }
+                void importRoster(true);
+              }}
+            >
+              确认覆盖
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -2605,7 +2649,7 @@ function TeacherHome() {
                     {row.student_id}
                     {row.status === "submitted" && row.submitted_at ? ` · 交卷 ${beijingTime(row.submitted_at)}` : ""}
                     {gradeNote ? ` · ${gradeNote}` : ""}
-                    {row.status === "in_progress" ? " · 还在作答，下面是目前已保存的内容" : row.frq_score == null ? " · 大题还没有分数" : ` · 大题 ${row.frq_score}/${row.frq_max}`}
+                    {row.status === "in_progress" ? (mcqHandedIn(row) ? " · 选择题已交，正在做大题" : " · 还在作答，下面是目前已保存的内容") : row.frq_score == null ? " · 大题还没有分数" : ` · 大题 ${row.frq_score}/${row.frq_max}`}
                   </DialogDescription>
                 </DialogHeader>
                 <div className="flex flex-wrap justify-end gap-2">
@@ -2616,14 +2660,14 @@ function TeacherHome() {
                   ) : (
                     <Button variant="outline" disabled={gradeBusy !== null || examStillOpen} onClick={() => void gradeStudentWithAi()}>
                       {gradeBusy === "ai" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                      {examStillOpen ? "结束后自动批改" : gradeBusy === "ai" ? "正在重试" : "重试这名学生"}
+                      {examStillOpen ? "截止后批改" : gradeBusy === "ai" ? "正在重试" : "重试这名学生"}
                     </Button>
                   )}
                 </div>
                 <section className="space-y-2">
                   <h3 className="text-sm font-semibold">选择题</h3>
                   <p className="text-xs text-muted-foreground">
-                    {row.mcq_correct != null ? `得 ${row.mcq_correct}/${row.mcq_total} 分。` : "还没交卷，先显示目前选了的选项。"}
+                    {mcqHandedIn(row) ? (row.mcq_correct != null ? `选择题已交，得 ${row.mcq_correct}/${row.mcq_total} 分。` : "选择题已交。") : "还没交选择题，先显示目前选了的选项。"}
                     绿色是选对，红色是选错。
                   </p>
                   <div className="flex flex-wrap gap-1">
@@ -2664,7 +2708,7 @@ function TeacherHome() {
                       {frq.breakdown?.length ? (
                         <ul className="space-y-1 text-xs text-muted-foreground">
                           {frq.breakdown.map((point, pointIndex) => (
-                            <li key={`${frq.frq_id}-${pointIndex}`}>{point.awarded ? "得分" : "未得分"} · {point.point}{point.comment ? `：${point.comment}` : ""}</li>
+                            <li key={`${frq.frq_id}-${pointIndex}`}>{typeof point.earned === "number" && typeof point.points === "number" ? `得 ${point.earned}/${point.points}` : point.awarded ? "得分" : "未得分"} · {point.point}{point.comment ? `：${point.comment}` : ""}</li>
                           ))}
                         </ul>
                       ) : null}

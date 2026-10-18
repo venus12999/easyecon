@@ -5,7 +5,7 @@ import { jsonErr } from "@/lib/json-api";
 import { accountNames, ensureTeacherClass, getTeacherDb, verifyTeacherRequest } from "@/lib/teacher-auth.server";
 import { isUuid } from "@/lib/school-exam-session";
 import { schoolExamAiOn } from "@/lib/exam-flags";
-import { alignFrqNumbers, closeSchoolAttempt, continueGradeBatch, gradeBatchToken, gradeFinishedExamStep, gradeNextSchoolFrq, mcqSectionClosed, readSubmittedAt, saveManualFrqScores, teacherFrqViews, teacherMcqViews } from "@/lib/school-exam.server";
+import { alignFrqNumbers, closeSchoolAttempt, collectFinishedExam, continueGradeBatch, gradeBatchToken, gradeFinishedExamStep, gradeNextSchoolFrq, mcqSectionClosed, readSubmittedAt, saveManualFrqScores, teacherFrqViews, teacherMcqViews } from "@/lib/school-exam.server";
 
 async function teacherAssignment(userId: string, jwt: string, assignmentId: string) {
   const db = await getTeacherDb(jwt);
@@ -32,6 +32,8 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
         const owned = await teacherAssignment(u.userId, u.jwt, assignmentId);
         if (!owned) return jsonErr(isUuid(assignmentId) ? "not found" : "missing assignment_id", isUuid(assignmentId) ? 404 : 400);
         const { db, assignment } = owned;
+        const collected = await collectFinishedExam(assignment.id, { endsAt: assignment.ends_at, paperId: assignment.paper_id });
+        if (collected.due) continueGradeBatch(request, assignment.id);
         const [{ data: roster }, { data: attempts }, { data: paper }, { data: frqs }, { data: questions }] = await Promise.all([
           db.from("school_roster").select("id,student_id,student_name,user_id").eq("class_id", assignment.class_id).order("student_id"),
           db
@@ -161,7 +163,7 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
         }
         if (!attempt.submitted_at) return jsonErr("学生还没交卷");
         if (body.action === "ai") {
-          if (Date.now() < Date.parse(owned.assignment.ends_at)) return jsonErr("考试还没结束。结束后会自动批完全部大题");
+          if (Date.now() < Date.parse(owned.assignment.ends_at)) return jsonErr("考试还没结束，截止后批改");
           const step = await gradeNextSchoolFrq(attempt.id, owned.assignment.paper_id, { force: true, retryFailed: true });
           if (step.error) return jsonErr(step.error, 502);
           return Response.json({ ok: true, done: step.done, pending: step.pending, busy: step.busy, graded_sort: step.gradedSort });

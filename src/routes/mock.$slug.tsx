@@ -939,6 +939,19 @@ function PaperRunner() {
   }, [isSchoolExam, schoolReady, schoolSubmitted, phase]);
 
   useEffect(() => {
+    if (!isSchoolExam || !assignmentId || schoolSubmitted) return;
+    if (phase !== "running" && phase !== "frq" && phase !== "break") return;
+    const ends = Date.parse(schoolEndsAt);
+    if (!Number.isFinite(ends)) return;
+    const timer = window.setTimeout(() => {
+      void finalizeSchoolExam();
+    }, Math.max(0, ends - Date.now()));
+    return () => window.clearTimeout(timer);
+    // Submit this paper at the shared deadline. The server also collects every other open paper.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assignmentId, isSchoolExam, phase, schoolEndsAt, schoolSubmitted]);
+
+  useEffect(() => {
     if (!isSchoolExam || !assignmentId || !schoolReady || schoolSubmitted) return;
     if (phase !== "running" && phase !== "frq" && phase !== "break") return;
     const t = window.setInterval(() => {

@@ -292,7 +292,14 @@ export function readStoredGrades(raw: unknown): Record<string, StoredFrqGrade> {
       ? g.ai_breakdown.flatMap((row) => {
           if (!row || typeof row !== "object") return [];
           const b = row as Record<string, unknown>;
-          return [{ point: String(b.point ?? ""), awarded: !!b.awarded, comment: String(b.comment ?? "") }];
+          const points = typeof b.points === "number" ? b.points : undefined;
+          const earned = typeof b.earned === "number" ? b.earned : undefined;
+          return [{
+            point: String(b.point ?? ""),
+            awarded: earned != null ? earned > 0 : !!b.awarded,
+            comment: String(b.comment ?? ""),
+            ...(points != null && earned != null ? { points, earned } : {}),
+          }];
         })
       : undefined;
     out[id] = {
@@ -553,10 +560,9 @@ export async function gradeFinishedExamStep(assignmentId: string): Promise<Schoo
     .maybeSingle();
   if (!assignment) return { ...idle, error: "考试不存在" };
   if (Date.now() < Date.parse(assignment.ends_at)) return { ...idle, done: false, waiting: true };
+  await collectFinishedExam(assignmentId, { endsAt: assignment.ends_at, paperId: assignment.paper_id });
   const { data: paper } = await supabaseAdmin.from("mock_papers").select("description").eq("id", assignment.paper_id).maybeSingle();
   if (!schoolExamAiOn(paper?.description)) return idle;
-  const { data: openAttempts } = await supabaseAdmin.from("school_attempts").select("id").eq("assignment_id", assignmentId).is("submitted_at", null);
-  for (const row of openAttempts ?? []) await closeSchoolAttempt(row.id, assignment.paper_id);
   const [{ data: attempts }, { data: frqs }] = await Promise.all([
     supabaseAdmin.from("school_attempts").select("id,frq_answers,submitted_at").eq("assignment_id", assignmentId),
     supabaseAdmin.from("paper_frqs").select("id,max_score,sort_order").eq("paper_id", assignment.paper_id).order("sort_order"),
@@ -650,7 +656,14 @@ export function teacherFrqViews(
           ? prior.ai_breakdown.flatMap((row) => {
               if (!row || typeof row !== "object") return [];
               const b = row as Record<string, unknown>;
-              return [{ point: String(b.point ?? ""), awarded: !!b.awarded, comment: String(b.comment ?? "") }];
+              const points = typeof b.points === "number" ? b.points : undefined;
+              const earned = typeof b.earned === "number" ? b.earned : undefined;
+              return [{
+                point: String(b.point ?? ""),
+                awarded: earned != null ? earned > 0 : !!b.awarded,
+                comment: String(b.comment ?? ""),
+                ...(points != null && earned != null ? { points, earned } : {}),
+              }];
             })
           : [];
       return {
@@ -708,29 +721,72 @@ export async function closeSchoolAttempt(
 ) {
   const { data: current } = await supabaseAdmin.from("school_attempts").select(ATTEMPT_FIELDS).eq("id", attemptId).maybeSingle();
   if (!current || current.submitted_at) return current;
-  const scored = await scorePaperMcq(paperId, picksFrom(patch?.mcq_detail ?? current.mcq_detail));
+  const sourceDetail = patch?.mcq_detail ?? current.mcq_detail;
+  let mcqDetail: Json = (sourceDetail ?? []) as Json;
+  let mcqTotal = current.mcq_total;
+  let mcqCorrect = current.mcq_correct;
+  try {
+    const scored = await scorePaperMcq(paperId, picksFrom(sourceDetail));
+    mcqDetail = scored.detail as Json;
+    mcqTotal = scored.total;
+    mcqCorrect = scored.correct;
+  } catch (error) {
+    console.error("score mcq on collect", attemptId, error);
+  }
   const submittedAt = new Date().toISOString();
-  const { data } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from("school_attempts")
     .update({
       submitted_at: submittedAt,
-      mcq_detail: scored.detail as Json,
+      mcq_detail: mcqDetail,
       frq_answers: withSubmitStamp(patch?.frq_answers ?? current.frq_answers, submittedAt) as Json,
       duration_seconds: patch?.duration_seconds ?? current.duration_seconds,
-      mcq_total: scored.total,
-      mcq_correct: scored.correct,
+      mcq_total: mcqTotal,
+      mcq_correct: mcqCorrect,
     })
     .eq("id", attemptId)
     .is("submitted_at", null)
     .select(ATTEMPT_FIELDS)
     .maybeSingle();
-  if (!data) return current;
+  if (error) throw new Error(error.message);
+  if (!data) {
+    const { data: again } = await supabaseAdmin.from("school_attempts").select(ATTEMPT_FIELDS).eq("id", attemptId).maybeSingle();
+    return again ?? current;
+  }
   return data;
+}
+
+/** Once the clock has stopped, close every started paper. Students who never opened the exam stay 未交. */
+export async function collectFinishedExam(assignmentId: string, known?: { endsAt?: string; paperId?: string }) {
+  let endsAt = known?.endsAt;
+  let paperId = known?.paperId;
+  if (!endsAt || !paperId) {
+    const { data } = await supabaseAdmin.from("school_assignments").select("paper_id,ends_at").eq("id", assignmentId).maybeSingle();
+    if (!data) return { due: false, closed: 0 };
+    endsAt = data.ends_at;
+    paperId = data.paper_id;
+  }
+  if (Date.now() < Date.parse(endsAt)) return { due: false, closed: 0 };
+  const { data: openAttempts } = await supabaseAdmin
+    .from("school_attempts")
+    .select("id")
+    .eq("assignment_id", assignmentId)
+    .is("submitted_at", null);
+  let closed = 0;
+  for (const row of openAttempts ?? []) {
+    try {
+      const saved = await closeSchoolAttempt(row.id, paperId);
+      if (saved?.submitted_at) closed += 1;
+    } catch (error) {
+      console.error("collect attempt", row.id, error);
+    }
+  }
+  return { due: true, closed };
 }
 
 export async function finalizeIfOverdue(attempt: AttemptRow, paperId: string, endsAt: string) {
   if (attempt.submitted_at) return attempt;
-  if (Date.now() <= Date.parse(endsAt)) return attempt;
+  if (Date.now() < Date.parse(endsAt)) return attempt;
   const closed = await closeSchoolAttempt(attempt.id, paperId);
   return closed ? { ...attempt, ...closed } : attempt;
 }
@@ -738,9 +794,10 @@ export async function finalizeIfOverdue(attempt: AttemptRow, paperId: string, en
 export type TeacherMcqView = { n: number; picked: string | null; is_correct: boolean | null };
 
 export function mcqSectionClosed(raw: unknown) {
-  const progress = parseFrqAnswers(raw).progress as Record<string, unknown> | null;
-  if (!progress) return false;
-  return progress.mcq_locked === true || phaseRank(progress.phase) >= 2;
+  const parsed = parseFrqAnswers(raw);
+  const progress = parsed.progress as Record<string, unknown> | null;
+  if (progress && (progress.mcq_locked === true || phaseRank(progress.phase) >= 2)) return true;
+  return Object.values(parsed.items).some((item) => !!item?.text?.trim() || !!item?.fileUrl);
 }
 
 export function teacherMcqViews(
@@ -810,7 +867,7 @@ export type ActiveExamPayload = {
   locked: boolean;
 };
 
-export async function loadActiveExamForUser(userId: string): Promise<ActiveExamPayload | null> {
+export async function loadActiveExamForUser(userId: string, request?: Request): Promise<ActiveExamPayload | null> {
   const { data: rosterRows } = await supabaseAdmin
     .from("school_roster")
     .select("id,class_id,student_id,student_name")
@@ -832,6 +889,10 @@ export async function loadActiveExamForUser(userId: string): Promise<ActiveExamP
   for (const a of assignments) {
     const roster = rosterByClass.get(a.class_id);
     if (!roster) continue;
+    if (now >= Date.parse(a.ends_at)) {
+      await collectFinishedExam(a.id, { endsAt: a.ends_at, paperId: a.paper_id });
+      if (request) continueGradeBatch(request, a.id);
+    }
     let attempt = await loadAttempt(a.id, roster.id);
     if (attempt) attempt = await finalizeIfOverdue(attempt, a.paper_id, a.ends_at);
     const submitted = !!attempt?.submitted_at;

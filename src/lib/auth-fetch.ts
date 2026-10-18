@@ -1,8 +1,7 @@
-import { supabase } from "@/integrations/supabase/client";
+import { activeAccessToken } from "@/lib/exam-auth";
 
 export async function authFetch(input: string, init: RequestInit = {}) {
-  const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
+  const token = await activeAccessToken();
   const headers = new Headers(init.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);
   if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {

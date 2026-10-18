@@ -189,9 +189,15 @@ function captionSlices(page: RasterPageCrop, caption: TextLine): CropSlice[] {
   const next = lines.filter((line) => line.y > caption.y + caption.h + 2).sort((a, b) => a.y - b.y)[0];
   const x = Math.round(page.width * 0.06);
   const w = Math.round(page.width * 0.88);
+  // Keep the whole "Figure N" line inside the crop. A tight cut at the text-box edge slices the title in half.
+  const pad = Math.max(16, Math.round(caption.h * 1.4));
+  const captionTop = caption.y - pad;
+  const captionBottom = caption.y + caption.h + pad;
+  const captionFloor = caption.y + caption.h + 8;
+  const captionCeil = caption.y - 8;
   const above0 = prev ? prev.y + prev.h + 4 : Math.round(page.height * 0.05);
-  const above1 = caption.y - 2;
-  const below0 = caption.y + caption.h + 4;
+  const above1 = Math.max(captionFloor, next ? Math.min(captionBottom, next.y - 4) : captionBottom);
+  const below0 = Math.min(captionCeil, prev ? Math.max(captionTop, prev.y + prev.h + 4) : captionTop);
   const below1 = next ? next.y - 4 : Math.round(page.height * 0.92);
   const gaps = [
     { y: above0, h: above1 - above0 },
@@ -735,7 +741,7 @@ function trimCaptionSlice(ctx: CanvasRenderingContext2D, slice: CropSlice): Crop
   const rw = box.maxX - box.minX;
   const bh = box.maxY - box.minY;
   if (rw < 80 || bh < 72) return null;
-  const edge = 10;
+  const edge = 18;
   return { x: x + box.minX - edge, y: y + box.minY - edge, w: rw + edge * 2, h: bh + edge * 2 };
 }
 

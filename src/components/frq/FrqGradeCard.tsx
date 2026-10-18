@@ -4,7 +4,7 @@ import { Check, X } from "lucide-react";
 export type GradeResult = {
   total_score: number;
   max_score: number;
-  breakdown: { point: string; awarded: boolean; comment: string }[];
+  breakdown: { point: string; awarded: boolean; comment: string; points?: number; earned?: number }[];
   overall_comment: string;
   suggestions: string;
 };
@@ -37,7 +37,10 @@ export function FrqGradeCard({ grade }: { grade: GradeResult }) {
                     {b.awarded ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
                   </span>
                   <div className="flex-1">
-                    <div className="font-medium">{b.point}</div>
+                    <div className="font-medium">
+                      {b.point}
+                      {typeof b.earned === "number" && typeof b.points === "number" ? `（得 ${b.earned}/${b.points}）` : ""}
+                    </div>
                     <div className="text-muted-foreground text-xs leading-relaxed mt-0.5">
                       {b.comment}
                     </div>

@@ -1,11 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { beginExamSession } from "@/lib/exam-auth";
 import { clearExamExited, saveSchoolExamSession } from "@/lib/school-exam-session";
 
 export const Route = createFileRoute("/exam")({
@@ -61,10 +61,7 @@ function ExamEntry() {
         toast.error(j.error ?? "入场失败", { id: "exam-enter" });
         return;
       }
-      const { error } = await supabase.auth.setSession({
-        access_token: j.access_token,
-        refresh_token: j.refresh_token,
-      });
+      const error = await beginExamSession(j.access_token, j.refresh_token);
       if (error) {
         toast.error(error.message, { id: "exam-enter" });
         return;

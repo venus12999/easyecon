@@ -3,7 +3,8 @@ import { jsonErr } from "@/lib/json-api";
 import { verifyUserRequest } from "@/lib/user-auth.server";
 import { isUuid } from "@/lib/school-exam-session";
 import {
-  finalizeIfOverdue,
+  collectFinishedExam,
+  continueGradeBatch,
   inExamWindow,
   loadAssignmentBundle,
   loadAttempt,
@@ -24,10 +25,9 @@ export const Route = createFileRoute("/api/exam/paper")({
         if (!bundle) return jsonErr("考试不存在", 404);
         const roster = await rosterForUser(u.userId, bundle.assignment.class_id);
         if (!roster) return jsonErr("你不在本场花名册中", 403);
+        const collected = await collectFinishedExam(bundle.assignment.id, { endsAt: bundle.assignment.ends_at, paperId: bundle.paper.id });
+        if (collected.due) continueGradeBatch(request, bundle.assignment.id);
         let attempt = await loadAttempt(bundle.assignment.id, roster.id);
-        if (attempt) {
-          attempt = await finalizeIfOverdue(attempt, bundle.paper.id, bundle.assignment.ends_at);
-        }
         const published = bundle.assignment.results_published;
         const { questions, frqs } = await loadSchoolPaperQuestions(bundle.paper.id, published);
         return Response.json({

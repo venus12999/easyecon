@@ -17,7 +17,7 @@ export type SchoolExamSession = {
 export function loadSchoolExamSession(): SchoolExamSession | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = sessionStorage.getItem(KEY) ?? localStorage.getItem(KEY);
+    const raw = sessionStorage.getItem(KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as SchoolExamSession;
     if (!parsed?.assignmentId || !parsed.paperSlug) return null;
@@ -44,7 +44,7 @@ export function saveSchoolExamSession(session: SchoolExamSession) {
   if (typeof window === "undefined") return;
   const raw = JSON.stringify(session);
   sessionStorage.setItem(KEY, raw);
-  localStorage.setItem(KEY, raw);
+  localStorage.removeItem(KEY);
   notifySchoolExamSession();
 }
 

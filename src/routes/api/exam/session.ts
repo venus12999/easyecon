@@ -9,7 +9,7 @@ export const Route = createFileRoute("/api/exam/session")({
       GET: async ({ request }) => {
         const u = await verifyUserRequest(request);
         if (!u) return jsonErr("unauthorized", 401);
-        const exam = await loadActiveExamForUser(u.userId);
+        const exam = await loadActiveExamForUser(u.userId, request);
         return Response.json({ exam });
       },
     },

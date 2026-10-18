@@ -5,6 +5,7 @@ import { verifyUserRequest } from "@/lib/user-auth.server";
 import { isUuid } from "@/lib/school-exam-session";
 import {
   closeSchoolAttempt,
+  collectFinishedExam,
   continueGradeBatch,
   finalizeIfOverdue,
   gradeFinishedExamStep,
@@ -30,12 +31,12 @@ export const Route = createFileRoute("/api/exam/attempt")({
         const roster = await rosterForUser(u.userId, bundle.assignment.class_id);
         if (!roster) return jsonErr("你不在本场花名册中", 403);
         let attempt = await loadAttempt(bundle.assignment.id, roster.id);
-        const wasSubmitted = !!attempt?.submitted_at;
-        if (attempt) {
-          attempt = await finalizeIfOverdue(attempt, bundle.paper.id, bundle.assignment.ends_at);
-        }
-        if (!wasSubmitted && attempt?.submitted_at && Date.now() >= Date.parse(bundle.assignment.ends_at)) {
+        const collected = await collectFinishedExam(bundle.assignment.id, { endsAt: bundle.assignment.ends_at, paperId: bundle.paper.id });
+        if (collected.due) {
           continueGradeBatch(request, bundle.assignment.id);
+          if (attempt && !attempt.submitted_at) attempt = await loadAttempt(bundle.assignment.id, roster.id);
+        } else if (attempt) {
+          attempt = await finalizeIfOverdue(attempt, bundle.paper.id, bundle.assignment.ends_at);
         }
         return Response.json({
           assignment: bundle.assignment,
@@ -63,15 +64,13 @@ export const Route = createFileRoute("/api/exam/attempt")({
         if (!roster) return jsonErr("你不在本场花名册中", 403);
 
         let attempt = await loadAttempt(bundle.assignment.id, roster.id);
-        const wasSubmitted = !!attempt?.submitted_at;
-        if (attempt) {
-          attempt = await finalizeIfOverdue(attempt, bundle.paper.id, bundle.assignment.ends_at);
-        }
-        if (!wasSubmitted && attempt?.submitted_at && Date.now() >= Date.parse(bundle.assignment.ends_at)) {
+        const overdue = Date.now() >= Date.parse(bundle.assignment.ends_at);
+        if (overdue && action !== "save" && action !== "submit") {
+          await collectFinishedExam(bundle.assignment.id, { endsAt: bundle.assignment.ends_at, paperId: bundle.paper.id });
           continueGradeBatch(request, bundle.assignment.id);
+          if (attempt && !attempt.submitted_at) attempt = await loadAttempt(bundle.assignment.id, roster.id);
         }
         const windowOpen = inExamWindow(bundle.assignment.starts_at, bundle.assignment.ends_at);
-        const overdue = Date.now() > Date.parse(bundle.assignment.ends_at);
 
         if (action === "start") {
           if (attempt?.submitted_at) {
@@ -117,7 +116,6 @@ export const Route = createFileRoute("/api/exam/attempt")({
         if (attempt.submitted_at) return jsonErr("已交卷，不能再改");
 
         if (action === "save") {
-          if (overdue) return jsonErr("考试已截止，请交卷");
           const merged = mergeSavedAttempt(attempt, {
             mcq_detail: body.mcq_detail,
             frq_answers: body.frq_answers,
@@ -132,6 +130,11 @@ export const Route = createFileRoute("/api/exam/attempt")({
             .eq("id", attempt.id)
             .is("submitted_at", null);
           if (error) return jsonErr(error.message, 500);
+          if (overdue) {
+            await collectFinishedExam(bundle.assignment.id, { endsAt: bundle.assignment.ends_at, paperId: bundle.paper.id });
+            continueGradeBatch(request, bundle.assignment.id);
+            return jsonErr("考试已截止，请交卷");
+          }
           return Response.json({ ok: true });
         }
 
@@ -146,7 +149,10 @@ export const Route = createFileRoute("/api/exam/attempt")({
             duration_seconds: typeof body.duration_seconds === "number" ? body.duration_seconds : attempt.duration_seconds,
           });
           if (!closed?.submitted_at) return jsonErr("交卷失败", 500);
-          if (Date.now() >= Date.parse(bundle.assignment.ends_at)) continueGradeBatch(request, bundle.assignment.id);
+          if (Date.now() >= Date.parse(bundle.assignment.ends_at)) {
+            await collectFinishedExam(bundle.assignment.id, { endsAt: bundle.assignment.ends_at, paperId: bundle.paper.id });
+            continueGradeBatch(request, bundle.assignment.id);
+          }
           return Response.json({
             assignment: bundle.assignment,
             paper: bundle.paper,
