@@ -5,7 +5,8 @@ import { jsonErr } from "@/lib/json-api";
 import { accountNames, ensureTeacherClass, getTeacherDb, isSchoolAdmin, verifyTeacherRequest } from "@/lib/teacher-auth.server";
 import { isUuid } from "@/lib/school-exam-session";
 import { schoolExamAiOn } from "@/lib/exam-flags";
-import { alignFrqNumbers, closeSchoolAttempt, collectFinishedExam, continueGradeBatch, gradeBatchToken, gradeFinishedExamStep, gradeNextSchoolFrq, mcqSectionClosed, readSubmittedAt, releaseGradeLocks, saveManualFrqScores, teacherFrqViews, teacherMcqViews } from "@/lib/school-exam.server";
+import { alignFrqNumbers, closeSchoolAttempt, collectFinishedExam, continueGradeBatch, drainSchoolGrades, gradeBatchToken, gradeNextSchoolFrq, mcqSectionClosed, readSubmittedAt, releaseGradeLocks, saveManualFrqScores, teacherFrqViews, teacherMcqViews } from "@/lib/school-exam.server";
+import { splitImageTextRubric, splitTeacherFrq } from "@/lib/frq-teacher-fields";
 
 async function teacherAssignment(userId: string, jwt: string, assignmentId: string, email: string | null) {
   if (!isUuid(assignmentId)) return null;
@@ -49,7 +50,7 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
             .select("id,roster_id,user_id,started_at,submitted_at,mcq_total,mcq_correct,duration_seconds,mcq_detail,frq_answers")
             .eq("assignment_id", assignmentId),
           db.from("mock_papers").select("id,slug,title,description").eq("id", assignment.paper_id).maybeSingle(),
-          supabaseAdmin.from("paper_frqs").select("id,title,content,sort_order,max_score").eq("paper_id", assignment.paper_id).order("sort_order"),
+          supabaseAdmin.from("paper_frqs").select("id,title,content,image_text,sort_order,max_score").eq("paper_id", assignment.paper_id).order("sort_order"),
           supabaseAdmin
             .from("paper_questions")
             .select("sort_order,question_id,questions!inner(correct_answer)")
@@ -77,7 +78,15 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
           list.push(row);
           byUser.set(row.user_id, list);
         }
-        const numberedFrqs = await alignFrqNumbers(assignment.paper_id, frqs ?? []);
+        const frqIds = (frqs ?? []).map((frq) => frq.id);
+        const { data: rubricRows } = frqIds.length
+          ? await supabaseAdmin.from("paper_frq_rubrics").select("frq_id,rubric_note").in("frq_id", frqIds)
+          : { data: [] as { frq_id: string; rubric_note: string | null }[] };
+        const rubricById = new Map((rubricRows ?? []).map((row) => [row.frq_id, row.rubric_note]));
+        const numberedFrqs = await alignFrqNumbers(assignment.paper_id, (frqs ?? []).map((frq) => ({
+          ...frq,
+          rubric_note: rubricById.get(frq.id)?.trim() || splitImageTextRubric(frq.image_text).rubric || splitTeacherFrq(frq.content).rubric_note,
+        })));
         const attemptMap = new Map((attempts ?? []).map((a) => [a.roster_id, a]));
         const names = await accountNames(db, (roster ?? []).map((row) => row.user_id));
         const rows = (roster ?? []).map((r) => {
@@ -121,9 +130,9 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
           comments?: Record<string, string | null>;
         };
         if (body.action === "batch" && body.assignment_id && request.headers.get("x-grade-token") === gradeBatchToken(body.assignment_id)) {
-          const step = await gradeFinishedExamStep(body.assignment_id);
+          const step = await drainSchoolGrades(body.assignment_id);
           const fatal = !!step.error && /额度|尚未配置|请求过多/.test(step.error);
-          if (!step.waiting && !step.busy && !step.done && !fatal) continueGradeBatch(request, body.assignment_id);
+          if (!step.waiting && !step.done && !fatal) continueGradeBatch(request, body.assignment_id);
           if (fatal && step.error) return jsonErr(step.error, 502);
           return Response.json({ ok: true, waiting: step.waiting, done: step.done, busy: step.busy, pending: step.pending, graded_sort: step.gradedSort, notice: step.notice ?? null });
         }
@@ -139,16 +148,16 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
         if (body.action === "regrade") {
           if (Date.now() < Date.parse(owned.assignment.ends_at)) return jsonErr("考试还没结束，截止后批改");
           await releaseGradeLocks(assignmentId);
-          const step = await gradeFinishedExamStep(assignmentId);
+          const step = await drainSchoolGrades(assignmentId);
           const fatal = !!step.error && /额度|尚未配置|请求过多/.test(step.error);
-          if (!step.waiting && !step.busy && !step.done && !fatal) continueGradeBatch(request, assignmentId);
+          if (!step.waiting && !step.done && !fatal) continueGradeBatch(request, assignmentId);
           if (fatal && step.error) return jsonErr(step.error, 502);
           return Response.json({ ok: true, waiting: step.waiting, done: step.done, busy: step.busy, pending: step.pending, graded_sort: step.gradedSort, notice: step.notice ?? null });
         }
         if (body.action === "batch") {
-          const step = await gradeFinishedExamStep(assignmentId);
+          const step = await drainSchoolGrades(assignmentId);
           const fatal = !!step.error && /额度|尚未配置|请求过多/.test(step.error);
-          if (!step.waiting && !step.busy && !step.done && !fatal) continueGradeBatch(request, assignmentId);
+          if (!step.waiting && !step.done && !fatal) continueGradeBatch(request, assignmentId);
           if (fatal && step.error) return jsonErr(step.error, 502);
           return Response.json({ ok: true, waiting: step.waiting, done: step.done, busy: step.busy, pending: step.pending, graded_sort: step.gradedSort, notice: step.notice ?? null });
         }

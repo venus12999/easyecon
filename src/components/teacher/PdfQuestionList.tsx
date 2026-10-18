@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { mediaSrcRetry } from "@/lib/media-src";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,35 +45,53 @@ function CropThumb({
   onStatus?: (status: "ok" | "weak" | "broken") => void;
 }) {
   const [mode, setMode] = useState<"src" | "fallback" | "broken">(src ? "src" : fallback ? "fallback" : "broken");
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     setMode(src ? "src" : fallback ? "fallback" : "broken");
+    setAttempt(0);
   }, [src, fallback]);
-  const url = mode === "src" ? src : mode === "fallback" ? fallback : null;
+  const raw = mode === "src" ? src : mode === "fallback" ? fallback : null;
+  const url = raw ? mediaSrcRetry(raw, attempt) : null;
   if (!url) {
     return (
-      <div className="flex h-24 w-28 shrink-0 items-center justify-center rounded border border-dashed border-border bg-muted/40 text-[11px] text-muted-foreground">
-        截图缺失
+      <div className="flex h-24 w-28 shrink-0 flex-col items-center justify-center gap-1 rounded border border-dashed border-border bg-muted/40 px-1 text-center text-[11px] text-muted-foreground">
+        <span>截图缺失</span>
+        {src || fallback ? (
+          <button type="button" className="text-primary" onClick={() => { setMode(src ? "src" : "fallback"); setAttempt((n) => n + 1); }}>重试</button>
+        ) : null}
       </div>
     );
   }
   return (
-    <a href={url} target="_blank" rel="noreferrer" className="block shrink-0">
-      <img
-        src={url}
-        alt={label}
-        className="max-h-24 max-w-[10rem] rounded border border-border object-contain bg-white"
-        onLoad={(e) => {
-          const img = e.currentTarget;
-          const thin = img.naturalHeight < 72 || (img.naturalWidth / Math.max(1, img.naturalHeight) > 8 && img.naturalHeight < 160);
-          onStatus?.(thin ? "weak" : "ok");
-        }}
-        onError={() => {
-          onStatus?.("broken");
-          if (mode === "src" && fallback && fallback !== src) setMode("fallback");
-          else setMode("broken");
-        }}
-      />
-    </a>
+    <div className="shrink-0">
+      <a href={url} target="_blank" rel="noreferrer" className="block">
+        <img
+          key={url}
+          src={url}
+          alt={label}
+          className="max-h-24 max-w-[10rem] rounded border border-border object-contain bg-white"
+          onLoad={(e) => {
+            const img = e.currentTarget;
+            const thin = img.naturalHeight < 72 || (img.naturalWidth / Math.max(1, img.naturalHeight) > 8 && img.naturalHeight < 160);
+            onStatus?.(thin ? "weak" : "ok");
+          }}
+          onError={() => {
+            onStatus?.("broken");
+            if (attempt < 2) {
+              setAttempt((n) => n + 1);
+              return;
+            }
+            if (mode === "src" && fallback && fallback !== src) {
+              setMode("fallback");
+              setAttempt(0);
+              return;
+            }
+            setMode("broken");
+          }}
+        />
+      </a>
+      <button type="button" className="mt-1 text-[11px] text-primary" onClick={() => { setMode(src ? "src" : "fallback"); setAttempt((n) => n + 1); }}>重新加载</button>
+    </div>
   );
 }
 
@@ -196,8 +215,8 @@ function PdfQuestionCard({
                     )}
                     {reason && <p className="text-xs text-amber-800 mt-1">{reason}</p>}
                   </div>
-                  {it.image_url ? (
-                    <CropThumb src={it.image_url} fallback={null} label={`第 ${it.sort_order} 题截图`} onStatus={setShot} />
+                  {it.image_url || (it.needs_image && it.page_image_url) ? (
+                    <CropThumb src={it.image_url} fallback={it.needs_image ? it.page_image_url : null} label={`第 ${it.sort_order} 题截图`} onStatus={setShot} />
                   ) : (
                     <div className="flex h-24 w-28 shrink-0 items-center justify-center rounded border border-dashed border-border bg-muted/40 text-[11px] text-muted-foreground">
                       无截图

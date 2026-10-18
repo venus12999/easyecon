@@ -55,39 +55,26 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAccountLabel } from "@/lib/display-name";
+import { mediaSrcRetry } from "@/lib/media-src";
 
 async function assertStoredImage(url: string) {
   let detail = "";
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const res = await fetch(url, { cache: "no-store" });
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch(mediaSrcRetry(url, attempt), { cache: "no-store" });
     if (res.ok) {
       await res.body?.cancel();
       return;
     }
     detail = await res.text().catch(() => "");
-    if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 400));
+    if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
   }
-  if (detail.includes("Object not found") || detail.includes("NoSuchKey")) {
-    throw new Error("页图没有写进存储（读取返回 400，文件不存在）");
+  if (detail.includes("Object not found") || detail.includes("NoSuchKey") || detail.includes("not found")) {
+    throw new Error("页图没有写进存储（读取返回文件不存在）");
   }
   throw new Error("页图读取失败");
 }
 
-async function putAssignmentPng(classId: string, importId: string, filename: string, blob: Blob) {
-  const path = `assignments/${classId}/${importId}/${filename}`;
-  const { error } = await supabase.storage.from("question-images").upload(path, blob, {
-    contentType: blob.type || "image/png",
-    upsert: true,
-  });
-  if (!error) {
-    const url = supabase.storage.from("question-images").getPublicUrl(path).data.publicUrl;
-    try {
-      await assertStoredImage(url);
-      return url;
-    } catch {
-      /* 客户端显示上传成功，但公开地址读不到时改走服务端再写一次 */
-    }
-  }
+function assignmentUpload(importId: string, filename: string, blob: Blob) {
   const fd = new FormData();
   fd.append("file", new File([blob], filename, { type: blob.type || "image/png" }));
   fd.append("import_id", importId);
@@ -97,14 +84,38 @@ async function putAssignmentPng(classId: string, importId: string, filename: str
     fd.append("sort_order", crop[2]);
   } else {
     const pageNumber = filename.match(/page-(\d+)/i)?.[1];
-    if (!pageNumber) throw new Error(error?.message ?? "无法上传图片");
+    if (!pageNumber) throw new Error("无法上传图片");
     fd.append("page_number", pageNumber);
   }
-  const up = await authFetch("/api/teacher/pdf", { method: "POST", body: fd });
-  const uj = await up.json().catch(() => ({}));
-  if (!up.ok || !uj.image_url) throw new Error(uj.error ?? error?.message ?? "图片上传失败");
-  await assertStoredImage(uj.image_url as string);
-  return uj.image_url as string;
+  return fd;
+}
+
+async function putAssignmentPng(classId: string, importId: string, filename: string, blob: Blob) {
+  let last = "图片上传失败";
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const up = await authFetch("/api/teacher/pdf", { method: "POST", body: assignmentUpload(importId, filename, blob) });
+      const uj = await up.json().catch(() => ({}));
+      if (up.ok && uj.image_url) {
+        await assertStoredImage(uj.image_url as string);
+        return uj.image_url as string;
+      }
+      last = uj.error ?? last;
+    } catch (error) {
+      last = error instanceof Error ? error.message : last;
+    }
+    if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 600 * (attempt + 1)));
+  }
+  if (!classId) throw new Error(last);
+  const path = `assignments/${classId}/${importId}/${filename}`;
+  const { error } = await supabase.storage.from("question-images").upload(path, blob, {
+    contentType: blob.type || "image/png",
+    upsert: true,
+  });
+  if (error) throw new Error(last);
+  const url = supabase.storage.from("question-images").getPublicUrl(path).data.publicUrl;
+  await assertStoredImage(url);
+  return url;
 }
 
 const TEST_ROSTER = [
@@ -388,9 +399,55 @@ function missingImageFinding(reason: string) {
 }
 
 async function cropAlreadyStored(url: string) {
-  const res = await fetch(url, { cache: "no-store" });
+  const res = await fetch(mediaSrcRetry(url, 0), { cache: "no-store" });
   await res.body?.cancel();
   return res.ok;
+}
+
+function pointLabel(point: { awarded: boolean; comment: string; points?: number; earned?: number; point: string }) {
+  const score = typeof point.earned === "number" && typeof point.points === "number"
+    ? `得 ${point.earned}/${point.points}`
+    : point.comment === "还没有逐条分数"
+      ? (typeof point.points === "number" ? `这条满分 ${point.points}，还没有逐条分数` : "还没有逐条分数")
+      : point.awarded ? "得分" : "未得分";
+  return `${score} · ${point.point}${point.comment && point.comment !== "还没有逐条分数" ? `：${point.comment}` : ""}`;
+}
+
+function frqClassNotes(rows: GradeRow[]) {
+  const byQuestion = new Map<number, { scores: number[]; max: number; points: Map<string, { miss: number; seen: number }> }>();
+  for (const row of rows) {
+    if (row.status !== "submitted") continue;
+    for (const frq of row.frqs ?? []) {
+      const score = frq.manual_score ?? frq.ai_score;
+      if (score == null) continue;
+      const bucket = byQuestion.get(frq.sort_order) ?? { scores: [] as number[], max: frq.max_score, points: new Map<string, { miss: number; seen: number }>() };
+      bucket.scores.push(score);
+      bucket.max = frq.max_score;
+      for (const point of frq.breakdown ?? []) {
+        if (!point.point || point.comment === "还没有逐条分数") continue;
+        const key = point.point;
+        const cur = bucket.points.get(key) ?? { miss: 0, seen: 0 };
+        cur.seen += 1;
+        const missed = typeof point.earned === "number" && typeof point.points === "number" ? point.earned < point.points : !point.awarded;
+        if (missed) cur.miss += 1;
+        bucket.points.set(key, cur);
+      }
+      byQuestion.set(frq.sort_order, bucket);
+    }
+  }
+  return [...byQuestion.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([n, bucket]) => {
+      const avg = bucket.scores.reduce((sum, score) => sum + score, 0) / bucket.scores.length;
+      const worst = [...bucket.points.entries()].sort((a, b) => b[1].miss - a[1].miss || b[1].seen - a[1].seen)[0];
+      return {
+        n,
+        avg,
+        max: bucket.max,
+        count: bucket.scores.length,
+        worst: worst && worst[1].miss > 0 ? { point: worst[0], miss: worst[1].miss, seen: worst[1].seen } : null,
+      };
+    });
 }
 
 function sortPdfItems(items: PdfItem[]) {
@@ -1691,6 +1748,10 @@ function TeacherHome() {
     if (row.mcq_correct == null || !row.mcq_total) return best;
     return Math.max(best, row.mcq_correct / row.mcq_total);
   }, -1);
+  const scoresPending = page === "scores" && !gradeMeta;
+  const reviewRows = gradeRows.filter((row) => (row.frqs ?? []).some((frq) => frq.needs_review));
+  const questionNotes = frqClassNotes(gradeRows);
+  const pendingFrqCount = gradeRows.reduce((sum, row) => sum + (row.status === "submitted" ? (row.frqs ?? []).filter((frq) => frq.manual_score == null && frq.ai_score == null && (frq.answer_text.trim() || frq.file_url)).length : 0), 0);
   const examStillOpen = !!gradeMeta && Date.parse(gradeMeta.ends_at) > Date.now();
   const mcqHeaders = columnNumbers(gradeRows, (row) => row.mcqs, (item) => item.n);
   const frqHeaders = columnNumbers(gradeRows, (row) => row.frqs, (frq) => frq.sort_order);
@@ -2341,7 +2402,7 @@ function TeacherHome() {
                   </p>
                   {gradeNote ? (
                     <div className="mt-1 flex flex-wrap items-center gap-2">
-                      <p className="text-sm text-muted-foreground">{gradeNote}</p>
+                      <p className="text-sm text-muted-foreground">{gradeNote}{pendingFrqCount > 0 && !gradeNote.includes("还剩") ? `，还剩 ${pendingFrqCount} 题` : ""}</p>
                       <Button size="sm" variant="outline" className="h-7" onClick={() => void regradeClass()}>重新批改未出分的题</Button>
                     </div>
                   ) : null}
@@ -2383,21 +2444,41 @@ function TeacherHome() {
                     ) : null}
                   </div>
                   <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                    <StatCard label="班级正确率" value={gradeRate == null ? "—" : `${gradeRate}%`} hint={gradeRate == null ? "暂无成绩数据" : "已交卷选择题"} />
+                    <StatCard label="班级正确率" value={scoresPending || gradeRate == null ? "—" : `${gradeRate}%`} hint={scoresPending ? "正在读取成绩" : gradeRate == null ? "暂无成绩数据" : "已交卷选择题"} />
                     <StatCard
                       label="已提交"
-                      value={gradeId ? `${submittedCount} / ${gradeRows.length || roster.length}` : roster.length ? `0 / ${roster.length}` : "—"}
-                      hint={gradeId ? inProgressHint : roster.length ? "名册人数，选择考试后显示交卷数" : "请选择一场考试"}
+                      value={scoresPending ? "—" : gradeId ? `${submittedCount} / ${gradeRows.length || roster.length}` : "—"}
+                      hint={scoresPending ? "正在读取成绩" : gradeId ? inProgressHint : "请选择一场考试"}
                     />
-                    <StatCard label="最高正确率" value={bestScore < 0 ? "—" : `${Math.round(bestScore * 100)}%`} hint={bestScore < 0 ? "暂无成绩数据" : "单份已交答卷"} />
-                    <StatCard label="已交大题" value={frqCount} hint={frqCount ? "点学生姓名查看评语和改分" : "暂无大题作答"} />
+                    <StatCard label="最高正确率" value={scoresPending || bestScore < 0 ? "—" : `${Math.round(bestScore * 100)}%`} hint={scoresPending ? "正在读取成绩" : bestScore < 0 ? "暂无成绩数据" : "单份已交答卷"} />
+                    <StatCard label="已交大题" value={scoresPending ? "—" : frqCount} hint={scoresPending ? "正在读取成绩" : frqCount ? "点学生姓名查看评语和改分" : "暂无大题作答"} />
                   </div>
+                  {reviewRows.length > 0 ? (
+                    <p className="rounded-xl bg-amber-100 px-3 py-2 text-sm text-amber-950">
+                      {reviewRows.length} 名学生有建议复核的大题，名单里用黄色标出，请优先改分。
+                    </p>
+                  ) : null}
+                  {questionNotes.length > 0 ? (
+                    <section className="glass rounded-2xl px-5 py-4">
+                      <h2 className="text-[15px] font-semibold">按题目</h2>
+                      <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+                        {questionNotes.map((item) => (
+                          <li key={item.n}>
+                            Q{item.n} 平均 {item.avg.toFixed(1)}/{item.max}（{item.count} 人已出分）
+                            {item.worst ? `。丢分最多：${item.worst.point}（${item.worst.miss}/${item.worst.seen} 人没拿满）` : ""}
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  ) : null}
                   <section className="glass overflow-hidden rounded-2xl">
                     <div className="px-5 py-4">
                       <h2 className="text-[15px] font-semibold">成绩花名册</h2>
                       <p className="text-xs text-muted-foreground">{gradeMeta ? `${gradeMeta.title} · 点一行查看答卷` : "选择考试后显示全班成绩"}</p>
                     </div>
-                    {!gradeId ? (
+                    {scoresPending ? (
+                      <EmptyState icon={BarChart3} title="正在读取成绩" hint="成绩册加载完成后会显示交卷人数和分数。" />
+                    ) : !gradeId ? (
                       <EmptyState icon={BarChart3} title="请选择一场考试" hint="从上方选择考试，或从工作台点进一场考试。" />
                     ) : shownGrades.length === 0 ? (
                       <EmptyState icon={Users} title="还没有成绩" hint="布置考试并收集答卷后，这里会显示学生成绩。" />
@@ -2418,14 +2499,19 @@ function TeacherHome() {
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {shownGrades.map((row) => (
+                            {shownGrades.map((row) => {
+                              const needsReview = (row.frqs ?? []).some((frq) => frq.needs_review);
+                              return (
                               <TableRow
                                 key={row.student_id}
-                                className={row.status === "missing" ? undefined : "cursor-pointer"}
+                                className={needsReview ? "cursor-pointer bg-amber-50" : row.status === "missing" ? undefined : "cursor-pointer"}
                                 onClick={() => openGrade(row)}
                               >
-                                <TableCell className="sticky left-0 z-10 bg-white">
-                                  <div className="font-medium">{row.student_name}</div>
+                                <TableCell className={cn("sticky left-0 z-10", needsReview ? "bg-amber-50" : "bg-white")}>
+                                  <div className="font-medium">
+                                    {row.student_name}
+                                    {needsReview ? <span className="ml-2 rounded bg-amber-200 px-1.5 py-0.5 text-[10px] font-semibold text-amber-950">建议复核</span> : null}
+                                  </div>
                                   <div className="font-mono text-[11px] text-muted-foreground">{row.student_id}</div>
                                 </TableCell>
                                 <TableCell className="tabular-nums">
@@ -2459,9 +2545,9 @@ function TeacherHome() {
                                           ? "截止后批改"
                                           : "未作答";
                                   return (
-                                    <TableCell key={`${row.roster_id}-frq-${n}`} className="tabular-nums" title={frq?.ai_error ?? undefined}>
+                                    <TableCell key={`${row.roster_id}-frq-${n}`} className={cn("tabular-nums", frq?.needs_review && "bg-amber-100 font-semibold text-amber-950")} title={frq?.ai_error ?? undefined}>
                                       <div>{label}</div>
-                                      {frq?.needs_review ? <div className="text-[10px] text-amber-800">建议复核</div> : null}
+                                      {frq?.needs_review ? <div className="text-[10px] font-semibold text-amber-950">建议复核</div> : null}
                                     </TableCell>
                                   );
                                 })}
@@ -2471,7 +2557,8 @@ function TeacherHome() {
                                   </Pill>
                                 </TableCell>
                               </TableRow>
-                            ))}
+                              );
+                            })}
                           </TableBody>
                         </Table>
                       </div>
@@ -2754,7 +2841,7 @@ function TeacherHome() {
                       ) : null}
                       <p className="text-sm">
                         AI 分数：{frq.ai_score == null ? (frq.ai_failed ? "没批完" : "还没有") : `${frq.ai_score}/${frq.max_score}`}
-                        {frq.needs_review ? <span className="ml-2 text-amber-800">建议复核</span> : null}
+                        {frq.needs_review ? <span className="ml-2 rounded bg-amber-200 px-1.5 py-0.5 text-xs font-semibold text-amber-950">建议复核</span> : null}
                       </p>
                       {frq.ai_failed && frq.ai_error ? <p className="text-sm text-amber-800">{frq.ai_error}</p> : null}
                       {frq.ai_comment ? <p className="whitespace-pre-wrap text-sm text-muted-foreground">{frq.ai_comment}</p> : null}
@@ -2762,7 +2849,7 @@ function TeacherHome() {
                       {frq.breakdown?.length ? (
                         <ul className="space-y-1 text-xs text-muted-foreground">
                           {frq.breakdown.map((point, pointIndex) => (
-                            <li key={`${frq.frq_id}-${pointIndex}`}>{typeof point.earned === "number" && typeof point.points === "number" ? `得 ${point.earned}/${point.points}` : point.awarded ? "得分" : "未得分"} · {point.point}{point.comment ? `：${point.comment}` : ""}</li>
+                            <li key={`${frq.frq_id}-${pointIndex}`}>{pointLabel(point)}</li>
                           ))}
                         </ul>
                       ) : null}

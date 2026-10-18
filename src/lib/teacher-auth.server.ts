@@ -15,37 +15,39 @@ export async function uploadTeacherAssignmentImage(jwt: string, path: string, fi
   const url = (process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL ?? "").replace(/\/$/, "");
   const anon = process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
   if (!url || !anon) return { error: { message: "Missing Supabase URL or anon key" }, publicUrl: "" };
-  if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    const { error } = await supabaseAdmin.storage.from("question-images").upload(path, file, {
-      contentType: file.type || "image/png",
-      upsert: true,
-    });
-    if (!error) return { error: null, publicUrl: `${url}/storage/v1/object/public/question-images/${path}` };
-  }
-  const objectUrl = `${url}/storage/v1/object/question-images/${path}`;
+  const publicUrl = `${url}/storage/v1/object/public/question-images/${path}`;
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${jwt}`,
-    apikey: anon,
-    "Content-Type": file.type || "image/png",
-    "x-upsert": "true",
-  };
-  let res = await fetch(objectUrl, { method: "POST", headers, body: bytes });
-  if (!res.ok) {
-    res = await fetch(objectUrl, { method: "PUT", headers, body: bytes });
-  }
-  if (!res.ok) {
+  let last = "图片上传失败";
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      const { error } = await supabaseAdmin.storage.from("question-images").upload(path, bytes, {
+        contentType: file.type || "image/png",
+        upsert: true,
+      });
+      if (!error) return { error: null, publicUrl };
+      last = error.message;
+    }
+    const objectUrl = `${url}/storage/v1/object/question-images/${path}`;
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY || jwt}`,
+      apikey: process.env.SUPABASE_SERVICE_ROLE_KEY || anon,
+      "Content-Type": file.type || "image/png",
+      "x-upsert": "true",
+    };
+    let res = await fetch(objectUrl, { method: "POST", headers, body: bytes });
+    if (!res.ok) res = await fetch(objectUrl, { method: "PUT", headers, body: bytes });
+    if (res.ok) return { error: null, publicUrl };
     const text = await res.text();
-    let message = text.slice(0, 400);
+    last = text.slice(0, 400);
     try {
       const parsed = JSON.parse(text) as { message?: string; error?: string };
-      message = parsed.message || parsed.error || message;
+      last = parsed.message || parsed.error || last;
     } catch {
       /* keep raw body */
     }
-    return { error: { message }, publicUrl: "" };
+    if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 400 * (attempt + 1)));
   }
-  return { error: null, publicUrl: `${url}/storage/v1/object/public/question-images/${path}` };
+  return { error: { message: last }, publicUrl: "" };
 }
 
 export async function accountNames(db: SupabaseClient, userIds: Array<string | null | undefined>) {

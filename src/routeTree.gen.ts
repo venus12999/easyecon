@@ -34,6 +34,7 @@ import { Route as LegalTermsRouteImport } from './routes/legal.terms'
 import { Route as LegalRefundsRouteImport } from './routes/legal.refunds'
 import { Route as LegalPrivacyRouteImport } from './routes/legal.privacy'
 import { Route as ApiMembershipRouteImport } from './routes/api/membership'
+import { Route as ApiMediaRouteImport } from './routes/api/media'
 import { Route as ApiManualPaymentsRouteImport } from './routes/api/manual-payments'
 import { Route as ApiFeedbackRouteImport } from './routes/api/feedback'
 import { Route as ApiAiExplainRouteImport } from './routes/api/ai-explain'
@@ -184,6 +185,11 @@ const LegalPrivacyRoute = LegalPrivacyRouteImport.update({
 const ApiMembershipRoute = ApiMembershipRouteImport.update({
   id: '/api/membership',
   path: '/api/membership',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMediaRoute = ApiMediaRouteImport.update({
+  id: '/api/media',
+  path: '/api/media',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiManualPaymentsRoute = ApiManualPaymentsRouteImport.update({
@@ -337,6 +343,7 @@ export interface FileRoutesByFullPath {
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/api/feedback': typeof ApiFeedbackRoute
   '/api/manual-payments': typeof ApiManualPaymentsRoute
+  '/api/media': typeof ApiMediaRoute
   '/api/membership': typeof ApiMembershipRouteWithChildren
   '/legal/privacy': typeof LegalPrivacyRoute
   '/legal/refunds': typeof LegalRefundsRoute
@@ -390,6 +397,7 @@ export interface FileRoutesByTo {
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/api/feedback': typeof ApiFeedbackRoute
   '/api/manual-payments': typeof ApiManualPaymentsRoute
+  '/api/media': typeof ApiMediaRoute
   '/api/membership': typeof ApiMembershipRouteWithChildren
   '/legal/privacy': typeof LegalPrivacyRoute
   '/legal/refunds': typeof LegalRefundsRoute
@@ -444,6 +452,7 @@ export interface FileRoutesById {
   '/api/ai-explain': typeof ApiAiExplainRoute
   '/api/feedback': typeof ApiFeedbackRoute
   '/api/manual-payments': typeof ApiManualPaymentsRoute
+  '/api/media': typeof ApiMediaRoute
   '/api/membership': typeof ApiMembershipRouteWithChildren
   '/legal/privacy': typeof LegalPrivacyRoute
   '/legal/refunds': typeof LegalRefundsRoute
@@ -499,6 +508,7 @@ export interface FileRouteTypes {
     | '/api/ai-explain'
     | '/api/feedback'
     | '/api/manual-payments'
+    | '/api/media'
     | '/api/membership'
     | '/legal/privacy'
     | '/legal/refunds'
@@ -552,6 +562,7 @@ export interface FileRouteTypes {
     | '/api/ai-explain'
     | '/api/feedback'
     | '/api/manual-payments'
+    | '/api/media'
     | '/api/membership'
     | '/legal/privacy'
     | '/legal/refunds'
@@ -605,6 +616,7 @@ export interface FileRouteTypes {
     | '/api/ai-explain'
     | '/api/feedback'
     | '/api/manual-payments'
+    | '/api/media'
     | '/api/membership'
     | '/legal/privacy'
     | '/legal/refunds'
@@ -659,6 +671,7 @@ export interface RootRouteChildren {
   ApiAiExplainRoute: typeof ApiAiExplainRoute
   ApiFeedbackRoute: typeof ApiFeedbackRoute
   ApiManualPaymentsRoute: typeof ApiManualPaymentsRoute
+  ApiMediaRoute: typeof ApiMediaRoute
   ApiMembershipRoute: typeof ApiMembershipRouteWithChildren
   LegalPrivacyRoute: typeof LegalPrivacyRoute
   LegalRefundsRoute: typeof LegalRefundsRoute
@@ -866,6 +879,13 @@ declare module '@tanstack/react-router' {
       path: '/api/membership'
       fullPath: '/api/membership'
       preLoaderRoute: typeof ApiMembershipRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/media': {
+      id: '/api/media'
+      path: '/api/media'
+      fullPath: '/api/media'
+      preLoaderRoute: typeof ApiMediaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/manual-payments': {
@@ -1095,6 +1115,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAiExplainRoute: ApiAiExplainRoute,
   ApiFeedbackRoute: ApiFeedbackRoute,
   ApiManualPaymentsRoute: ApiManualPaymentsRoute,
+  ApiMediaRoute: ApiMediaRoute,
   ApiMembershipRoute: ApiMembershipRouteWithChildren,
   LegalPrivacyRoute: LegalPrivacyRoute,
   LegalRefundsRoute: LegalRefundsRoute,

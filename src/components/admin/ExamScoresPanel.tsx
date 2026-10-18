@@ -143,9 +143,12 @@ export function ExamScoresPanel({ token }: { token: string }) {
                     </thead>
                     <tbody>
                       {rows.map((row) => (
-                        <tr key={row.roster_id} className="border-t">
+                        <tr key={row.roster_id} className={row.frqs?.some((item) => item.needs_review) ? "border-t bg-amber-50" : "border-t"}>
                           <td className="py-2 pr-3">
-                            <div>{row.student_name}</div>
+                            <div>
+                              {row.student_name}
+                              {row.frqs?.some((item) => item.needs_review) ? <span className="ml-2 rounded bg-amber-200 px-1.5 py-0.5 text-[10px] font-semibold text-amber-950">建议复核</span> : null}
+                            </div>
                             <div className="font-mono text-[11px] text-muted-foreground">{row.student_id}</div>
                           </td>
                           <td className="py-2 pr-3">{row.status === "submitted" ? "已交卷" : row.status === "in_progress" ? "作答中" : "未交"}</td>
@@ -153,9 +156,9 @@ export function ExamScoresPanel({ token }: { token: string }) {
                           {frqNumbers.map((n) => {
                             const frq = row.frqs?.find((item) => item.sort_order === n);
                             return (
-                              <td key={n} className="py-2 pr-3 tabular-nums">
+                              <td key={n} className={frq?.needs_review ? "bg-amber-100 py-2 pr-3 font-semibold tabular-nums text-amber-950" : "py-2 pr-3 tabular-nums"}>
                                 {frq ? frqLabel(frq) : "—"}
-                                {frq?.needs_review ? <div className="text-[10px] text-amber-800">建议复核</div> : null}
+                                {frq?.needs_review ? <div className="text-[10px] font-semibold">建议复核</div> : null}
                               </td>
                             );
                           })}

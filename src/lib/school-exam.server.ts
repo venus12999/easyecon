@@ -3,7 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { printedQuestionNumber } from "@/lib/ap-exam-parse";
 import { readPageImage, readPointMarker, schoolExamAiOn, stripPageImage, stripPointMarker } from "@/lib/exam-flags";
-import { answerNeedsReview, gradeFrqAnswer, type FrqBreakdown } from "@/lib/frq-grade.server";
+import { answerNeedsReview, gradeFrqAnswer, pointsFromRubric, type FrqBreakdown } from "@/lib/frq-grade.server";
+import { splitImageTextRubric, splitTeacherFrq } from "@/lib/frq-teacher-fields";
 import { EXAM_LOCK_GRACE_MS, isUuid } from "@/lib/school-exam-session";
 import type { Json } from "@/integrations/supabase/types";
 
@@ -539,14 +540,50 @@ export function gradeBatchToken(assignmentId: string) {
 
 export function continueGradeBatch(request: Request, assignmentId: string) {
   const url = new URL("/api/teacher/gradebook", request.url);
-  const work = fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-grade-token": gradeBatchToken(assignmentId) },
-    body: JSON.stringify({ assignment_id: assignmentId, action: "batch" }),
-  }).catch((error) => console.error("grade batch", error));
   const runtime = globalThis as { waitUntil?: (promise: Promise<unknown>) => void };
+  const work = (async () => {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-grade-token": gradeBatchToken(assignmentId) },
+          body: JSON.stringify({ assignment_id: assignmentId, action: "batch" }),
+        });
+        await response.body?.cancel();
+        if (response.ok || response.status === 401 || response.status === 404) return;
+      } catch (error) {
+        console.error("grade batch", error);
+      }
+      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 800 * (attempt + 1)));
+    }
+  })();
   if (typeof runtime.waitUntil === "function") runtime.waitUntil(work);
   else void work;
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Grade several remaining answers in this process, then the caller can chain another batch. */
+export async function drainSchoolGrades(assignmentId: string, budgetMs = 42000) {
+  const start = Date.now();
+  let last = await gradeFinishedExamStep(assignmentId);
+  let spins = 0;
+  while (Date.now() - start < budgetMs) {
+    if (last.done || last.waiting || fatalGradeError(last.error)) break;
+    if (last.busy) {
+      spins += 1;
+      if (spins > 6) break;
+      await sleep(1500);
+      last = await gradeFinishedExamStep(assignmentId);
+      continue;
+    }
+    spins = 0;
+    if (Date.now() - start > budgetMs - 2000) break;
+    last = await gradeFinishedExamStep(assignmentId);
+  }
+  return last;
 }
 
 function fatalGradeError(error: string | null) {
@@ -571,18 +608,21 @@ export async function gradeFinishedExamStep(assignmentId: string): Promise<Schoo
     supabaseAdmin.from("paper_frqs").select("id,max_score,sort_order").eq("paper_id", assignment.paper_id).order("sort_order"),
   ]);
   const submitted = (attempts ?? []).filter((row) => row.submitted_at);
-  if (submitted.some((row) => gradingLocked(parseFrqAnswers(row.frq_answers).progress))) {
-    return { ...idle, done: false, busy: true };
-  }
   let pending = 0;
   let nextAttempt: string | null = null;
+  let anyLocked = false;
   for (const row of submitted) {
+    const locked = gradingLocked(parseFrqAnswers(row.frq_answers).progress);
     const parsed = parseFrqAnswers(row.frq_answers);
     const plan = planSchoolGrade(frqs ?? [], parsed.items, readStoredGrades(row.frq_answers));
     pending += plan.pending;
-    if (!nextAttempt && plan.next) nextAttempt = row.id;
+    if (locked && plan.next) anyLocked = true;
+    if (!locked && !nextAttempt && plan.next) nextAttempt = row.id;
   }
-  if (!nextAttempt) return idle;
+  if (!nextAttempt) {
+    if (anyLocked) return { ...idle, done: false, busy: true, pending };
+    return idle;
+  }
   const step = await gradeNextSchoolFrq(nextAttempt, assignment.paper_id);
   if (step.busy) return { ...idle, done: false, busy: true, pending };
   const consumed = step.gradedSort != null || !!step.error;
@@ -642,7 +682,7 @@ export type TeacherFrqView = {
 
 export function teacherFrqViews(
   rawAnswers: unknown,
-  frqs: { id: string; title: string | null; sort_order: number; max_score: number }[],
+  frqs: { id: string; title: string | null; sort_order: number; max_score: number; content?: string | null; image_text?: string | null; rubric_note?: string | null }[],
   submissions: { frq_id: string; ai_score: number | null; ai_max_score: number | null; ai_overall: string | null; ai_suggestions: string | null; ai_breakdown: unknown }[],
 ): TeacherFrqView[] {
   const parsed = parseFrqAnswers(rawAnswers);
@@ -655,7 +695,7 @@ export function teacherFrqViews(
       const stored = grades[frq.id];
       const prior = latest.get(frq.id);
       const answer = parsed.items[frq.id];
-      const breakdown = stored?.ai_breakdown?.length
+      let breakdown = stored?.ai_breakdown?.length
         ? stored.ai_breakdown
         : Array.isArray(prior?.ai_breakdown)
           ? prior.ai_breakdown.flatMap((row) => {
@@ -671,6 +711,11 @@ export function teacherFrqViews(
               }];
             })
           : [];
+      const needsReview = stored?.needs_review === true || answerNeedsReview(answer?.text) || /建议复核|需老师复核/.test(stored?.ai_comment ?? prior?.ai_overall ?? "");
+      if (needsReview && breakdown.length === 0) {
+        const rubric = frq.rubric_note?.trim() || splitImageTextRubric(frq.image_text).rubric || splitTeacherFrq(frq.content).rubric_note;
+        breakdown = pointsFromRubric(rubric);
+      }
       return {
         frq_id: frq.id,
         title: frq.title,
@@ -681,7 +726,7 @@ export function teacherFrqViews(
         ai_score: stored?.ai_score ?? prior?.ai_score ?? null,
         ai_failed: stored?.ai_failed === true && stored?.ai_score == null,
         ai_error: stored?.ai_failed && stored?.ai_score == null ? stored?.ai_error ?? null : null,
-        needs_review: stored?.needs_review === true || answerNeedsReview(answer?.text) || /建议复核|需老师复核/.test(stored?.ai_comment ?? prior?.ai_overall ?? ""),
+        needs_review: needsReview,
         ai_comment: stored?.ai_comment ?? prior?.ai_overall ?? null,
         ai_suggestions: stored?.ai_suggestions ?? prior?.ai_suggestions ?? null,
         breakdown,
@@ -798,8 +843,7 @@ async function sweepDueExams() {
       .limit(20);
     for (const exam of data ?? []) {
       await collectFinishedExam(exam.id, { endsAt: exam.ends_at, paperId: exam.paper_id });
-      const step = await gradeFinishedExamStep(exam.id);
-      if (!step.done && !step.waiting && !step.busy) await gradeFinishedExamStep(exam.id);
+      await drainSchoolGrades(exam.id, 25000);
     }
   } catch (error) {
     console.error("sweep due exams", error);
