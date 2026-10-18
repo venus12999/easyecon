@@ -91,6 +91,12 @@ export async function ensureTeacherClass(teacherUserId: string, db: SupabaseClie
   return data;
 }
 
+export async function isSchoolAdmin(userId: string, email: string | null) {
+  if (isAdminEmailServer(email)) return true;
+  const { data } = await supabaseAdmin.from("user_roles").select("role").eq("user_id", userId).eq("role", "admin").maybeSingle();
+  return !!data;
+}
+
 export async function assertClassOwner(classId: string, teacherUserId: string, email: string | null, db: SupabaseClient) {
   const { data } = await db
     .from("school_classes")

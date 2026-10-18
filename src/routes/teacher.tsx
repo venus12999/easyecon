@@ -159,6 +159,8 @@ type Assignment = {
   results_published: boolean;
   paper_id: string;
   paper: { id: string; slug: string; title: string } | null;
+  class_name?: string;
+  teacher_name?: string;
   roster_count?: number;
   submitted_count?: number;
   mcq_correct?: number;
@@ -1605,7 +1607,7 @@ function TeacherHome() {
             <Link to="/auth" search={{ role: "teacher", redirect: "/teacher" }}>去登录</Link>
           </Button>
           <Button asChild variant="ghost" className="w-full">
-            <Link to="/">返回首页</Link>
+            <Link to="/">返回主页</Link>
           </Button>
         </div>
       </main>
@@ -1618,6 +1620,9 @@ function TeacherHome() {
           <h1 className="text-xl font-bold">暂时无法确认教师身份</h1>
           <p className="text-sm text-muted-foreground">登录是成功的。服务器这次没有连上校验，并不是学生账号。</p>
           <Button className="w-full" onClick={() => void loadClass()}>重试</Button>
+          <Button asChild variant="ghost" className="w-full">
+            <Link to="/">返回主页</Link>
+          </Button>
         </div>
       </main>
     );
@@ -1631,7 +1636,7 @@ function TeacherHome() {
             <p className="text-sm text-muted-foreground">这个账号可以进入教师端。服务器这次没有确认登录，请再试一次。</p>
             <Button className="w-full" onClick={() => void loadClass()}>重试</Button>
             <Button asChild variant="outline" className="w-full">
-              <Link to="/">返回首页</Link>
+              <Link to="/">返回主页</Link>
             </Button>
           </div>
         </main>
@@ -1643,7 +1648,7 @@ function TeacherHome() {
           <h1 className="text-xl font-bold">学生账号没有教师端</h1>
           <p className="text-sm text-muted-foreground">学生使用学习主界面。教师请退出后，在登录页选择「教师」。</p>
           <Button asChild variant="outline" className="w-full">
-            <Link to="/">返回首页</Link>
+            <Link to="/">返回主页</Link>
           </Button>
         </div>
       </main>
@@ -1771,7 +1776,7 @@ function TeacherHome() {
             <Button asChild variant="outline" size="sm" className="shrink-0">
               <Link to="/">
                 <ArrowLeft className="h-4 w-4" />
-                返回
+                返回主页
               </Link>
             </Button>
             <span className="truncate text-sm text-muted-foreground">
@@ -1935,7 +1940,10 @@ function TeacherHome() {
                           const win = examWindow(a.starts_at, a.ends_at);
                           return (
                             <TableRow key={a.id} className="cursor-pointer" onClick={() => void loadGradebook(a.id)}>
-                              <TableCell className="font-medium">{a.title}</TableCell>
+                              <TableCell className="font-medium">
+                                {a.title}
+                                {a.class_name ? <div className="text-[11px] font-normal text-muted-foreground">{a.class_name}{a.teacher_name ? ` · ${a.teacher_name}` : ""}</div> : null}
+                              </TableCell>
                               <TableCell className="whitespace-nowrap text-muted-foreground">{new Date(a.ends_at).toLocaleString()}</TableCell>
                               <TableCell>
                                 <button
@@ -2299,6 +2307,7 @@ function TeacherHome() {
                           </Pill>
                         </div>
                         <p className="text-xs leading-relaxed text-muted-foreground">
+                          {a.class_name ? `${a.class_name}${a.teacher_name ? ` · ${a.teacher_name}` : ""} · ` : ""}
                           {a.paper?.title ?? "试卷"} · {new Date(a.starts_at).toLocaleString()} – {new Date(a.ends_at).toLocaleString()}
                         </p>
                         <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center">
@@ -2325,7 +2334,11 @@ function TeacherHome() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <h2 className="text-lg font-semibold">成绩分析</h2>
-                  <p className="mt-1 text-xs text-muted-foreground">先看全班成绩。考试截止后会自动批完全部大题，点某一行再看这名学生的答卷。</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {isAdminEmail(user.email)
+                      ? "这里是全部教师的考试成绩。考试截止后会批完全部大题，点某一行再看这名学生的答卷。"
+                      : "先看全班成绩。考试截止后会自动批完全部大题，点某一行再看这名学生的答卷。"}
+                  </p>
                   {gradeNote ? (
                     <div className="mt-1 flex flex-wrap items-center gap-2">
                       <p className="text-sm text-muted-foreground">{gradeNote}</p>
@@ -2346,7 +2359,9 @@ function TeacherHome() {
                       <SelectTrigger className="w-full sm:max-w-xs"><SelectValue placeholder="选择一场考试" /></SelectTrigger>
                       <SelectContent>
                         {assignments.map((a) => (
-                          <SelectItem key={a.id} value={a.id}>{a.title}</SelectItem>
+                          <SelectItem key={a.id} value={a.id}>
+                            {a.class_name ? `${a.class_name} · ${a.title}` : a.title}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>

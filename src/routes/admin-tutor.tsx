@@ -113,7 +113,10 @@ function AdminTutorPage() {
       <div className="container py-8 space-y-3">
         <h1 className="text-xl font-bold">仅限教师/管理员访问</h1>
         <p className="text-sm text-muted-foreground">你没有权限查看该页面。</p>
-        <Button asChild variant="outline"><Link to="/">返回首页</Link></Button>
+        <div className="flex flex-wrap justify-center gap-2">
+          <Button asChild variant="outline"><Link to="/">返回主页</Link></Button>
+          <Button asChild variant="outline"><Link to="/admin">返回后台</Link></Button>
+        </div>
       </div>
     );
   }
@@ -124,6 +127,10 @@ function AdminTutorPage() {
         <div>
           <h1 className="text-2xl font-bold">教师端 · 试课预约</h1>
           <p className="text-sm text-muted-foreground mt-1">查看选定日期的所有试课预约，并标记完成。</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button asChild variant="outline" size="sm"><Link to="/">返回主页</Link></Button>
+            <Button asChild variant="outline" size="sm"><Link to="/admin">返回后台</Link></Button>
+          </div>
         </div>
         <Popover>
           <PopoverTrigger asChild>

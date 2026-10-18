@@ -2,15 +2,23 @@ import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { Json } from "@/integrations/supabase/types";
 import { jsonErr } from "@/lib/json-api";
-import { accountNames, ensureTeacherClass, getTeacherDb, verifyTeacherRequest } from "@/lib/teacher-auth.server";
+import { accountNames, ensureTeacherClass, getTeacherDb, isSchoolAdmin, verifyTeacherRequest } from "@/lib/teacher-auth.server";
 import { isUuid } from "@/lib/school-exam-session";
 import { schoolExamAiOn } from "@/lib/exam-flags";
 import { alignFrqNumbers, closeSchoolAttempt, collectFinishedExam, continueGradeBatch, gradeBatchToken, gradeFinishedExamStep, gradeNextSchoolFrq, mcqSectionClosed, readSubmittedAt, releaseGradeLocks, saveManualFrqScores, teacherFrqViews, teacherMcqViews } from "@/lib/school-exam.server";
 
-async function teacherAssignment(userId: string, jwt: string, assignmentId: string) {
+async function teacherAssignment(userId: string, jwt: string, assignmentId: string, email: string | null) {
+  if (!isUuid(assignmentId)) return null;
+  if (await isSchoolAdmin(userId, email)) {
+    const { data: assignment } = await supabaseAdmin
+      .from("school_assignments")
+      .select("id,title,exam_code,starts_at,ends_at,results_published,paper_id,class_id")
+      .eq("id", assignmentId)
+      .maybeSingle();
+    return assignment ? { db: supabaseAdmin, assignment } : null;
+  }
   const db = await getTeacherDb(jwt);
   const cls = await ensureTeacherClass(userId, db);
-  if (!isUuid(assignmentId)) return null;
   const { data: assignment } = await db
     .from("school_assignments")
     .select("id,title,exam_code,starts_at,ends_at,results_published,paper_id,class_id")
@@ -29,7 +37,7 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
         if (u === "unavailable") return jsonErr("unavailable", 503);
         if (!u) return jsonErr("unauthorized", 401);
         const assignmentId = new URL(request.url).searchParams.get("assignment_id") ?? "";
-        const owned = await teacherAssignment(u.userId, u.jwt, assignmentId);
+        const owned = await teacherAssignment(u.userId, u.jwt, assignmentId, u.email);
         if (!owned) return jsonErr(isUuid(assignmentId) ? "not found" : "missing assignment_id", isUuid(assignmentId) ? 404 : 400);
         const { db, assignment } = owned;
         const collected = await collectFinishedExam(assignment.id, { endsAt: assignment.ends_at, paperId: assignment.paper_id });
@@ -126,7 +134,7 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
         const assignmentId = body.assignment_id ?? "";
         const rosterId = body.roster_id ?? "";
         if (!isUuid(assignmentId)) return jsonErr("missing fields");
-        const owned = await teacherAssignment(u.userId, u.jwt, assignmentId);
+        const owned = await teacherAssignment(u.userId, u.jwt, assignmentId, u.email);
         if (!owned) return jsonErr("not found", 404);
         if (body.action === "regrade") {
           if (Date.now() < Date.parse(owned.assignment.ends_at)) return jsonErr("考试还没结束，截止后批改");

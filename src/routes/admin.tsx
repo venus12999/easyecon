@@ -13,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { isLifetimeVipEmail } from "@/lib/lifetime-vip";
 import { ManualPaymentsPanel } from "@/components/admin/ManualPaymentsPanel";
 import { TeacherUploadsPanel } from "@/components/admin/TeacherUploadsPanel";
+import { ExamScoresPanel } from "@/components/admin/ExamScoresPanel";
 
 // 判断题干是否提示包含图表（导入时在题干里以「[此题含图…]」「见原 PDF」「见图」等方式标注）
 function hasImageMarker(stem: string): boolean {
@@ -88,7 +89,10 @@ function Admin() {
         <h1 className="text-xl font-bold">需要登录</h1>
         <p className="text-sm text-muted-foreground">请先登录管理员账号</p>
         <Button asChild>
-          <Link to="/auth">前往登录</Link>
+          <Link to="/auth" search={{ redirect: "/admin" }}>前往登录</Link>
+        </Button>
+        <Button asChild variant="outline">
+          <Link to="/">返回主页</Link>
         </Button>
       </main>
     );
@@ -102,7 +106,7 @@ function Admin() {
           当前账号 <span className="font-mono">{user.email}</span> 不是管理员。
         </p>
         <Button asChild variant="outline">
-          <Link to="/">返回首页</Link>
+          <Link to="/">返回主页</Link>
         </Button>
       </main>
     );
@@ -221,15 +225,18 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
     <div className="min-h-screen">
       
       <main className="mx-auto max-w-6xl px-4 py-8">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-6 gap-3">
           <h1 className="text-2xl font-bold">题库管理</h1>
-          <Button variant="outline" size="sm" onClick={onLogout}>退出</Button>
+          <Button asChild variant="outline" size="sm">
+            <Link to="/">返回主页</Link>
+          </Button>
         </div>
 
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList className="h-auto flex-wrap justify-start">
             <TabsTrigger value="list">题目列表</TabsTrigger>
             <TabsTrigger value="uploads">教师卷</TabsTrigger>
+            <TabsTrigger value="scores">考试成绩</TabsTrigger>
             <TabsTrigger value="audit">AI 审核</TabsTrigger>
             <TabsTrigger value="feedback">用户反馈</TabsTrigger>
             <TabsTrigger value="users">用户数据</TabsTrigger>
@@ -381,6 +388,10 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
 
           <TabsContent value="uploads" className="mt-4">
             <TeacherUploadsPanel token={token} />
+          </TabsContent>
+
+          <TabsContent value="scores" className="mt-4">
+            <ExamScoresPanel token={token} />
           </TabsContent>
 
           <TabsContent value="audit" className="mt-4">

@@ -3,9 +3,80 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { withExamAiGrade } from "@/lib/exam-flags";
 import { jsonErr } from "@/lib/json-api";
 import { collectFinishedExam, continueGradeBatch, teacherFrqViews } from "@/lib/school-exam.server";
-import { ensureTeacherClass, getTeacherDb, verifyTeacherRequest } from "@/lib/teacher-auth.server";
+import { ensureTeacherClass, getTeacherDb, isSchoolAdmin, verifyTeacherRequest } from "@/lib/teacher-auth.server";
 import { createFixedRandomSchoolPaper, makeExamCode } from "@/lib/school-random-paper.server";
 import { isUuid } from "@/lib/school-exam-session";
+
+async function listAllExamScores(request: Request) {
+  const db = supabaseAdmin;
+  const { data, error } = await db
+    .from("school_assignments")
+    .select("id,title,exam_code,starts_at,ends_at,results_published,paper_id,class_id,created_at")
+    .order("created_at", { ascending: false });
+  if (error) return jsonErr(error.message, 500);
+  const exams = data ?? [];
+  const now = Date.now();
+  for (const exam of exams) {
+    if (exam.results_published || now < Date.parse(exam.ends_at)) continue;
+    await collectFinishedExam(exam.id, { endsAt: exam.ends_at, paperId: exam.paper_id });
+    continueGradeBatch(request, exam.id);
+  }
+  const classIds = [...new Set(exams.map((exam) => exam.class_id))];
+  const paperIds = [...new Set(exams.map((exam) => exam.paper_id))];
+  const assignmentIds = exams.map((exam) => exam.id);
+  const [{ data: classes }, { data: papers }, { data: roster }, { data: attempts }] = await Promise.all([
+    classIds.length
+      ? db.from("school_classes").select("id,name,teacher_user_id").in("id", classIds)
+      : Promise.resolve({ data: [] as { id: string; name: string; teacher_user_id: string }[] }),
+    paperIds.length
+      ? db.from("mock_papers").select("id,slug,title").in("id", paperIds)
+      : Promise.resolve({ data: [] as { id: string; slug: string; title: string }[] }),
+    classIds.length
+      ? db.from("school_roster").select("class_id").in("class_id", classIds)
+      : Promise.resolve({ data: [] as { class_id: string }[] }),
+    assignmentIds.length
+      ? db.from("school_attempts").select("assignment_id,submitted_at,mcq_correct,mcq_total").in("assignment_id", assignmentIds)
+      : Promise.resolve({ data: [] as { assignment_id: string; submitted_at: string | null; mcq_correct: number | null; mcq_total: number | null }[] }),
+  ]);
+  const teacherIds = [...new Set((classes ?? []).map((row) => row.teacher_user_id))];
+  const { data: profiles } = teacherIds.length
+    ? await db.from("profiles").select("user_id,display_name").in("user_id", teacherIds)
+    : { data: [] as { user_id: string; display_name: string | null }[] };
+  const teacherName = new Map((profiles ?? []).map((row) => [row.user_id, row.display_name?.trim() || ""]));
+  const classMap = new Map((classes ?? []).map((row) => [row.id, row]));
+  const paperMap = new Map((papers ?? []).map((row) => [row.id, row]));
+  const rosterCount = new Map<string, number>();
+  for (const row of roster ?? []) rosterCount.set(row.class_id, (rosterCount.get(row.class_id) ?? 0) + 1);
+  const stats = new Map<string, { submitted_count: number; mcq_correct: number; mcq_total: number }>();
+  for (const row of attempts ?? []) {
+    const cur = stats.get(row.assignment_id) ?? { submitted_count: 0, mcq_correct: 0, mcq_total: 0 };
+    if (row.submitted_at) {
+      cur.submitted_count += 1;
+      if (typeof row.mcq_correct === "number" && typeof row.mcq_total === "number" && row.mcq_total > 0) {
+        cur.mcq_correct += row.mcq_correct;
+        cur.mcq_total += row.mcq_total;
+      }
+    }
+    stats.set(row.assignment_id, cur);
+  }
+  return Response.json({
+    admin: true,
+    assignments: exams.map((exam) => {
+      const cls = classMap.get(exam.class_id);
+      const stat = stats.get(exam.id);
+      return {
+        ...exam,
+        paper: paperMap.get(exam.paper_id) ?? null,
+        class_name: cls?.name ?? "班级",
+        teacher_name: cls ? teacherName.get(cls.teacher_user_id) || "教师" : "教师",
+        roster_count: rosterCount.get(exam.class_id) ?? 0,
+        submitted_count: stat?.submitted_count ?? 0,
+        mcq_correct: stat?.mcq_correct ?? 0,
+        mcq_total: stat?.mcq_total ?? 0,
+      };
+    }),
+  });
+}
 
 export const Route = createFileRoute("/api/teacher/assignments")({
   server: {
@@ -16,8 +87,11 @@ export const Route = createFileRoute("/api/teacher/assignments")({
         if (u === "unavailable") return jsonErr("unavailable", 503);
         if (!u) return jsonErr("unauthorized", 401);
         const db = await getTeacherDb(u.jwt);
-        const cls = await ensureTeacherClass(u.userId, db);
         const url = new URL(request.url);
+        if (url.searchParams.get("papers") !== "1" && (await isSchoolAdmin(u.userId, u.email))) {
+          return listAllExamScores(request);
+        }
+        const cls = await ensureTeacherClass(u.userId, db);
         if (url.searchParams.get("papers") === "1") {
           const [{ data: papers }, { data: imports }] = await Promise.all([
             db
