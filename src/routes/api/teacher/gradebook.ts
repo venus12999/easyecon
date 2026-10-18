@@ -5,7 +5,7 @@ import { jsonErr } from "@/lib/json-api";
 import { accountNames, ensureTeacherClass, getTeacherDb, verifyTeacherRequest } from "@/lib/teacher-auth.server";
 import { isUuid } from "@/lib/school-exam-session";
 import { schoolExamAiOn } from "@/lib/exam-flags";
-import { alignFrqNumbers, closeSchoolAttempt, collectFinishedExam, continueGradeBatch, gradeBatchToken, gradeFinishedExamStep, gradeNextSchoolFrq, mcqSectionClosed, readSubmittedAt, saveManualFrqScores, teacherFrqViews, teacherMcqViews } from "@/lib/school-exam.server";
+import { alignFrqNumbers, closeSchoolAttempt, collectFinishedExam, continueGradeBatch, gradeBatchToken, gradeFinishedExamStep, gradeNextSchoolFrq, mcqSectionClosed, readSubmittedAt, releaseGradeLocks, saveManualFrqScores, teacherFrqViews, teacherMcqViews } from "@/lib/school-exam.server";
 
 async function teacherAssignment(userId: string, jwt: string, assignmentId: string) {
   const db = await getTeacherDb(jwt);
@@ -128,6 +128,15 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
         if (!isUuid(assignmentId)) return jsonErr("missing fields");
         const owned = await teacherAssignment(u.userId, u.jwt, assignmentId);
         if (!owned) return jsonErr("not found", 404);
+        if (body.action === "regrade") {
+          if (Date.now() < Date.parse(owned.assignment.ends_at)) return jsonErr("考试还没结束，截止后批改");
+          await releaseGradeLocks(assignmentId);
+          const step = await gradeFinishedExamStep(assignmentId);
+          const fatal = !!step.error && /额度|尚未配置|请求过多/.test(step.error);
+          if (!step.waiting && !step.busy && !step.done && !fatal) continueGradeBatch(request, assignmentId);
+          if (fatal && step.error) return jsonErr(step.error, 502);
+          return Response.json({ ok: true, waiting: step.waiting, done: step.done, busy: step.busy, pending: step.pending, graded_sort: step.gradedSort, notice: step.notice ?? null });
+        }
         if (body.action === "batch") {
           const step = await gradeFinishedExamStep(assignmentId);
           const fatal = !!step.error && /额度|尚未配置|请求过多/.test(step.error);

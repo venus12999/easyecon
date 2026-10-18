@@ -2,6 +2,16 @@ import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { examSlugFromFilename } from "@/lib/ap-exam-parse";
@@ -22,6 +32,10 @@ type UploadRow = {
   frq: number;
   thumb: string | null;
   in_mock_library: boolean;
+  exam_count: number;
+  open_exams: { title: string; ends_at: string }[];
+  exam_unknown: boolean;
+  in_practice: boolean;
   paper: { id: string; slug: string; title: string; year: number | null; description: string | null } | null;
 };
 
@@ -70,6 +84,7 @@ export function TeacherUploadsPanel({ token }: { token: string }) {
   const [openId, setOpenId] = useState("");
   const [detailItems, setDetailItems] = useState<DetailItem[] | null>(null);
   const [detailBusy, setDetailBusy] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<UploadRow | null>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -121,7 +136,7 @@ export function TeacherUploadsPanel({ token }: { token: string }) {
     }
   }
 
-  async function act(id: string, action: "promote" | "keep-school") {
+  async function act(id: string, action: "promote" | "keep-school" | "into-practice" | "delete-bank") {
     const row = rows?.find((x) => x.id === id);
     setBusy(id + action);
     const r = await fetch("/api/admin/teacher-uploads", {
@@ -141,10 +156,17 @@ export function TeacherUploadsPanel({ token }: { token: string }) {
       toast.error(j.error ?? "操作失败");
       return;
     }
+    if (action === "delete-bank") setDeleteTarget(null);
     toast.success(
       action === "promote"
         ? `已列入模拟考试：${j.paper?.title}${j.replaced ? `（已替换「${j.replaced}」）` : ""}`
-        : "已保留为学校考试卷",
+        : action === "into-practice"
+          ? "已纳入刷题库"
+          : action === "delete-bank"
+            ? j.kept_scores
+              ? "已删除。已结束考试的成绩还在"
+              : "已删除"
+            : "已保留为学校考试卷",
     );
     await reload();
   }
@@ -159,7 +181,7 @@ export function TeacherUploadsPanel({ token }: { token: string }) {
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        老师提交后，试卷和题目会出现在这里。默认只给该老师布置学校考试。由你决定是否列入模拟考试真题库，以及是否进入日常选择题/大题练习库。
+        老师提交后，试卷先只给该老师布置学校考试。考试结束后，可以把题目纳入刷题库，或删除这份题库。也可以另外列入模拟考试真题库。
       </p>
       {rows.map((row) => {
         const title = titleById[row.id] ?? row.paper?.title ?? row.filename;
@@ -183,6 +205,7 @@ export function TeacherUploadsPanel({ token }: { token: string }) {
                   {row.mcq} 道选择题 · {row.frq} 道大题 · {row.page_count} 页 · {new Date(row.created_at).toLocaleString()}
                   {row.paper ? ` · 当前卷号 ${row.paper.slug}` : ""}
                 </p>
+                <ExamFate row={row} busy={busy} onInclude={() => void act(row.id, "into-practice")} onDelete={() => setDeleteTarget(row)} />
                 <Button size="sm" variant="outline" onClick={() => void loadItems(row.id)}>
                   {open ? "收起题目" : "查看题目"}
                 </Button>
@@ -252,6 +275,72 @@ export function TeacherUploadsPanel({ token }: { token: string }) {
           </Card>
         );
       })}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>删除这份教师题库？</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget && deleteTarget.exam_count > 0
+                ? `「${deleteTarget.paper?.title ?? deleteTarget.filename}」会从刷题库拿掉，也不能再用来布置考试。已经结束的考试成绩还会留着。`
+                : `「${deleteTarget?.paper?.title ?? deleteTarget?.filename ?? "这份卷"}」还没有用来考试，题目会直接删掉。`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={!!busy}
+              onClick={(e) => {
+                e.preventDefault();
+                if (deleteTarget) void act(deleteTarget.id, "delete-bank");
+              }}
+            >
+              {busy.endsWith("delete-bank") ? "删除中…" : "删除"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+function ExamFate({
+  row,
+  busy,
+  onInclude,
+  onDelete,
+}: {
+  row: UploadRow;
+  busy: string;
+  onInclude: () => void;
+  onDelete: () => void;
+}) {
+  const open = row.open_exams?.[0];
+  const schoolPaper = !!row.paper?.slug.startsWith("school-") && !row.paper.slug.startsWith("school-retired");
+  const locked = !!open || row.exam_unknown;
+  return (
+    <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
+      {row.exam_unknown ? (
+        <p className="text-xs text-amber-700">暂时读不到这场卷的考试状态，先不能纳入或删除。</p>
+      ) : open ? (
+        <p className="text-xs text-amber-700">「{open.title}」还没结束。结束后才能纳入刷题库或删除。</p>
+      ) : row.exam_count > 0 ? (
+        <p className="text-xs text-muted-foreground">考试已结束，可以纳入刷题库或删除。</p>
+      ) : (
+        <p className="text-xs text-muted-foreground">还没有用来布置考试，可以纳入刷题库或删除。</p>
+      )}
+      {row.in_mock_library && (
+        <p className="text-xs text-muted-foreground">已列入模拟考试真题库。纳入刷题库后，日常练习和随机模考也会抽到这些题。</p>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" disabled={!!busy || locked || row.in_practice || !row.paper} onClick={onInclude}>
+          {busy === `${row.id}into-practice` ? "处理中…" : row.in_practice ? "已在刷题库" : "纳入刷题库"}
+        </Button>
+        {schoolPaper && (
+          <Button size="sm" variant="destructive" disabled={!!busy || locked} onClick={onDelete}>
+            删除
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

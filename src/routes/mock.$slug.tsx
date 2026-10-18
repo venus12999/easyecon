@@ -186,7 +186,7 @@ function PaperRunner() {
   const remaining = (() => {
     if (!paper) return 0;
     if (isSchoolExam) {
-      if (!schoolEndsAt) return paper.total_seconds || 1;
+      if (!schoolEndsAt) return 1;
       return Math.max(0, Math.floor((Date.parse(schoolEndsAt) - now) / 1000));
     }
     return Math.max(0, paper.total_seconds - seconds);
@@ -889,7 +889,7 @@ function PaperRunner() {
 
   useEffect(() => {
     if (!isSchoolExam) return;
-    if (phase !== "running" && phase !== "frq" && phase !== "break") return;
+    if (phase !== "idle" && phase !== "running" && phase !== "frq" && phase !== "break") return;
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, [isSchoolExam, phase]);
@@ -943,11 +943,28 @@ function PaperRunner() {
     if (phase !== "running" && phase !== "frq" && phase !== "break") return;
     const ends = Date.parse(schoolEndsAt);
     if (!Number.isFinite(ends)) return;
-    const timer = window.setTimeout(() => {
-      void finalizeSchoolExam();
-    }, Math.max(0, ends - Date.now()));
-    return () => window.clearTimeout(timer);
-    // Submit this paper at the shared deadline. The server also collects every other open paper.
+    const submitIfDue = () => {
+      if (Date.now() >= ends) void finalizeSchoolExam();
+    };
+    submitIfDue();
+    const timer = window.setInterval(submitIfDue, 1000);
+    const onWake = () => submitIfDue();
+    const onHide = () => {
+      if (Date.now() < ends) return;
+      submitIfDue();
+    };
+    window.addEventListener("visibilitychange", onWake);
+    window.addEventListener("focus", onWake);
+    window.addEventListener("pageshow", onWake);
+    window.addEventListener("pagehide", onHide);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("visibilitychange", onWake);
+      window.removeEventListener("focus", onWake);
+      window.removeEventListener("pageshow", onWake);
+      window.removeEventListener("pagehide", onHide);
+    };
+    // Submit this paper the moment the shared deadline is reached. The server also collects every other open paper.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentId, isSchoolExam, phase, schoolEndsAt, schoolSubmitted]);
 
@@ -1246,12 +1263,14 @@ function PaperRunner() {
                 <div className="text-xs text-muted-foreground mt-0.5">简答题</div>
               </div>
               <div className="border rounded-md py-3">
-                <div className="text-2xl font-bold text-primary">
-                  {isSchoolExam && schoolEndsAt
-                    ? Math.max(0, Math.ceil((Date.parse(schoolEndsAt) - Date.now()) / 60000))
+                <div className="text-2xl font-bold text-primary font-mono tabular-nums">
+                  {isSchoolExam
+                    ? schoolEndsAt
+                      ? `${String(Math.floor(remaining / 60)).padStart(2, "0")}:${String(remaining % 60).padStart(2, "0")}`
+                      : "—"
                     : Math.round(paper.total_seconds / 60)}
                 </div>
-                <div className="text-xs text-muted-foreground mt-0.5">{isSchoolExam ? "分钟内截止" : "分钟"}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">{isSchoolExam ? "距离截止" : "分钟"}</div>
               </div>
             </div>
             {!user && !isSchoolExam && (

@@ -17,6 +17,7 @@ import { getRememberPreference, setRememberPreference } from "@/lib/remember-ses
 import { safeRedirectPath } from "@/lib/safe-redirect";
 import { authFetch } from "@/lib/auth-fetch";
 import { isAdminEmail } from "@/lib/admin-emails";
+import { isExamLocalEmail, loadSchoolExamSession } from "@/lib/school-exam-session";
 
 type Audience = "student" | "teacher";
 
@@ -58,6 +59,8 @@ function AuthPage() {
   const [confirming, setConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState("");
   const teacherEntry = audience === "teacher";
+  const examAccount = isExamLocalEmail(user?.email);
+  const examSession = examAccount ? loadSchoolExamSession() : null;
   const announceAuth = useRef<string | null>(null);
 
   function studentPath() {
@@ -70,6 +73,10 @@ function AuthPage() {
     if (teacherEntry) {
       const { data: sessionData } = await supabase.auth.getSession();
       const signedInEmail = email ?? sessionData.session?.user.email ?? user?.email;
+      if (isExamLocalEmail(signedInEmail)) {
+        toast.error("考试账号不能进入教师工作台");
+        return;
+      }
       // 管理员账号选教师就进工作台。校验失败也不能写成「这是学生账号」，更不能把刚登录的会话清掉。
       if (!isAdminEmail(signedInEmail)) {
         const response = await authFetch("/api/teacher/class?probe=1");
@@ -109,7 +116,7 @@ function AuthPage() {
   }
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || isExamLocalEmail(user.email)) return;
     const announce = announceAuth.current;
     if (announce) {
       announceAuth.current = null;
@@ -259,7 +266,7 @@ function AuthPage() {
 
         <Card className="border-white/50 shadow-xl">
           <CardContent className="p-6">
-            {!pendingEmail && !confirming && (
+            {!pendingEmail && !confirming && !examAccount && (
               <div className="mb-4 grid grid-cols-2 gap-1 rounded-xl bg-muted/70 p-1">
                 <button
                   type="button"
@@ -279,7 +286,9 @@ function AuthPage() {
             )}
             <div className="mb-4 text-center">
               <h1 className="text-lg font-semibold">
-                {confirming
+                {examAccount
+                  ? "考试进行中"
+                  : confirming
                   ? "正在确认邮箱"
                   : pendingEmail
                   ? "注册成功，请验证邮箱"
@@ -290,7 +299,9 @@ function AuthPage() {
                       : tab === "register" ? "学生注册" : "学生登录"}
               </h1>
               <p className="mt-1 text-xs text-muted-foreground">
-                {confirming
+                {examAccount
+                  ? "回到考场继续作答。截止时间到了会自动交卷。"
+                  : confirming
                   ? "马上就好，确认后会自动进入。"
                   : pendingEmail
                   ? `验证邮件已发到 ${pendingEmail}。打开邮件，点确认按钮，会自动回到本站。没看到邮件时，先看垃圾箱。`
@@ -327,6 +338,31 @@ function AuthPage() {
                   onClick={() => { setPendingEmail(null); setTab("login"); setPassword(""); }}
                 >
                   已验证，返回登录
+                </Button>
+              </div>
+            ) : examAccount ? (
+              <div className="space-y-3">
+                <p className="text-center text-sm text-muted-foreground">你正在一场考试里。回到考场继续作答。</p>
+                {examSession?.paperSlug ? (
+                  <Button
+                    type="button"
+                    className="h-11 w-full"
+                    onClick={() => router.history.push(`/mock/${examSession.paperSlug}?assignment=${examSession.assignmentId}`)}
+                  >
+                    返回考场
+                  </Button>
+                ) : (
+                  <Button type="button" className="h-11 w-full" onClick={() => void nav({ to: "/exam" })}>
+                    返回考场入口
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="link"
+                  className="h-auto w-full p-0 text-xs"
+                  onClick={() => void signOut()}
+                >
+                  退出这场考试
                 </Button>
               </div>
             ) : user ? (

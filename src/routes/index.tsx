@@ -127,7 +127,7 @@ function Index() {
           c[k].draft += 1;
         }
       });
-      const kpList = ((kpData ?? []) as Kp[]).filter((k) => k.slug !== "school-import");
+      const kpList = ((kpData ?? []) as Kp[]).filter((k) => k.slug !== "school-import" || (c[k.id]?.total ?? 0) > 0);
       setKps(kpList);
       setCounts(c);
       setLoading(false);

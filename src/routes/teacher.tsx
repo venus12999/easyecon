@@ -174,6 +174,7 @@ type GradeFrq = {
   ai_score: number | null;
   ai_failed?: boolean;
   ai_error?: string | null;
+  needs_review?: boolean;
   ai_comment: string | null;
   ai_suggestions: string | null;
   breakdown: { point: string; awarded: boolean; comment: string; points?: number; earned?: number }[];
@@ -554,6 +555,16 @@ function TeacherHome() {
   }, [authLoading, user, loadClass, loadAssignments, loadPdfs]);
 
   useEffect(() => {
+    const dueSoon = assignments.some((item) => {
+      const ends = Date.parse(item.ends_at);
+      return Number.isFinite(ends) && ends > Date.now() - 3 * 60 * 60 * 1000;
+    });
+    if (!dueSoon) return;
+    const timer = window.setInterval(() => { void loadAssignments(); }, 15000);
+    return () => window.clearInterval(timer);
+  }, [assignments, loadAssignments]);
+
+  useEffect(() => {
     try {
       setMinecraft(localStorage.getItem("easyecon-teacher-theme") === "minecraft");
     } catch {
@@ -927,6 +938,22 @@ function TeacherHome() {
         setGradeBusy(null);
       }
     }
+  }
+
+  async function regradeClass() {
+    if (!gradeId) return;
+    setGradeNote("正在重新批改还没出分的大题");
+    const response = await authFetch("/api/teacher/gradebook", {
+      method: "POST",
+      body: JSON.stringify({ assignment_id: gradeId, action: "regrade" }),
+    });
+    const body = await response.json().catch(() => ({} as { error?: string }));
+    if (!response.ok) {
+      toast.error(body.error ?? "重新批改没有开始");
+      return;
+    }
+    await loadGradebook(gradeId, { keepPage: true });
+    toast.success("已重新开始批改还没出分的大题");
   }
 
   async function gradeStudentWithAi() {
@@ -1960,12 +1987,15 @@ function TeacherHome() {
                   aria-label="花名册 CSV"
                 />
                 <p className="mt-2 text-[11px] text-muted-foreground">支持逗号或制表符分隔。表头含「学号」时会自动跳过。</p>
+                {unfinishedExam ? <p className="mt-2 text-xs text-amber-800">「{unfinishedExam.title}」还没结束，现在不能覆盖名册。</p> : null}
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                   <Button onClick={() => void importRoster(false)}>追加导入</Button>
                   <Button type="button" variant="outline" onClick={() => void importTestRoster()}>导入测试学号</Button>
                   <Button
                     variant="outline"
+                    disabled={!!unfinishedExam}
                     onClick={() => {
+                      if (unfinishedExam) return;
                       if (parseRosterCsv(csvText).length === 0) {
                         toast.error("没有读到学号/姓名");
                         return;
@@ -2296,7 +2326,12 @@ function TeacherHome() {
                 <div>
                   <h2 className="text-lg font-semibold">成绩分析</h2>
                   <p className="mt-1 text-xs text-muted-foreground">先看全班成绩。考试截止后会自动批完全部大题，点某一行再看这名学生的答卷。</p>
-                  {gradeNote ? <p className="mt-1 text-sm text-muted-foreground">{gradeNote}</p> : null}
+                  {gradeNote ? (
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <p className="text-sm text-muted-foreground">{gradeNote}</p>
+                      <Button size="sm" variant="outline" className="h-7" onClick={() => void regradeClass()}>重新批改未出分的题</Button>
+                    </div>
+                  ) : null}
                 </div>
                 <Button variant="outline" disabled={!gradeRows.length} onClick={exportCsv}>导出成绩</Button>
               </div>
@@ -2409,7 +2444,10 @@ function TeacherHome() {
                                           ? "截止后批改"
                                           : "未作答";
                                   return (
-                                    <TableCell key={`${row.roster_id}-frq-${n}`} className="tabular-nums" title={frq?.ai_error ?? undefined}>{label}</TableCell>
+                                    <TableCell key={`${row.roster_id}-frq-${n}`} className="tabular-nums" title={frq?.ai_error ?? undefined}>
+                                      <div>{label}</div>
+                                      {frq?.needs_review ? <div className="text-[10px] text-amber-800">建议复核</div> : null}
+                                    </TableCell>
                                   );
                                 })}
                                 <TableCell>
@@ -2701,6 +2739,7 @@ function TeacherHome() {
                       ) : null}
                       <p className="text-sm">
                         AI 分数：{frq.ai_score == null ? (frq.ai_failed ? "没批完" : "还没有") : `${frq.ai_score}/${frq.max_score}`}
+                        {frq.needs_review ? <span className="ml-2 text-amber-800">建议复核</span> : null}
                       </p>
                       {frq.ai_failed && frq.ai_error ? <p className="text-sm text-amber-800">{frq.ai_error}</p> : null}
                       {frq.ai_comment ? <p className="whitespace-pre-wrap text-sm text-muted-foreground">{frq.ai_comment}</p> : null}

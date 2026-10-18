@@ -190,11 +190,11 @@ function captionSlices(page: RasterPageCrop, caption: TextLine): CropSlice[] {
   const x = Math.round(page.width * 0.06);
   const w = Math.round(page.width * 0.88);
   // Keep the whole "Figure N" line inside the crop. A tight cut at the text-box edge slices the title in half.
-  const pad = Math.max(16, Math.round(caption.h * 1.4));
+  const pad = Math.max(48, Math.round(caption.h * 2.5));
   const captionTop = caption.y - pad;
   const captionBottom = caption.y + caption.h + pad;
-  const captionFloor = caption.y + caption.h + 8;
-  const captionCeil = caption.y - 8;
+  const captionFloor = caption.y + caption.h + 16;
+  const captionCeil = caption.y - pad;
   const above0 = prev ? prev.y + prev.h + 4 : Math.round(page.height * 0.05);
   const above1 = Math.max(captionFloor, next ? Math.min(captionBottom, next.y - 4) : captionBottom);
   const below0 = Math.min(captionCeil, prev ? Math.max(captionTop, prev.y + prev.h + 4) : captionTop);
@@ -815,7 +815,7 @@ export async function cropImageBlob(blob: Blob, plan: CropPlan): Promise<Blob> {
       const clamped = clampSlice(pageBox, slice);
       if (slice.prefer === "caption") {
         const trimmed = trimCaptionSlice(ctx, clamped);
-        if (trimmed) captions.push(trimmed);
+        if (trimmed) captions.push({ ...trimmed, y: trimmed.y - 48, h: trimmed.h + 64 });
         continue;
       }
       const cluster = bestInkCluster(ctx, clamped, bmp.height, !!plan.hinted);

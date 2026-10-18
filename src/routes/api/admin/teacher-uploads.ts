@@ -45,6 +45,92 @@ async function retirePaper(db: SupabaseClient, paperId: string) {
   return error;
 }
 
+type ExamRow = { title: string; ends_at: string };
+
+async function paperExams(db: SupabaseClient, paperId: string) {
+  const { data, error } = await db.from("school_assignments").select("title,ends_at").eq("paper_id", paperId);
+  if (error) return { error: error.message, open: [] as ExamRow[], count: 0 };
+  const exams = (data ?? []) as ExamRow[];
+  const now = Date.now();
+  return {
+    error: null as string | null,
+    open: exams.filter((exam) => Date.parse(exam.ends_at) > now),
+    count: exams.length,
+  };
+}
+
+function openExamMessage(open: ExamRow[], verb: string) {
+  const title = open[0]?.title || "这场考试";
+  return `「${title}」还没结束，结束后才能${verb}`;
+}
+
+async function practiceIncluded(db: SupabaseClient, paperId: string) {
+  const { data: links } = await db.from("paper_questions").select("question_id").eq("paper_id", paperId);
+  const ids = (links ?? []).map((row) => row.question_id);
+  const { count: frqTotal } = await db.from("paper_frqs").select("id", { count: "exact", head: true }).eq("paper_id", paperId);
+  const { count: frqIn } = await db.from("paper_frqs").select("id", { count: "exact", head: true }).eq("paper_id", paperId).eq("exclude_from_pool", false);
+  let qIn = 0;
+  if (ids.length > 0) {
+    const { count } = await db.from("questions").select("id", { count: "exact", head: true }).in("id", ids).eq("exclude_from_pool", false);
+    qIn = count ?? 0;
+  }
+  const total = ids.length + (frqTotal ?? 0);
+  return total > 0 && qIn + (frqIn ?? 0) === total;
+}
+
+async function includeInPractice(db: SupabaseClient, paperId: string) {
+  const { data: links, error: linkErr } = await db.from("paper_questions").select("question_id").eq("paper_id", paperId);
+  if (linkErr) return linkErr.message;
+  const ids = (links ?? []).map((row) => row.question_id);
+  const { count: frqTotal, error: frqCountErr } = await db
+    .from("paper_frqs")
+    .select("id", { count: "exact", head: true })
+    .eq("paper_id", paperId);
+  if (frqCountErr) return frqCountErr.message;
+  if (ids.length === 0 && (frqTotal ?? 0) === 0) return "这份卷没有题目";
+  if (ids.length > 0) {
+    const { data: questions, error: qErr } = await db.from("questions").select("id,correct_answer").in("id", ids);
+    if (qErr) return qErr.message;
+    const missing = (questions ?? []).filter((q) => !/^[A-E]$/i.test(q.correct_answer ?? "")).length;
+    if (missing > 0) return `还有 ${missing} 道选择题没填答案，填好后再纳入刷题库`;
+    const { error } = await db.from("questions").update({ exclude_from_pool: false }).in("id", ids);
+    if (error) return error.message;
+  }
+  if ((frqTotal ?? 0) > 0) {
+    const { error } = await db.from("paper_frqs").update({ exclude_from_pool: false }).eq("paper_id", paperId);
+    if (error) return error.message;
+  }
+  return null;
+}
+
+/** Finished exams still need the question rows. Take the paper out of future use and the practice pool. */
+async function shelveEndedPaper(db: SupabaseClient, paperId: string) {
+  const { data: links, error: linkErr } = await db.from("paper_questions").select("question_id").eq("paper_id", paperId);
+  if (linkErr) return linkErr.message;
+  const ids = (links ?? []).map((row) => row.question_id);
+  if (ids.length > 0) {
+    const { error } = await db.from("questions").update({ exclude_from_pool: true }).in("id", ids);
+    if (error) return error.message;
+  }
+  const { error: frqErr } = await db.from("paper_frqs").update({ exclude_from_pool: true }).eq("paper_id", paperId);
+  if (frqErr) return frqErr.message;
+  const retired = `school-retired-${crypto.randomUUID().slice(0, 8)}`;
+  const { error } = await db.from("mock_papers").update({
+    slug: retired,
+    sort_order: 999,
+    description: "管理员已删除这份教师题库。已结束考试的成绩仍保留，题目不再进入刷题。",
+  }).eq("id", paperId);
+  return error?.message ?? null;
+}
+
+async function destroyUnusedPaper(db: SupabaseClient, paperId: string, importId: string) {
+  await dropPaperItems(db, paperId);
+  const { error: paperErr } = await db.from("mock_papers").delete().eq("id", paperId);
+  if (paperErr) return paperErr.message;
+  const { error: importErr } = await db.from("school_pdf_imports").delete().eq("id", importId);
+  return importErr?.message ?? null;
+}
+
 export const Route = createFileRoute("/api/admin/teacher-uploads")({
   server: {
     handlers: {
@@ -89,6 +175,8 @@ export const Route = createFileRoute("/api/admin/teacher-uploads")({
                 : Promise.resolve({ count: 0 }),
               db.from("school_pdf_pages").select("image_url").eq("import_id", imp.id).eq("page_number", 1).maybeSingle(),
             ]);
+            const exams = paper ? await paperExams(db, paper.id) : { error: null, open: [] as ExamRow[], count: 0 };
+            const inPractice = paper ? await practiceIncluded(db, paper.id) : false;
             const inMockLibrary = !!paper && !paper.slug.startsWith("school-") && !paper.slug.startsWith("frq-");
             const retired = !!paper && paper.slug.startsWith("school-retired");
             return {
@@ -100,6 +188,10 @@ export const Route = createFileRoute("/api/admin/teacher-uploads")({
               promote_requested: !!(paper?.description ?? "").includes(PROMOTE_MARK),
               in_mock_library: inMockLibrary,
               retired,
+              exam_count: exams.count,
+              open_exams: exams.open,
+              exam_unknown: !!exams.error,
+              in_practice: inPractice,
             };
           }),
         );
@@ -111,7 +203,7 @@ export const Route = createFileRoute("/api/admin/teacher-uploads")({
         if (!(await verifyAdminRequest(request))) return unauth();
         const db = await adminDb(request);
         const body = (await request.json()) as {
-          action?: "promote" | "keep-school";
+          action?: "promote" | "keep-school" | "into-practice" | "delete-bank";
           import_id?: string;
           title?: string;
           slug?: string;
@@ -127,6 +219,29 @@ export const Route = createFileRoute("/api/admin/teacher-uploads")({
           const desc = (paper.description ?? "").replace(PROMOTE_MARK, "").trim() || "学校考试 · PDF 整页出图（人工校对后发布）";
           await db.from("mock_papers").update({ description: desc, sort_order: 910 }).eq("id", paper.id);
           return Response.json({ ok: true, paper });
+        }
+
+        if (body.action === "into-practice" || body.action === "delete-bank") {
+          const exams = await paperExams(db, paper.id);
+          if (exams.error) return jsonErr(exams.error, 500);
+          if (body.action === "into-practice") {
+            if (exams.open.length) return jsonErr(openExamMessage(exams.open, "纳入刷题库"));
+            const included = await includeInPractice(db, paper.id);
+            if (included) return jsonErr(included, 500);
+            return Response.json({ ok: true });
+          }
+          if (!paper.slug.startsWith("school-") || paper.slug.startsWith("school-retired")) {
+            return jsonErr("已列入模拟考试真题库的卷不能从这里删除");
+          }
+          if (exams.open.length) return jsonErr(openExamMessage(exams.open, "删除"));
+          if (exams.count > 0) {
+            const shelved = await shelveEndedPaper(db, paper.id);
+            if (shelved) return jsonErr(shelved, 500);
+            return Response.json({ ok: true, kept_scores: true });
+          }
+          const removed = await destroyUnusedPaper(db, paper.id, imp.id);
+          if (removed) return jsonErr(removed, 500);
+          return Response.json({ ok: true });
         }
 
         if (body.action !== "promote") return jsonErr("unknown action");

@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { printedQuestionNumber } from "@/lib/ap-exam-parse";
 import { readPageImage, readPointMarker, schoolExamAiOn, stripPageImage, stripPointMarker } from "@/lib/exam-flags";
-import { gradeFrqAnswer, type FrqBreakdown } from "@/lib/frq-grade.server";
+import { answerNeedsReview, gradeFrqAnswer, type FrqBreakdown } from "@/lib/frq-grade.server";
 import { EXAM_LOCK_GRACE_MS, isUuid } from "@/lib/school-exam-session";
 import type { Json } from "@/integrations/supabase/types";
 
@@ -278,6 +278,7 @@ export type StoredFrqGrade = {
   manual_comment: string | null;
   ai_failed?: boolean;
   ai_error?: string | null;
+  needs_review?: boolean;
 };
 
 export function readStoredGrades(raw: unknown): Record<string, StoredFrqGrade> {
@@ -312,6 +313,7 @@ export function readStoredGrades(raw: unknown): Record<string, StoredFrqGrade> {
       manual_comment: typeof g.manual_comment === "string" ? g.manual_comment : null,
       ai_failed: g.ai_failed === true,
       ai_error: typeof g.ai_error === "string" ? g.ai_error : null,
+      needs_review: g.needs_review === true,
     };
   }
   return out;
@@ -451,7 +453,7 @@ export async function gradeNextSchoolFrq(attemptId: string, paperId: string, opt
     if (plan.blanks.length) await saveGradeState(attemptId, attempt.frq_answers, grades, null);
     return { pending: 0, done: true, busy: false, gradedSort: null, error: null };
   }
-  const lockUntil = new Date(Date.now() + 40_000).toISOString();
+  const lockUntil = new Date(Date.now() + 20_000).toISOString();
   await saveGradeState(attemptId, attempt.frq_answers, grades, lockUntil);
   const frq = plan.next;
   const answer = parsed.items[frq.id];
@@ -501,6 +503,7 @@ export async function gradeNextSchoolFrq(attemptId: string, paperId: string, opt
       ai_breakdown: graded.grade.breakdown,
       ai_failed: false,
       ai_error: null,
+      needs_review: graded.grade.needs_review === true || answerNeedsReview(answer?.text),
       manual_score: prev?.manual_score ?? null,
       manual_comment: prev?.manual_comment ?? null,
     };
@@ -611,6 +614,7 @@ export async function saveManualFrqScores(
       ai_breakdown: prev?.ai_breakdown,
       ai_failed: prev?.ai_failed === true && prev?.ai_score == null,
       ai_error: prev?.ai_error ?? null,
+      needs_review: prev?.needs_review === true,
       manual_score: score == null ? null : Math.max(0, Math.min(max, Math.round(score))),
       manual_comment: note || null,
     };
@@ -628,6 +632,7 @@ export type TeacherFrqView = {
   ai_score: number | null;
   ai_failed?: boolean;
   ai_error?: string | null;
+  needs_review?: boolean;
   ai_comment: string | null;
   ai_suggestions: string | null;
   breakdown: FrqBreakdown[];
@@ -676,6 +681,7 @@ export function teacherFrqViews(
         ai_score: stored?.ai_score ?? prior?.ai_score ?? null,
         ai_failed: stored?.ai_failed === true && stored?.ai_score == null,
         ai_error: stored?.ai_failed && stored?.ai_score == null ? stored?.ai_error ?? null : null,
+        needs_review: stored?.needs_review === true || answerNeedsReview(answer?.text) || /建议复核|需老师复核/.test(stored?.ai_comment ?? prior?.ai_overall ?? ""),
         ai_comment: stored?.ai_comment ?? prior?.ai_overall ?? null,
         ai_suggestions: stored?.ai_suggestions ?? prior?.ai_suggestions ?? null,
         breakdown,
@@ -756,8 +762,62 @@ export async function closeSchoolAttempt(
   return data;
 }
 
+/** Drop a leftover grading lock and let unfinished answers be graded again. */
+export async function releaseGradeLocks(assignmentId: string) {
+  const { data: attempts } = await supabaseAdmin.from("school_attempts").select("id,frq_answers").eq("assignment_id", assignmentId);
+  for (const row of attempts ?? []) {
+    const parsed = parseFrqAnswers(row.frq_answers);
+    const grades = readStoredGrades(row.frq_answers);
+    let changed = typeof parsed.progress?.grading_until === "string";
+    for (const [id, grade] of Object.entries(grades)) {
+      if (grade.ai_score == null && grade.manual_score == null && grade.ai_failed) {
+        grades[id] = { ...grade, ai_failed: false, ai_error: null };
+        changed = true;
+      }
+    }
+    if (!changed) continue;
+    await saveGradeState(row.id, row.frq_answers, grades, null);
+  }
+}
+
+let sweeping = false;
+let sweeperStarted = false;
+
+async function sweepDueExams() {
+  if (sweeping) return;
+  sweeping = true;
+  try {
+    const now = new Date().toISOString();
+    const since = new Date(Date.now() - 18 * 60 * 60 * 1000).toISOString();
+    const { data } = await supabaseAdmin
+      .from("school_assignments")
+      .select("id,paper_id,ends_at")
+      .lte("ends_at", now)
+      .gte("ends_at", since)
+      .eq("results_published", false)
+      .limit(20);
+    for (const exam of data ?? []) {
+      await collectFinishedExam(exam.id, { endsAt: exam.ends_at, paperId: exam.paper_id });
+      const step = await gradeFinishedExamStep(exam.id);
+      if (!step.done && !step.waiting && !step.busy) await gradeFinishedExamStep(exam.id);
+    }
+  } catch (error) {
+    console.error("sweep due exams", error);
+  } finally {
+    sweeping = false;
+  }
+}
+
+function ensureExamSweeper() {
+  if (sweeperStarted) return;
+  sweeperStarted = true;
+  const timer = setInterval(() => { void sweepDueExams(); }, 15000);
+  if (typeof timer === "object" && timer && "unref" in timer && typeof timer.unref === "function") timer.unref();
+}
+
 /** Once the clock has stopped, close every started paper. Students who never opened the exam stay 未交. */
 export async function collectFinishedExam(assignmentId: string, known?: { endsAt?: string; paperId?: string }) {
+  ensureExamSweeper();
   let endsAt = known?.endsAt;
   let paperId = known?.paperId;
   if (!endsAt || !paperId) {

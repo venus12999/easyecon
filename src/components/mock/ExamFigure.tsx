@@ -63,17 +63,24 @@ export function ExamFigure({
   }
 
   return (
-    <a href={shown} target="_blank" rel="noreferrer" className="block">
-      <img
-        src={shown}
-        alt={alt}
-        className="max-h-[70vh] max-w-full h-auto rounded border border-slate-300 bg-white"
-        onLoad={(e) => {
-          const img = e.currentTarget;
-          if (img.src.split("?")[0] !== src.split("?")[0]) return;
-          void recover(img.naturalWidth, img.naturalHeight);
-        }}
-      />
-    </a>
+    <div className="space-y-1">
+      <a href={shown} target="_blank" rel="noreferrer" className="block">
+        <img
+          src={shown}
+          alt={alt}
+          className="max-h-[70vh] max-w-full h-auto rounded border border-slate-300 bg-white"
+          onLoad={(e) => {
+            const img = e.currentTarget;
+            if (img.src.split("?")[0] !== src.split("?")[0]) return;
+            void recover(img.naturalWidth, img.naturalHeight);
+          }}
+        />
+      </a>
+      {pageUrl ? (
+        <a href={pageUrl} target="_blank" rel="noreferrer" className="inline-block text-xs text-primary">
+          打开原页查看完整图题
+        </a>
+      ) : null}
+    </div>
   );
 }
