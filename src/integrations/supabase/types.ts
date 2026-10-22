@@ -696,6 +696,7 @@ export type Database = {
           mcq_seconds: number | null
           paper_id: string
           results_published: boolean
+          score_max: number | null
           starts_at: string
           title: string
         }
@@ -711,6 +712,7 @@ export type Database = {
           mcq_seconds?: number | null
           paper_id: string
           results_published?: boolean
+          score_max?: number | null
           starts_at: string
           title: string
         }
@@ -726,6 +728,7 @@ export type Database = {
           mcq_seconds?: number | null
           paper_id?: string
           results_published?: boolean
+          score_max?: number | null
           starts_at?: string
           title?: string
         }

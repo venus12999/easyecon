@@ -15,6 +15,13 @@
       "when": 1792676146233,
       "tag": "0001_school_assignment_sections",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792676162134,
+      "tag": "0002_school_assignment_score_max",
+      "breakpoints": true
     }
   ]
 }
