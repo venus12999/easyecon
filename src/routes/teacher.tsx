@@ -47,6 +47,8 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { authFetch } from "@/lib/auth-fetch";
 import { applyKnownApAnswerKey, looksLikeProvidedFigure, parseApExamPages, readPrintedScore, studentVisibleQuestion, withUniqueQuestionNumbers, type ParsedExamItem } from "@/lib/ap-exam-parse";
+import { CUSTOM_SCORE_MAX_DEFAULT, apBasisText, apDistributionText, apMicroScore, apScoreText, formatScaledScore, pointsOnScale, scoreMaxError, summarizeApScores, type ApClassSummary, type ApScore } from "@/lib/ap-score";
+import { BREAK_MINUTES_DEFAULT, FRQ_MINUTES_DEFAULT, MCQ_MINUTES_DEFAULT, sectionMinutesError, sectionTimingLabel, sectionTotalMinutes } from "@/lib/exam-sections";
 import { splitTeacherFrq } from "@/lib/frq-teacher-fields";
 import { cropImageBlob, cropRectsForQuestions, cropUrlFromPage } from "@/lib/exam-page-crop";
 import { PageCropDialog } from "@/components/teacher/PageCropDialog";
@@ -160,7 +162,16 @@ export const Route = createFileRoute("/teacher")({
 });
 
 type RosterRow = { id: string; student_id: string; student_name: string; user_id: string | null; account_name?: string | null };
-type Paper = { id: string; slug: string; title: string; year: number | null; created_at?: string | null };
+type Paper = {
+  id: string;
+  slug: string;
+  title: string;
+  year: number | null;
+  created_at?: string | null;
+  total_seconds?: number | null;
+  frq_seconds?: number | null;
+  break_seconds?: number | null;
+};
 type Assignment = {
   id: string;
   title: string;
@@ -172,10 +183,15 @@ type Assignment = {
   paper: { id: string; slug: string; title: string } | null;
   class_name?: string;
   teacher_name?: string;
+  mcq_seconds?: number | null;
+  frq_seconds?: number | null;
+  break_seconds?: number | null;
+  score_max?: number | null;
   roster_count?: number;
   submitted_count?: number;
   mcq_correct?: number;
   mcq_total?: number;
+  ap?: ApClassSummary;
 };
 type GradeFrq = {
   frq_id: string;
@@ -378,6 +394,44 @@ const NAV: { id: TeacherPage; label: string; icon: typeof Users }[] = [
   { id: "pdf", label: "PDF 出题", icon: FileUp },
 ];
 
+function paperSectionMinutes(paper: Pick<Paper, "total_seconds" | "frq_seconds" | "break_seconds">) {
+  const mcq = Math.max(10, Math.round((paper.total_seconds || MCQ_MINUTES_DEFAULT * 60) / 60));
+  const rawFrq = Math.round((paper.frq_seconds ?? FRQ_MINUTES_DEFAULT * 60) / 60);
+  const frq = rawFrq <= 0 ? 0 : Math.max(10, Math.min(180, rawFrq));
+  const breakMinutes = frq > 0 ? Math.min(20, Math.max(0, Math.round((paper.break_seconds ?? BREAK_MINUTES_DEFAULT * 60) / 60))) : 0;
+  return { mcq: Math.min(180, mcq), frq, breakMinutes };
+}
+
+function assignmentTiming(exam: Pick<Assignment, "mcq_seconds" | "frq_seconds" | "break_seconds" | "starts_at" | "ends_at">) {
+  return sectionTimingLabel(exam.mcq_seconds, exam.frq_seconds, exam.break_seconds)
+    ?? `总时长 ${Math.max(1, Math.round((Date.parse(exam.ends_at) - Date.parse(exam.starts_at)) / 60000))} 分钟`;
+}
+
+function gradeAp(row: GradeRow) {
+  if (row.status !== "submitted") {
+    return apMicroScore({ mcqCorrect: null, mcqTotal: null, frqEarned: null, frqMax: null });
+  }
+  const hasFrq = row.frq_max > 0;
+  return apMicroScore({
+    mcqCorrect: row.mcq_correct,
+    mcqTotal: row.mcq_total,
+    frqEarned: hasFrq ? row.frq_score : null,
+    frqMax: hasFrq ? row.frq_max : null,
+  });
+}
+
+function scaledLabel(result: ApScore, scoreMax: number | null | undefined) {
+  if (!scoreMax) return "—";
+  const points = pointsOnScale(result.composite, scoreMax);
+  if (points == null) return result.reason === "frq-pending" || result.reason === "mcq-pending" ? "待出分" : "—";
+  return `${points}/${scoreMax}`;
+}
+
+function formatApAverage(summary: ApClassSummary | null | undefined) {
+  if (!summary || summary.average == null) return summary?.pending ? "待出分" : "—";
+  return summary.average.toFixed(1);
+}
+
 function mcqRate(rows: GradeRow[]) {
   let correct = 0;
   let total = 0;
@@ -519,11 +573,14 @@ function TeacherHome() {
   const [source, setSource] = useState<"existing" | "random">("existing");
   const [paperId, setPaperId] = useState("");
   const [startsAt, setStartsAt] = useState(() => toLocalInput(new Date()));
-  const [examMinutes, setExamMinutes] = useState(70);
+  const [mcqMinutes, setMcqMinutes] = useState(MCQ_MINUTES_DEFAULT);
+  const [frqMinutes, setFrqMinutes] = useState(FRQ_MINUTES_DEFAULT);
+  const [breakMinutes, setBreakMinutes] = useState(BREAK_MINUTES_DEFAULT);
+  const [scoreMax, setScoreMax] = useState(CUSTOM_SCORE_MAX_DEFAULT);
   const [publishAnswers, setPublishAnswers] = useState(false);
   const [aiGradeFrq, setAiGradeFrq] = useState(true);
   const [cropPick, setCropPick] = useState<{ index: number; pageUrl: string } | null>(null);
-  const [endsAt, setEndsAt] = useState(() => toLocalInput(new Date(Date.now() + 70 * 60 * 1000)));
+  const [endsAt, setEndsAt] = useState(() => toLocalInput(new Date(Date.now() + sectionTotalMinutes(MCQ_MINUTES_DEFAULT, FRQ_MINUTES_DEFAULT, BREAK_MINUTES_DEFAULT) * 60 * 1000)));
   const [creating, setCreating] = useState(false);
   const [gradeId, setGradeId] = useState(search.exam ?? "");
   const [gradeRows, setGradeRows] = useState<GradeRow[]>([]);
@@ -532,7 +589,7 @@ function TeacherHome() {
   const [commentDraft, setCommentDraft] = useState<Record<string, string>>({});
   const [gradeBusy, setGradeBusy] = useState<"save" | "ai" | "collect" | "end" | null>(null);
   const [endConfirm, setEndConfirm] = useState(false);
-  const [gradeMeta, setGradeMeta] = useState<{ title: string; results_published: boolean; ends_at: string; ai_grade: boolean } | null>(null);
+  const [gradeMeta, setGradeMeta] = useState<{ title: string; results_published: boolean; ends_at: string; ai_grade: boolean; score_max: number | null } | null>(null);
   const [gradeNote, setGradeNote] = useState("");
   const gradingLock = useRef(false);
   const autoQueued = useRef("");
@@ -558,7 +615,7 @@ function TeacherHome() {
   const [rosterQuery, setRosterQuery] = useState("");
   const [scoreQuery, setScoreQuery] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [snapshot, setSnapshot] = useState<{ id: string; rows: GradeRow[] } | null>(null);
+  const [snapshot, setSnapshot] = useState<{ id: string; rows: GradeRow[]; scoreMax: number | null } | null>(null);
   const [copied, setCopied] = useState("");
   const [studentEditor, setStudentEditor] = useState<null | { id: string | null; student_id: string; student_name: string }>(null);
   const [studentEditorError, setStudentEditorError] = useState("");
@@ -781,6 +838,10 @@ function TeacherHome() {
           paper_id: source === "existing" ? paperId : undefined,
           starts_at: new Date(startsAt).toISOString(),
           ends_at: new Date(endsAt).toISOString(),
+          mcq_minutes: mcqMinutes,
+          frq_minutes: frqMinutes,
+          break_minutes: frqMinutes > 0 ? breakMinutes : 0,
+          score_max: scoreMax,
           publish_answers: publishAnswers,
           ai_grade: aiGradeFrq,
         }),
@@ -862,6 +923,7 @@ function TeacherHome() {
       results_published: j.assignment.results_published,
       ends_at: j.assignment.ends_at,
       ai_grade: j.assignment.ai_grade !== false,
+      score_max: typeof j.assignment.score_max === "number" ? j.assignment.score_max : null,
     });
     return rows;
   }
@@ -1077,7 +1139,7 @@ function TeacherHome() {
     const mcqFull = gradeRows.reduce((max, row) => Math.max(max, row.mcq_total ?? row.mcqs?.length ?? 0), 0);
     const frqFull = gradeRows.reduce((max, row) => Math.max(max, row.frq_max || 0), 0);
     const totalFull = mcqFull + frqFull;
-    const header = ["学号", "姓名", "状态", "选择题得分", "选择题满分", "总分", "总分满分", "选择题作答", ...frqHeaders, "交卷时间（北京时间）"];
+    const header = ["学号", "姓名", "状态", "AP分", "综合分", "折算得分", "满分", "选择题得分", "选择题满分", "原始总分", "原始总分满分", "选择题作答", ...frqHeaders, "交卷时间（北京时间）"];
     const lines = gradeRows.map((row) => {
       const mcqText = (row.mcqs ?? []).map((item) => `Q${item.n}${item.picked ?? "-"}`).join(" ");
       const frqByNumber = new Map((row.frqs ?? []).map((frq) => [frq.sort_order, frq]));
@@ -1090,10 +1152,15 @@ function TeacherHome() {
       });
       const frqSum = (row.frqs ?? []).reduce((sum, frq) => sum + (frq.manual_score ?? frq.ai_score ?? 0), 0);
       const total = row.status === "submitted" ? (row.mcq_correct ?? 0) + frqSum : "";
+      const ap = gradeAp(row);
       return [
         row.student_id,
         row.student_name,
         row.status === "submitted" ? "已交卷" : row.status === "in_progress" ? (mcqHandedIn(row) ? "选择题已交" : "作答中") : "未交",
+        ap.score ?? (ap.reason === "frq-pending" ? "待大题出分" : ""),
+        ap.composite ?? "",
+        pointsOnScale(ap.composite, gradeMeta?.score_max) ?? "",
+        gradeMeta?.score_max ?? "",
         row.mcq_correct ?? "",
         row.mcq_total ?? "",
         total,
@@ -1627,8 +1694,17 @@ function TeacherHome() {
   useEffect(() => {
     if (paperId) return;
     const first = libraryPapers[0];
-    if (first) setPaperId(first.id);
-  }, [libraryPapers, paperId]);
+    if (!first) return;
+    const timing = paperSectionMinutes(first);
+    setPaperId(first.id);
+    setMcqMinutes(timing.mcq);
+    setFrqMinutes(timing.frq);
+    setBreakMinutes(timing.breakMinutes);
+    const start = Date.parse(startsAt);
+    if (Number.isFinite(start)) {
+      setEndsAt(toLocalInput(new Date(start + sectionTotalMinutes(timing.mcq, timing.frq, timing.breakMinutes) * 60 * 1000)));
+    }
+  }, [libraryPapers, paperId, startsAt]);
 
   useEffect(() => {
     const id = assignments[0]?.id;
@@ -1640,7 +1716,7 @@ function TeacherHome() {
     void authFetch(`/api/teacher/gradebook?assignment_id=${id}`).then(async (r) => {
       if (!r.ok || cancel) return;
       const j = await r.json();
-      if (!cancel) setSnapshot({ id, rows: j.rows ?? [] });
+      if (!cancel) setSnapshot({ id, rows: j.rows ?? [], scoreMax: typeof j.assignment?.score_max === "number" ? j.assignment.score_max : null });
     });
     return () => {
       cancel = true;
@@ -1741,9 +1817,10 @@ function TeacherHome() {
         : `${inProgressCount} 人作答中`;
   const liveCount = assignments.filter((a) => examWindow(a.starts_at, a.ends_at).label === "进行中").length;
   const overviewRate = mcqRate(snapshot?.rows ?? []);
+  const overviewAp = summarizeApScores((snapshot?.rows ?? []).filter((row) => row.status === "submitted").map(gradeAp), snapshot?.scoreMax);
+  const classAp = summarizeApScores(gradeRows.filter((row) => row.status === "submitted").map(gradeAp), gradeMeta?.score_max);
   const pendingCount = snapshot ? snapshot.rows.filter((r) => r.status !== "submitted").length : 0;
   const gradeRate = mcqRate(gradeRows);
-  const frqCount = gradeRows.filter((r) => r.status === "submitted" && Object.keys(r.frq_answers ?? {}).length > 0).length;
   const bestScore = gradeRows.reduce((best, row) => {
     if (row.mcq_correct == null || !row.mcq_total) return best;
     return Math.max(best, row.mcq_correct / row.mcq_total);
@@ -1787,9 +1864,12 @@ function TeacherHome() {
     openTeacherPage(next);
     if (next === "exam" && examStep === "edit" && !title.trim()) {
       const start = new Date();
+      const timing = source === "existing" && selectedPaper ? paperSectionMinutes(selectedPaper) : { mcq: MCQ_MINUTES_DEFAULT, frq: FRQ_MINUTES_DEFAULT, breakMinutes: BREAK_MINUTES_DEFAULT };
       setStartsAt(toLocalInput(start));
-      setExamMinutes(70);
-      setEndsAt(toLocalInput(new Date(start.getTime() + 70 * 60 * 1000)));
+      setMcqMinutes(timing.mcq);
+      setFrqMinutes(timing.frq);
+      setBreakMinutes(timing.breakMinutes);
+      setEndsAt(toLocalInput(new Date(start.getTime() + sectionTotalMinutes(timing.mcq, timing.frq, timing.breakMinutes) * 60 * 1000)));
     }
   }
 
@@ -1812,8 +1892,19 @@ function TeacherHome() {
       toast.error("请设置有效的开考和截止时间");
       return;
     }
-    if (examMinutes < 10 || examMinutes > 240) {
-      toast.error("答题时长请设在 10 到 240 分钟之间");
+    const sectionError = sectionMinutesError(mcqMinutes, frqMinutes, frqMinutes > 0 ? breakMinutes : 0);
+    if (sectionError) {
+      toast.error(sectionError);
+      return;
+    }
+    const maxError = scoreMaxError(scoreMax);
+    if (maxError) {
+      toast.error(maxError);
+      return;
+    }
+    const sectionMs = sectionTotalMinutes(mcqMinutes, frqMinutes, frqMinutes > 0 ? breakMinutes : 0) * 60 * 1000;
+    if (ends - starts + 90_000 < sectionMs) {
+      toast.error("截止时间要盖住选择题、休息和大题");
       return;
     }
     setExamStep("review");
@@ -1932,7 +2023,7 @@ function TeacherHome() {
               <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                 <StatCard label="我的学生" value={roster.length} hint={roster.length ? `${roster.filter((r) => r.user_id).length} 人已入场绑定` : "尚未导入学生"} icon={Users} />
                 <StatCard label="进行中的考试" value={liveCount} hint={assignments.length ? `共布置 ${assignments.length} 场` : "创建考试后会显示在这里"} icon={ClipboardList} />
-                <StatCard label="平均正确率" value={overviewRate == null ? "—" : `${overviewRate}%`} hint={overviewRate == null ? "暂无成绩数据" : "最近一场已交卷的选择题"} icon={BarChart3} />
+                <StatCard label="平均 AP 分" value={formatApAverage(overviewAp)} hint={overviewAp.averageCustom != null ? `折算均分 ${formatScaledScore(overviewAp.averageCustom, overviewAp.scoreMax)}` : overviewAp.scored ? `最近一场 1–5 分，选择题正确率 ${overviewRate ?? "—"}%` : overviewAp.pending ? "最近一场大题还没出分" : "最近一场还没有可换算的成绩"} icon={BarChart3} />
                 <StatCard label="待处理" value={pendingCount} hint={snapshot ? "最近一场尚未交卷" : "暂无待处理事项"} icon={Clock} />
               </div>
               <div className={cn("grid gap-4", roster.length > 0 && assignments.length > 0 ? "" : "lg:grid-cols-[1.35fr_1fr]")}>
@@ -1993,6 +2084,8 @@ function TeacherHome() {
                           <TableHead>考试码</TableHead>
                           <TableHead>提交情况</TableHead>
                           <TableHead>正确率</TableHead>
+                          <TableHead>AP 分</TableHead>
+                          <TableHead>得分</TableHead>
                           <TableHead>状态</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -2020,6 +2113,8 @@ function TeacherHome() {
                               </TableCell>
                               <TableCell>{submitProgress(a)}</TableCell>
                               <TableCell>{accuracyLabel(a)}</TableCell>
+                              <TableCell className="tabular-nums" title={a.ap?.scored ? apDistributionText(a.ap) : undefined}>{formatApAverage(a.ap)}</TableCell>
+                              <TableCell className="tabular-nums">{formatScaledScore(a.ap?.averageCustom, a.score_max ?? a.ap?.scoreMax)}</TableCell>
                               <TableCell><Pill tone={win.tone}>{win.label}</Pill></TableCell>
                             </TableRow>
                           );
@@ -2187,8 +2282,14 @@ function TeacherHome() {
                         <dt className="text-muted-foreground">考试名称</dt><dd className="font-medium">{title}</dd>
                         <dt className="text-muted-foreground">班级与人数</dt><dd className="font-medium">本班，共 {roster.length} 人</dd>
                         <dt className="text-muted-foreground">试卷</dt><dd className="font-medium">{paperLabel}</dd>
-                        <dt className="text-muted-foreground">答题时长</dt>
-                        <dd className="font-medium">{examMinutes} 分钟</dd>
+                        <dt className="text-muted-foreground">分段计时</dt>
+                        <dd className="font-medium">
+                          {frqMinutes > 0
+                            ? `选择题 ${mcqMinutes} 分钟 + 大题 ${frqMinutes} 分钟${breakMinutes ? `，休息 ${breakMinutes} 分钟` : ""}`
+                            : `选择题 ${mcqMinutes} 分钟`}
+                        </dd>
+                        <dt className="text-muted-foreground">满分</dt>
+                        <dd className="font-medium">{scoreMax} 分，AP 1–5 仍按 90 分综合分</dd>
                         <dt className="text-muted-foreground">考试时间</dt>
                         <dd className="font-medium">{new Date(startsAt).toLocaleString()} 至 {new Date(endsAt).toLocaleString()}</dd>
                         <dt className="text-muted-foreground">防作弊</dt>
@@ -2238,7 +2339,16 @@ function TeacherHome() {
                             "rounded-xl border px-3 py-2 text-sm",
                             source === "random" ? "border-primary/40 bg-primary/10 font-medium text-primary" : "border-border bg-white/60 text-muted-foreground",
                           )}
-                          onClick={() => setSource("random")}
+                          onClick={() => {
+                            setSource("random");
+                            const start = Date.parse(startsAt);
+                            setMcqMinutes(MCQ_MINUTES_DEFAULT);
+                            setFrqMinutes(FRQ_MINUTES_DEFAULT);
+                            setBreakMinutes(BREAK_MINUTES_DEFAULT);
+                            if (Number.isFinite(start)) {
+                              setEndsAt(toLocalInput(new Date(start + sectionTotalMinutes(MCQ_MINUTES_DEFAULT, FRQ_MINUTES_DEFAULT, BREAK_MINUTES_DEFAULT) * 60 * 1000)));
+                            }
+                          }}
                         >
                           生成固定随机卷
                         </button>
@@ -2247,7 +2357,19 @@ function TeacherHome() {
                     {source === "existing" ? (
                       <Field label="选择试卷" hint="选择已有题卷，学生将完成同一套题目。">
                         <div className="flex flex-col gap-2 sm:flex-row">
-                          <Select value={paperId || undefined} onValueChange={setPaperId}>
+                          <Select value={paperId || undefined} onValueChange={(id) => {
+                            setPaperId(id);
+                            const paper = libraryPapers.find((item) => item.id === id);
+                            if (!paper) return;
+                            const timing = paperSectionMinutes(paper);
+                            setMcqMinutes(timing.mcq);
+                            setFrqMinutes(timing.frq);
+                            setBreakMinutes(timing.breakMinutes);
+                            const start = Date.parse(startsAt);
+                            if (Number.isFinite(start)) {
+                              setEndsAt(toLocalInput(new Date(start + sectionTotalMinutes(timing.mcq, timing.frq, timing.breakMinutes) * 60 * 1000)));
+                            }
+                          }}>
                             <SelectTrigger className="min-w-0 flex-1"><SelectValue placeholder="选择试卷" /></SelectTrigger>
                             <SelectContent>
                               {libraryPapers.map((p) => (
@@ -2271,7 +2393,7 @@ function TeacherHome() {
                         这是公开卷库。未走考试入场的学生仍可能在「模考」里练习同一份卷。课上请只用考试码入场；随机卷或 PDF 导入卷不会出现在公开模考列表。
                       </p>
                     )}
-                    <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
                       <Field label="开始时间">
                         <Input
                           type="datetime-local"
@@ -2281,49 +2403,90 @@ function TeacherHome() {
                             const value = e.target.value;
                             setStartsAt(value);
                             const start = Date.parse(value);
-                            if (Number.isFinite(start)) setEndsAt(toLocalInput(new Date(start + examMinutes * 60 * 1000)));
+                            if (!Number.isFinite(start)) return;
+                            setEndsAt(toLocalInput(new Date(start + sectionTotalMinutes(mcqMinutes, frqMinutes, frqMinutes > 0 ? breakMinutes : 0) * 60 * 1000)));
                           }}
                         />
                       </Field>
-                      <Field label="答题时长（分钟）" hint="改时长会重算截止时间。">
-                        <Input
-                          type="number"
-                          min={10}
-                          max={240}
-                          value={examMinutes}
-                          onChange={(e) => {
-                            const mins = Number(e.target.value);
-                            if (!Number.isFinite(mins)) return;
-                            setExamMinutes(mins);
-                            if (mins < 10 || mins > 240) return;
-                            const start = Date.parse(startsAt);
-                            if (Number.isFinite(start)) setEndsAt(toLocalInput(new Date(start + mins * 60 * 1000)));
-                          }}
-                        />
-                      </Field>
-                      <Field label="截止时间">
+                      <Field label="截止时间" hint="默认等于各段时长相加。可以再延后，给学生留迟到缓冲。">
                         <Input
                           type="datetime-local"
                           className="min-w-0 w-full text-sm"
                           value={endsAt}
+                          onChange={(e) => setEndsAt(e.target.value)}
+                        />
+                      </Field>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <Field label="选择题（分钟）" hint="官方卷默认 70 分钟。改时长会重算截止时间。">
+                        <Input
+                          type="number"
+                          min={10}
+                          max={180}
+                          value={mcqMinutes}
                           onChange={(e) => {
-                            const value = e.target.value;
-                            setEndsAt(value);
+                            const mins = Math.round(Number(e.target.value));
+                            if (!Number.isFinite(mins)) return;
+                            setMcqMinutes(mins);
                             const start = Date.parse(startsAt);
-                            const end = Date.parse(value);
-                            if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
-                              setExamMinutes(Math.max(1, Math.round((end - start) / 60000)));
-                            }
+                            if (!Number.isFinite(start) || mins < 10 || mins > 180) return;
+                            setEndsAt(toLocalInput(new Date(start + sectionTotalMinutes(mins, frqMinutes, frqMinutes > 0 ? breakMinutes : 0) * 60 * 1000)));
+                          }}
+                        />
+                      </Field>
+                      <Field label="大题（分钟）" hint="官方卷默认 60 分钟。填 0 表示这场没有大题。">
+                        <Input
+                          type="number"
+                          min={0}
+                          max={180}
+                          value={frqMinutes}
+                          onChange={(e) => {
+                            const mins = Math.round(Number(e.target.value));
+                            if (!Number.isFinite(mins)) return;
+                            const nextBreak = mins > 0 ? breakMinutes : 0;
+                            setFrqMinutes(mins);
+                            setBreakMinutes(nextBreak);
+                            const start = Date.parse(startsAt);
+                            if (!Number.isFinite(start)) return;
+                            setEndsAt(toLocalInput(new Date(start + sectionTotalMinutes(mcqMinutes, mins, nextBreak) * 60 * 1000)));
+                          }}
+                        />
+                      </Field>
+                      <Field label="休息（分钟）" hint="选择题和大题之间，学生可以跳过。">
+                        <Input
+                          type="number"
+                          min={0}
+                          max={20}
+                          disabled={frqMinutes <= 0}
+                          value={frqMinutes > 0 ? breakMinutes : 0}
+                          onChange={(e) => {
+                            const mins = Math.round(Number(e.target.value));
+                            if (!Number.isFinite(mins)) return;
+                            setBreakMinutes(mins);
+                            const start = Date.parse(startsAt);
+                            if (!Number.isFinite(start) || mins < 0 || mins > 20) return;
+                            setEndsAt(toLocalInput(new Date(start + sectionTotalMinutes(mcqMinutes, frqMinutes, mins) * 60 * 1000)));
                           }}
                         />
                       </Field>
                     </div>
+                    <Field label="满分" hint="学生得分按选择题三分之二、大题三分之一折到这个满分。AP 1–5 仍按 90 分综合分计算。">
+                      <Input
+                        type="number"
+                        min={10}
+                        max={300}
+                        step={1}
+                        className="w-32"
+                        value={scoreMax}
+                        onChange={(e) => setScoreMax(Math.round(Number(e.target.value) || 0))}
+                      />
+                    </Field>
                     <ul className="list-disc space-y-1 rounded-xl bg-amber-500/10 px-6 py-2 text-xs leading-relaxed text-amber-900">
                       <li>学生用学号、姓名和考试码进入。考试码是 6 位字母和数字，例如 K7PGAD。</li>
-                      <li>倒计时到统一截止时间。开始得晚，剩下的时间就更短。</li>
+                      <li>选择题和大题分开倒计时。一段时间到了就进入下一段，休息可以跳过。</li>
+                      <li>整场到截止时间会自动交卷。开始得晚，后面的段落可能被截止时间截短。</li>
                       <li>离开考试页面会提醒，关闭页面前会再确认一次。</li>
-                      <li>未交卷可以在截止前重新进入。已提交的答卷不能重复提交。</li>
-                      <li>选择题交卷后不能再改。</li>
+                      <li>未交卷可以在截止前重新进入。已提交的答卷不能重复提交。选择题交卷后不能再改。</li>
                     </ul>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="flex items-start justify-between gap-3 rounded-xl border border-border bg-white/70 px-3 py-3">
@@ -2369,7 +2532,7 @@ function TeacherHome() {
                         </div>
                         <p className="text-xs leading-relaxed text-muted-foreground">
                           {a.class_name ? `${a.class_name}${a.teacher_name ? ` · ${a.teacher_name}` : ""} · ` : ""}
-                          {a.paper?.title ?? "试卷"} · {new Date(a.starts_at).toLocaleString()} – {new Date(a.ends_at).toLocaleString()}
+                          {a.paper?.title ?? "试卷"} · {assignmentTiming(a)} · 满分 {a.score_max ?? "—"} · 平均 {formatScaledScore(a.ap?.averageCustom, a.score_max ?? a.ap?.scoreMax)} · AP {formatApAverage(a.ap)} · 正确率 {accuracyLabel(a)} · {new Date(a.starts_at).toLocaleString()} – {new Date(a.ends_at).toLocaleString()}
                         </p>
                         <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center">
                           <span className="font-mono text-lg tracking-[0.14em]">{a.exam_code}</span>
@@ -2444,15 +2607,18 @@ function TeacherHome() {
                     ) : null}
                   </div>
                   <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                    <StatCard label="平均 AP 分" value={scoresPending ? "—" : formatApAverage(classAp)} hint={scoresPending ? "正在读取成绩" : classAp.averageCustom != null ? `折算均分 ${formatScaledScore(classAp.averageCustom, classAp.scoreMax)}` : classAp.scored ? `已换算 ${classAp.scored} 人${classAp.pending ? `，${classAp.pending} 人待出分` : ""}` : classAp.pending ? "大题批完后换算" : "交卷后按 1–5 分换算"} />
                     <StatCard label="班级正确率" value={scoresPending || gradeRate == null ? "—" : `${gradeRate}%`} hint={scoresPending ? "正在读取成绩" : gradeRate == null ? "暂无成绩数据" : "已交卷选择题"} />
                     <StatCard
                       label="已提交"
                       value={scoresPending ? "—" : gradeId ? `${submittedCount} / ${gradeRows.length || roster.length}` : "—"}
                       hint={scoresPending ? "正在读取成绩" : gradeId ? inProgressHint : "请选择一场考试"}
                     />
-                    <StatCard label="最高正确率" value={scoresPending || bestScore < 0 ? "—" : `${Math.round(bestScore * 100)}%`} hint={scoresPending ? "正在读取成绩" : bestScore < 0 ? "暂无成绩数据" : "单份已交答卷"} />
-                    <StatCard label="已交大题" value={scoresPending ? "—" : frqCount} hint={scoresPending ? "正在读取成绩" : frqCount ? "点学生姓名查看评语和改分" : "暂无大题作答"} />
+                    <StatCard label="最高 AP 分" value={scoresPending || classAp.best == null ? "—" : classAp.best} hint={scoresPending ? "正在读取成绩" : classAp.bestCustom != null ? `最高折算 ${formatScaledScore(classAp.bestCustom, classAp.scoreMax)}` : bestScore < 0 ? "暂无成绩数据" : `最高选择题正确率 ${Math.round(bestScore * 100)}%`} />
                   </div>
+                  {classAp.scored > 0 ? (
+                    <p className="text-xs text-muted-foreground">AP 分布：{apDistributionText(classAp)}。选择题占三分之二，大题占三分之一；综合分满分 90，70 分为 5，57 分为 4，45 分为 3，36 分为 2。{gradeMeta?.score_max ? `老师设定满分 ${gradeMeta.score_max}，班均 ${formatScaledScore(classAp.averageCustom, gradeMeta.score_max)}。` : ""}</p>
+                  ) : null}
                   {reviewRows.length > 0 ? (
                     <p className="rounded-xl bg-amber-100 px-3 py-2 text-sm text-amber-950">
                       {reviewRows.length} 名学生有建议复核的大题，名单里用黄色标出，请优先改分。
@@ -2489,6 +2655,8 @@ function TeacherHome() {
                             <TableRow className="hover:bg-transparent">
                               <TableHead className="sticky left-0 z-10 bg-white">学生</TableHead>
                               <TableHead>选择题</TableHead>
+                              <TableHead>AP 分</TableHead>
+                              <TableHead>得分</TableHead>
                               {mcqHeaders.map((n) => (
                                 <TableHead key={`mcq-${n}`} className="px-1 text-center">{n}</TableHead>
                               ))}
@@ -2517,6 +2685,10 @@ function TeacherHome() {
                                 <TableCell className="tabular-nums">
                                   {mcqProgressLabel(row)}
                                 </TableCell>
+                                <TableCell className="tabular-nums font-semibold">
+                                  {apScoreText(gradeAp(row))}
+                                </TableCell>
+                                <TableCell className="tabular-nums">{scaledLabel(gradeAp(row), gradeMeta?.score_max)}</TableCell>
                                 {mcqHeaders.map((n) => {
                                   const item = row.mcqs?.find((entry) => entry.n === n);
                                   return (
@@ -2804,6 +2976,32 @@ function TeacherHome() {
                     </Button>
                   )}
                 </div>
+                {(() => {
+                  const ap = gradeAp(row);
+                  return (
+                    <section className="rounded-xl bg-primary/5 px-3 py-3">
+                      <div className="flex gap-8">
+                        <div>
+                          <div className="text-xs text-muted-foreground">AP 分数</div>
+                          <div className="mt-1 text-3xl font-semibold tabular-nums">{apScoreText(ap)}</div>
+                        </div>
+                        {gradeMeta?.score_max ? (
+                          <div>
+                            <div className="text-xs text-muted-foreground">得分 / {gradeMeta.score_max}</div>
+                            <div className="mt-1 text-3xl font-semibold tabular-nums">{pointsOnScale(ap.composite, gradeMeta.score_max) ?? "—"}</div>
+                          </div>
+                        ) : null}
+                      </div>
+                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                        {ap.reason === "ready"
+                          ? `综合分 ${ap.composite}/${ap.compositeMax}${ap.mcqWeighted != null ? `，选择题折算 ${ap.mcqWeighted}` : ""}${ap.frqWeighted != null ? `，大题折算 ${ap.frqWeighted}` : ""}。${apBasisText(ap.basis)}`
+                          : ap.reason === "frq-pending"
+                            ? "大题批完后换算成 1–5。选择题占三分之二，大题占三分之一。"
+                            : "交卷并出分后换算成 1–5。"}
+                      </p>
+                    </section>
+                  );
+                })()}
                 <section className="space-y-2">
                   <h3 className="text-sm font-semibold">选择题</h3>
                   <p className="text-xs text-muted-foreground">

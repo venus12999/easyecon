@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { printedQuestionNumber } from "@/lib/ap-exam-parse";
 import { readPageImage, readPointMarker, schoolExamAiOn, stripPageImage, stripPointMarker } from "@/lib/exam-flags";
+import { fixAp2025Frqs, fixAp2025Questions } from "@/lib/ap-2025-paper";
 import { answerNeedsReview, gradeFrqAnswer, pointsFromRubric, type FrqBreakdown } from "@/lib/frq-grade.server";
 import { splitImageTextRubric, splitTeacherFrq } from "@/lib/frq-teacher-fields";
 import { EXAM_LOCK_GRACE_MS, isUuid } from "@/lib/school-exam-session";
@@ -77,7 +78,7 @@ export async function loadAssignmentBundle(assignmentId: string) {
   if (!isUuid(assignmentId)) return null;
   const { data: assignment } = await supabaseAdmin
     .from("school_assignments")
-    .select("id,class_id,paper_id,title,exam_code,starts_at,ends_at,results_published")
+    .select("id,class_id,paper_id,title,exam_code,starts_at,ends_at,results_published,mcq_seconds,frq_seconds,break_seconds,score_max")
     .eq("id", assignmentId)
     .maybeSingle();
   if (!assignment) return null;
@@ -1025,7 +1026,7 @@ export async function loadActiveExamForUser(userId: string, request?: Request): 
   return candidates[0] ?? null;
 }
 
-export async function loadSchoolPaperQuestions(paperId: string, published: boolean) {
+export async function loadSchoolPaperQuestions(paperId: string, published: boolean, slug?: string | null) {
   const { data: pqs } = await supabaseAdmin
     .from("paper_questions")
     .select(
@@ -1068,5 +1069,7 @@ export async function loadSchoolPaperQuestions(paperId: string, published: boole
       page_image_url,
     };
   });
-  return { questions, frqs: frqs ?? [] };
+  const cleanedQuestions = slug === "ap-micro-2025" ? fixAp2025Questions(questions) : questions;
+  const cleanedFrqs = slug === "ap-micro-2025" ? fixAp2025Frqs(frqs ?? []) : (frqs ?? []);
+  return { questions: cleanedQuestions, frqs: cleanedFrqs };
 }

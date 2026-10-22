@@ -93,7 +93,7 @@ function ExamEntry() {
     <main className="mx-auto max-w-md px-4 py-10">
       <h1 className="text-2xl font-bold mb-1">学校考试入场</h1>
       <p className="text-sm text-muted-foreground mb-2">填写花名册上的学号、姓名，以及老师公布的考试码。同一学号可再次入场继续未交卷。</p>
-      <p className="text-sm text-muted-foreground mb-6">计时倒数到统一截止时间。迟到会减少作答时间。</p>
+      <p className="text-sm text-muted-foreground mb-6">选择题和大题分开计时。整场仍有统一截止时间，迟到会截短后面的段落。</p>
       <Card>
         <CardContent className="p-5">
           <form noValidate className="space-y-3" onSubmit={(e) => void enter(e)}>

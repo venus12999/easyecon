@@ -29,7 +29,7 @@ export const Route = createFileRoute("/api/exam/paper")({
         if (collected.due) continueGradeBatch(request, bundle.assignment.id);
         let attempt = await loadAttempt(bundle.assignment.id, roster.id);
         const published = bundle.assignment.results_published;
-        const { questions, frqs } = await loadSchoolPaperQuestions(bundle.paper.id, published);
+        const { questions, frqs } = await loadSchoolPaperQuestions(bundle.paper.id, published, bundle.paper.slug);
         return Response.json({
           assignment: bundle.assignment,
           paper: bundle.paper,

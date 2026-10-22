@@ -13,7 +13,7 @@ async function teacherAssignment(userId: string, jwt: string, assignmentId: stri
   if (await isSchoolAdmin(userId, email)) {
     const { data: assignment } = await supabaseAdmin
       .from("school_assignments")
-      .select("id,title,exam_code,starts_at,ends_at,results_published,paper_id,class_id")
+      .select("id,title,exam_code,starts_at,ends_at,results_published,paper_id,class_id,score_max")
       .eq("id", assignmentId)
       .maybeSingle();
     return assignment ? { db: supabaseAdmin, assignment } : null;
@@ -22,7 +22,7 @@ async function teacherAssignment(userId: string, jwt: string, assignmentId: stri
   const cls = await ensureTeacherClass(userId, db);
   const { data: assignment } = await db
     .from("school_assignments")
-    .select("id,title,exam_code,starts_at,ends_at,results_published,paper_id,class_id")
+    .select("id,title,exam_code,starts_at,ends_at,results_published,paper_id,class_id,score_max")
     .eq("id", assignmentId)
     .eq("class_id", cls.id)
     .maybeSingle();

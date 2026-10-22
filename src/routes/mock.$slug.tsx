@@ -44,7 +44,9 @@ import { clearPendingMock, loadPendingMock, savePendingMock } from "@/lib/pendin
 import { consumeMockAccess } from "@/lib/mock-access-client";
 import { authFetch } from "@/lib/auth-fetch";
 import { ExamFigure } from "@/components/mock/ExamFigure";
+import { apBasisText, apMicroScore, apScoreText, pointsOnScale } from "@/lib/ap-score";
 import { readExamAiGrade, readPageImage, readPointMarker, stripExamFlags, stripPointMarker, studentPaperNote } from "@/lib/exam-flags";
+import { ap2025Clock, fixAp2025Frqs, fixAp2025Questions } from "@/lib/ap-2025-paper";
 import { clearSchoolExamSession, hasExitedExam, isExamLocalEmail, isUuid, loadSchoolExamSession, markExamExited, markIntentionalSignOut, saveSchoolExamSession } from "@/lib/school-exam-session";
 
 export const Route = createFileRoute("/mock/$slug")({
@@ -118,6 +120,13 @@ function PaperRunner() {
   const [schoolSubmitted, setSchoolSubmitted] = useState(false);
   const [schoolTitle, setSchoolTitle] = useState("");
   const [schoolEndsAt, setSchoolEndsAt] = useState("");
+  const [schoolSections, setSchoolSections] = useState<{ mcq: number; frq: number; break: number } | null>(null);
+  const [schoolScoreMax, setSchoolScoreMax] = useState<number | null>(null);
+  const schoolSectionsRef = useRef(schoolSections);
+  schoolSectionsRef.current = schoolSections;
+  const [sectionMarks, setSectionMarks] = useState<{ mcq: string | null; break: string | null; frq: string | null }>({ mcq: null, break: null, frq: null });
+  const sectionMarksRef = useRef(sectionMarks);
+  sectionMarksRef.current = sectionMarks;
   const [schoolStudentName, setSchoolStudentName] = useState("");
   const [schoolSavedAt, setSchoolSavedAt] = useState(0);
   const [now, setNow] = useState(() => Date.now());
@@ -144,6 +153,7 @@ function PaperRunner() {
     idx: 0,
     phase: "idle",
     breakSeconds: 0,
+    frqSeconds: 0,
   });
   const [breakSeconds, setBreakSeconds] = useState(0);
   const [frqSeconds, setFrqSeconds] = useState(0);
@@ -185,6 +195,17 @@ function PaperRunner() {
 
   const remaining = (() => {
     if (!paper) return 0;
+    if (isSchoolExam && schoolSections) {
+      const windowLeft = schoolEndsAt ? Math.max(0, Math.floor((Date.parse(schoolEndsAt) - now) / 1000)) : 0;
+      const elapsed = (startedAt: string | null, allowance: number) => {
+        if (!startedAt) return allowance;
+        return Math.max(0, allowance - Math.floor((now - Date.parse(startedAt)) / 1000));
+      };
+      if (phase === "running") return Math.min(windowLeft, elapsed(sectionMarks.mcq, schoolSections.mcq));
+      if (phase === "break") return Math.min(windowLeft, elapsed(sectionMarks.break, schoolSections.break));
+      if (phase === "frq") return Math.min(windowLeft, elapsed(sectionMarks.frq, schoolSections.frq));
+      return windowLeft;
+    }
     if (isSchoolExam) {
       if (!schoolEndsAt) return 1;
       return Math.max(0, Math.floor((Date.parse(schoolEndsAt) - now) / 1000));
@@ -207,7 +228,7 @@ function PaperRunner() {
         setLoading(false);
         return;
       }
-      setPaper(p as Paper);
+      setPaper(ap2025Clock(slug, p) as Paper);
       const [{ data: pqs }, { data: fr }] = await Promise.all([
         supabase
           .from("paper_questions")
@@ -227,8 +248,8 @@ function PaperRunner() {
         points: readPointMarker(row.questions.explanation),
         explanation: stripPointMarker(row.questions.explanation),
       }));
-      setQuestions(qs);
-      const loadedFrqs = (fr ?? []) as Frq[];
+      setQuestions(slug === "ap-micro-2025" ? fixAp2025Questions(qs) : qs);
+      const loadedFrqs = (slug === "ap-micro-2025" ? fixAp2025Frqs((fr ?? []) as Frq[]) : (fr ?? []) as Frq[]);
       setFrqs(slug === "frq-pdf-practice"
         ? loadedFrqs.filter((item) =>
             selectedFrqId ? item.id === selectedFrqId : !selectedFrqUnit || getFrqUnit(item.title) === selectedFrqUnit,
@@ -259,13 +280,22 @@ function PaperRunner() {
       const r = await authFetch(`/api/exam/paper?assignment_id=${assignmentId}`);
       const j = (await r.json()) as {
         error?: string;
-        assignment?: { title: string; ends_at: string; results_published: boolean };
+        assignment?: {
+          title: string;
+          ends_at: string;
+          results_published: boolean;
+          mcq_seconds?: number | null;
+          frq_seconds?: number | null;
+          break_seconds?: number | null;
+          score_max?: number | null;
+        };
         paper?: Paper & { slug?: string };
         roster?: { student_id: string; student_name: string };
         questions?: Q[];
         frqs?: Frq[];
         attempt?: {
           submitted?: boolean;
+          started_at?: string;
           duration_seconds?: number | null;
           mcq_detail?: { question_id: string; picked: string | null }[];
           frq_answers?: {
@@ -301,8 +331,17 @@ function PaperRunner() {
       setFrqs((j.frqs ?? []) as Frq[]);
       setSchoolTitle(j.assignment?.title ?? "");
       setSchoolEndsAt(j.assignment?.ends_at ?? "");
+      const sectionMcq = j.assignment?.mcq_seconds;
+      const sectionFrq = j.assignment?.frq_seconds;
+      const sectionBreak = j.assignment?.break_seconds;
+      if (typeof sectionMcq === "number" && typeof sectionFrq === "number" && typeof sectionBreak === "number") {
+        setSchoolSections({ mcq: sectionMcq, frq: sectionFrq, break: sectionBreak });
+        setBreakSeconds(sectionBreak);
+        setFrqSeconds(sectionFrq);
+      }
       setSchoolStudentName(j.roster?.student_name ?? "");
       setSchoolPublished(!!j.assignment?.results_published);
+      setSchoolScoreMax(typeof j.assignment?.score_max === "number" ? j.assignment.score_max : null);
       saveSchoolExamSession({
         assignmentId,
         paperSlug: j.paper.slug ?? slug,
@@ -332,19 +371,43 @@ function PaperRunner() {
           };
         });
         if (Object.keys(next).length) setFrqAnswers(next);
-        const progress = raw?.progress as { phase?: string; seconds?: number; breakSeconds?: number; frqSeconds?: number; idx?: number; mcq_locked?: boolean } | undefined;
+        const progress = raw?.progress as {
+          phase?: string;
+          seconds?: number;
+          breakSeconds?: number;
+          frqSeconds?: number;
+          idx?: number;
+          mcq_locked?: boolean;
+          mcqStartedAt?: string;
+          breakStartedAt?: string;
+          frqStartedAt?: string;
+        } | undefined;
+        const mcqStartedAt = progress?.mcqStartedAt || j.attempt.started_at || null;
+        if (mcqStartedAt || progress?.breakStartedAt || progress?.frqStartedAt) {
+          const marks = {
+            mcq: mcqStartedAt,
+            break: progress?.breakStartedAt ?? null,
+            frq: progress?.frqStartedAt ?? null,
+          };
+          sectionMarksRef.current = marks;
+          setSectionMarks(marks);
+        }
         if (typeof progress?.seconds === "number") setSeconds(progress.seconds);
         else if (typeof j.attempt.duration_seconds === "number") setSeconds(j.attempt.duration_seconds);
         if (typeof progress?.breakSeconds === "number") setBreakSeconds(progress.breakSeconds);
-        else setBreakSeconds(j.paper.break_seconds ?? 600);
+        else if (typeof sectionBreak !== "number") setBreakSeconds(j.paper.break_seconds ?? 600);
+        if (typeof progress?.frqSeconds === "number") setFrqSeconds(progress.frqSeconds);
         if (typeof progress?.idx === "number") setIdx(progress.idx);
         const hasFrq = Object.values(next).some((ans) => ans.text.trim() || ans.fileUrl);
         const locked = progress?.mcq_locked === true || progress?.phase === "frq" || progress?.phase === "break" || hasFrq;
-        progressRef.current = { phase: locked ? "frq" : (progress?.phase ?? "running"), mcqLocked: locked };
+        const resumePhase = progress?.phase === "break" && !hasFrq ? "break" : locked ? "frq" : (progress?.phase ?? "running");
+        progressRef.current = { phase: resumePhase === "break" ? "break" : locked ? "frq" : resumePhase, mcqLocked: locked };
         if (j.attempt.submitted) {
           setSchoolSubmitted(true);
           setFrqSubmitted(true);
           setPhase("done");
+        } else if (progress?.phase === "break" && !hasFrq) {
+          setPhase("break");
         } else if (locked) {
           setPhase("frq");
         } else if (progress?.phase === "running" || j.attempt) {
@@ -549,10 +612,47 @@ function PaperRunner() {
     return () => clearInterval(t);
   }, [phase]);
 
+  function stampSection(which: "mcq" | "break" | "frq", at?: string) {
+    if (sectionMarksRef.current[which]) return sectionMarksRef.current[which];
+    const next = { ...sectionMarksRef.current, [which]: at || new Date().toISOString() };
+    sectionMarksRef.current = next;
+    setSectionMarks(next);
+    return next[which];
+  }
+
   useEffect(() => {
     if (!timeUp || finishingRef.current) return;
     finishingRef.current = true;
     if (isSchoolExam) {
+      const sections = schoolSectionsRef.current;
+      const windowLeft = schoolEndsAt ? Math.floor((Date.parse(schoolEndsAt) - Date.now()) / 1000) : 0;
+      const moveToFrq = () => {
+        stampSection("frq");
+        setPhase("frq");
+        void saveSchoolProgress({ phase: "frq", mcqLocked: true });
+        finishingRef.current = false;
+      };
+      if (!sections || windowLeft <= 0) {
+        void finalizeSchoolExam();
+        return;
+      }
+      if (phase === "running" && frqs.length > 0 && sections.frq > 0) {
+        progressRef.current = { phase: sections.break > 0 ? "break" : "frq", mcqLocked: true };
+        if (sections.break > 0) {
+          stampSection("break");
+          setBreakSeconds(sections.break);
+          setPhase("break");
+          void saveSchoolProgress({ phase: "break", mcqLocked: true });
+          finishingRef.current = false;
+          return;
+        }
+        moveToFrq();
+        return;
+      }
+      if (phase === "break") {
+        moveToFrq();
+        return;
+      }
       void finalizeSchoolExam();
       return;
     }
@@ -582,7 +682,12 @@ function PaperRunner() {
       setFrqGrades({});
     }
     setFrqSubmitted(false);
-    if (paper) {
+    const sections = schoolSectionsRef.current;
+    if (sections) {
+      stampSection("mcq");
+      setBreakSeconds(sections.break);
+      setFrqSeconds(sections.frq);
+    } else if (paper) {
       setBreakSeconds(paper.break_seconds ?? 600);
       setFrqSeconds(paper.frq_seconds ?? 3600);
     }
@@ -614,10 +719,22 @@ function PaperRunner() {
         scheduleClassGrade(j.assignment?.ends_at);
         return;
       }
-      const saved = j.attempt?.frq_answers as { items?: Record<string, FrqAnswerState>; progress?: { phase?: string; mcq_locked?: boolean } } | undefined;
+      const saved = j.attempt?.frq_answers as { items?: Record<string, FrqAnswerState>; progress?: { phase?: string; mcq_locked?: boolean; mcqStartedAt?: string; breakStartedAt?: string; frqStartedAt?: string } } | undefined;
       const savedItems = saved?.items ?? {};
+      const resumedMarks = {
+        mcq: saved?.progress?.mcqStartedAt || j.attempt?.started_at || sectionMarksRef.current.mcq,
+        break: saved?.progress?.breakStartedAt ?? null,
+        frq: saved?.progress?.frqStartedAt ?? null,
+      };
+      sectionMarksRef.current = resumedMarks;
+      setSectionMarks(resumedMarks);
       const hasFrq = Object.values(savedItems).some((ans) => ans?.text?.trim() || ans?.fileUrl);
       const locked = saved?.progress?.mcq_locked === true || saved?.progress?.phase === "frq" || saved?.progress?.phase === "break" || hasFrq;
+      if (saved?.progress?.phase === "break" && !hasFrq) {
+        progressRef.current = { phase: "break", mcqLocked: true };
+        setPhase("break");
+        return;
+      }
       if (locked || (Array.isArray(j.attempt?.mcq_detail) && j.attempt.mcq_detail.some((row: { picked?: string | null }) => row.picked))) {
         progressRef.current = { phase: locked ? "frq" : "running", mcqLocked: locked };
         setPhase(locked ? "frq" : "running");
@@ -637,7 +754,7 @@ function PaperRunner() {
     beginPaper();
   }
 
-  draftRef.current = { answers, frqAnswers, seconds, idx, phase, breakSeconds };
+  draftRef.current = { answers, frqAnswers, seconds, idx, phase, breakSeconds, frqSeconds };
 
   function captureActiveAnswer() {
     const el = document.activeElement;
@@ -662,7 +779,18 @@ function PaperRunner() {
       mcq_detail: questions.map((q) => ({ question_id: q.id, picked: draft.answers[q.id] ?? null })),
       frq_answers: {
         items: draft.frqAnswers,
-        progress: { phase: locked && phaseNow === "running" ? "frq" : phaseNow, seconds: draft.seconds, breakSeconds: draft.breakSeconds, idx: draft.idx, mcq_locked: locked, save_seq: saveSeq.current },
+        progress: {
+          phase: locked && phaseNow === "running" ? "frq" : phaseNow,
+          seconds: draft.seconds,
+          breakSeconds: draft.breakSeconds,
+          frqSeconds: draft.frqSeconds,
+          mcqStartedAt: sectionMarksRef.current.mcq,
+          breakStartedAt: sectionMarksRef.current.break,
+          frqStartedAt: sectionMarksRef.current.frq,
+          idx: draft.idx,
+          mcq_locked: locked,
+          save_seq: saveSeq.current,
+        },
       },
       duration_seconds: draft.seconds,
     };
@@ -849,7 +977,15 @@ function PaperRunner() {
 
   function submit() {
     if (isSchoolExam) {
-      if (frqs.length > 0) {
+      const sections = schoolSectionsRef.current;
+      if (sections && frqs.length > 0 && sections.frq > 0) {
+        const next = sections.break > 0 ? "break" : "frq";
+        progressRef.current = { phase: next, mcqLocked: true };
+        stampSection(next === "break" ? "break" : "frq");
+        if (next === "break") setBreakSeconds(sections.break);
+        setPhase(next);
+        void saveSchoolProgress({ phase: next, mcqLocked: true });
+      } else if (!sections && frqs.length > 0) {
         progressRef.current = { phase: "frq", mcqLocked: true };
         setPhase("frq");
         void saveSchoolProgress({ phase: "frq", mcqLocked: true });
@@ -879,13 +1015,14 @@ function PaperRunner() {
   // 休息倒计时（仅仿真模式）
   useEffect(() => {
     if (phase !== "break") return;
+    if (isSchoolExam && schoolSectionsRef.current) return;
     if (breakSeconds <= 0) {
       setPhase("frq");
       return;
     }
     const t = setInterval(() => setBreakSeconds((s) => Math.max(0, s - 1)), 1000);
     return () => clearInterval(t);
-  }, [phase, breakSeconds]);
+  }, [phase, breakSeconds, isSchoolExam]);
 
   useEffect(() => {
     if (!isSchoolExam) return;
@@ -910,11 +1047,11 @@ function PaperRunner() {
     return () => obs.disconnect();
   }, [isSchoolExam, phase]);
 
-  // FRQ 倒计时（学校考试用截止时间，不从试卷大题时长重新计）
+  // 仿真卷的大题用自己的倒计时。学校分段考试按开始时间计算，不在这里扣秒。
   useEffect(() => {
     if (isSchoolExam || phase !== "frq" || mode !== "exam") return;
     if (frqSeconds <= 0) {
-      void submitAllFrqs();
+      if (!isSchoolExam) void submitAllFrqs();
       return;
     }
     const t = setInterval(() => setFrqSeconds((s) => Math.max(0, s - 1)), 1000);
@@ -1215,6 +1352,9 @@ function PaperRunner() {
         {isSchoolExam && (
           <p className="text-sm mb-4 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
             学校计分考 · 只能作答一次 · 交卷后可以离开，成绩由老师查看
+            {schoolSections
+              ? ` · 选择题 ${Math.round(schoolSections.mcq / 60)} 分钟${schoolSections.frq > 0 ? `${schoolSections.break ? `，休息 ${Math.round(schoolSections.break / 60)} 分钟` : ""}，大题 ${Math.round(schoolSections.frq / 60)} 分钟` : ""}。每一段单独倒计时。`
+              : ""}
           </p>
         )}
         {!isFrqPractice && !isSchoolExam && <div className="grid sm:grid-cols-2 gap-3 mb-4">
@@ -1264,13 +1404,15 @@ function PaperRunner() {
               </div>
               <div className="border rounded-md py-3">
                 <div className="text-2xl font-bold text-primary font-mono tabular-nums">
-                  {isSchoolExam
+                  {isSchoolExam && schoolSections
+                    ? `${Math.round(schoolSections.mcq / 60)}+${Math.round(schoolSections.frq / 60)}`
+                    : isSchoolExam
                     ? schoolEndsAt
                       ? `${String(Math.floor(remaining / 60)).padStart(2, "0")}:${String(remaining % 60).padStart(2, "0")}`
                       : "—"
                     : Math.round(paper.total_seconds / 60)}
                 </div>
-                <div className="text-xs text-muted-foreground mt-0.5">{isSchoolExam ? "距离截止" : "分钟"}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">{isSchoolExam && schoolSections ? "选择+大题" : isSchoolExam ? "距离截止" : "分钟"}</div>
               </div>
             </div>
             {!user && !isSchoolExam && (
@@ -1323,7 +1465,11 @@ function PaperRunner() {
         <h1 className="text-2xl font-bold">休息时间</h1>
         <p className="text-sm text-muted-foreground">距离 Section II（FRQ）开始还有</p>
         <div className="text-6xl font-bold font-mono text-primary">{mm}:{ss}</div>
-        <Button onClick={() => setPhase("frq")}>跳过休息，立即开始 FRQ</Button>
+        <Button onClick={() => {
+          if (isSchoolExam) stampSection("frq");
+          setPhase("frq");
+          if (isSchoolExam) void saveSchoolProgress({ phase: "frq", mcqLocked: true });
+        }}>跳过休息，立即开始大题</Button>
       </main>
     );
   }
@@ -1405,7 +1551,7 @@ function PaperRunner() {
           {mode === "exam" && (
             <div className="text-right">
               <div className="font-mono text-lg tabular-nums text-primary">{mm}:{ss}</div>
-              <div className="text-xs text-muted-foreground">剩余时间</div>
+              <div className="text-xs text-muted-foreground">{isSchoolExam && schoolSections ? "大题剩余" : "剩余时间"}</div>
             </div>
           )}
         </div>
@@ -1623,6 +1769,9 @@ function PaperRunner() {
               <div className={cn("font-mono text-base tabular-nums sm:text-lg", mode !== "practice" && lowTime && !hideTime && "text-red-600 font-bold")}>
                 {mode === "practice" ? "练习" : hideTime ? "—:—" : `${mm}:${ss}`}
               </div>
+              {isSchoolExam && schoolSections && mode !== "practice" ? (
+                <div className="text-[10px] text-slate-500">选择题</div>
+              ) : null}
               {mode !== "practice" && (
                 <button
                   onClick={() => setHideTime((v) => !v)}
@@ -1987,6 +2136,16 @@ function PaperRunner() {
 
   if (!stats) return null;
   const pct = stats.total === 0 ? 0 : Math.round((stats.correct / stats.total) * 100);
+  const frqMax = frqs.reduce((sum, item) => sum + (frqGrades[item.id]?.max_score || item.max_score || 0), 0);
+  const frqGraded = frqs.filter((item) => frqGrades[item.id]).length;
+  const frqReady = frqs.length === 0 || (frqSubmitted && frqGraded === frqs.length);
+  const frqEarned = frqs.reduce((sum, item) => sum + (frqGrades[item.id]?.total_score ?? 0), 0);
+  const ap = apMicroScore({
+    mcqCorrect: stats.correct,
+    mcqTotal: stats.total,
+    frqEarned: frqs.length === 0 ? null : frqReady ? frqEarned : null,
+    frqMax: frqs.length === 0 ? null : frqMax || null,
+  });
   const showSchoolResults = !isSchoolExam || schoolPublished;
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
@@ -2011,6 +2170,18 @@ function PaperRunner() {
           </div>
           <div className="mt-2 text-sm text-muted-foreground">
             {stats.correct} / {stats.total} {stats.weighted ? "分" : "题正确"}
+          </div>
+          <div className="mt-5 border-t pt-4">
+            <div className="text-xs text-muted-foreground">AP 分数</div>
+            <div className="mt-1 text-4xl font-bold">{apScoreText(ap)}</div>
+            {schoolScoreMax && ap.reason === "ready" ? (
+              <div className="mt-2 text-sm text-muted-foreground">得分 {pointsOnScale(ap.composite, schoolScoreMax)} / {schoolScoreMax}</div>
+            ) : null}
+            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+              {ap.reason === "ready"
+                ? `综合分 ${ap.composite}/${ap.compositeMax}${ap.mcqWeighted != null ? `，选择题折算 ${ap.mcqWeighted}` : ""}${ap.frqWeighted != null ? `，大题折算 ${ap.frqWeighted}` : ""}。${apBasisText(ap.basis)} 70 分为 5，57 分为 4，45 分为 3，36 分为 2。`
+                : "大题批完后，按选择题占三分之二、大题占三分之一换算成 1–5。"}
+            </p>
           </div>
         </CardContent>
       </Card>

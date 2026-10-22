@@ -35,7 +35,12 @@ type FrqSub = { label: string; body: string };
 type FrqPart = { label: string; body: string; subs: FrqSub[] };
 
 function tidyChunk(s: string) {
-  return s.replace(/^[-*]\s+/, "").replace(/\s*[-*]\s*$/, "").trim();
+  return s
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*\*/g, "")
+    .replace(/^[-*]\s+/, "")
+    .replace(/\s*[-*]\s*$/, "")
+    .trim();
 }
 
 function splitSubs(chunk: string): { body: string; subs: FrqSub[] } {

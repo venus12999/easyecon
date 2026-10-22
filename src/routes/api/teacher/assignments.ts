@@ -1,17 +1,68 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { apMicroScore, scoreMaxError, summarizeApScores, type ApClassSummary } from "@/lib/ap-score";
+import { sectionMinutesError, sectionTotalMinutes } from "@/lib/exam-sections";
 import { withExamAiGrade } from "@/lib/exam-flags";
 import { jsonErr } from "@/lib/json-api";
-import { collectFinishedExam, continueGradeBatch, teacherFrqViews } from "@/lib/school-exam.server";
+import { collectFinishedExam, continueGradeBatch, readStoredGrades, teacherFrqViews } from "@/lib/school-exam.server";
 import { ensureTeacherClass, getTeacherDb, isSchoolAdmin, verifyTeacherRequest } from "@/lib/teacher-auth.server";
 import { createFixedRandomSchoolPaper, makeExamCode } from "@/lib/school-random-paper.server";
 import { isUuid } from "@/lib/school-exam-session";
+
+type AttemptScoreRow = {
+  assignment_id: string;
+  submitted_at: string | null;
+  mcq_correct: number | null;
+  mcq_total: number | null;
+  frq_answers?: unknown;
+};
+
+function apForAssignment(rows: AttemptScoreRow[], frqIds: string[], frqMax: number, scoreMax: number | null): ApClassSummary {
+  const results = rows
+    .filter((row) => row.submitted_at)
+    .map((row) => {
+      const grades = readStoredGrades(row.frq_answers);
+      let earned: number | null = 0;
+      if (frqMax > 0) {
+        for (const id of frqIds) {
+          const grade = grades[id];
+          const score = grade?.manual_score ?? grade?.ai_score;
+          if (typeof score !== "number") {
+            earned = null;
+            break;
+          }
+          earned += score;
+        }
+      }
+      return apMicroScore({
+        mcqCorrect: row.mcq_correct,
+        mcqTotal: row.mcq_total,
+        frqEarned: frqMax > 0 ? earned : null,
+        frqMax: frqMax > 0 ? frqMax : null,
+      });
+    });
+  return summarizeApScores(results, scoreMax);
+}
+
+async function frqScales(db: { from: typeof supabaseAdmin.from }, paperIds: string[]) {
+  const ids = new Map<string, string[]>();
+  const max = new Map<string, number>();
+  if (!paperIds.length) return { ids, max };
+  const { data } = await db.from("paper_frqs").select("id,paper_id,max_score").in("paper_id", paperIds);
+  for (const frq of data ?? []) {
+    const list = ids.get(frq.paper_id) ?? [];
+    list.push(frq.id);
+    ids.set(frq.paper_id, list);
+    max.set(frq.paper_id, (max.get(frq.paper_id) ?? 0) + (frq.max_score ?? 0));
+  }
+  return { ids, max };
+}
 
 async function listAllExamScores(request: Request) {
   const db = supabaseAdmin;
   const { data, error } = await db
     .from("school_assignments")
-    .select("id,title,exam_code,starts_at,ends_at,results_published,paper_id,class_id,created_at")
+    .select("id,title,exam_code,starts_at,ends_at,results_published,paper_id,class_id,created_at,mcq_seconds,frq_seconds,break_seconds,score_max")
     .order("created_at", { ascending: false });
   if (error) return jsonErr(error.message, 500);
   const exams = data ?? [];
@@ -35,9 +86,10 @@ async function listAllExamScores(request: Request) {
       ? db.from("school_roster").select("class_id").in("class_id", classIds)
       : Promise.resolve({ data: [] as { class_id: string }[] }),
     assignmentIds.length
-      ? db.from("school_attempts").select("assignment_id,submitted_at,mcq_correct,mcq_total").in("assignment_id", assignmentIds)
-      : Promise.resolve({ data: [] as { assignment_id: string; submitted_at: string | null; mcq_correct: number | null; mcq_total: number | null }[] }),
+      ? db.from("school_attempts").select("assignment_id,submitted_at,mcq_correct,mcq_total,frq_answers").in("assignment_id", assignmentIds)
+      : Promise.resolve({ data: [] as AttemptScoreRow[] }),
   ]);
+  const frqScale = await frqScales(db, paperIds);
   const teacherIds = [...new Set((classes ?? []).map((row) => row.teacher_user_id))];
   const { data: profiles } = teacherIds.length
     ? await db.from("profiles").select("user_id,display_name").in("user_id", teacherIds)
@@ -73,6 +125,12 @@ async function listAllExamScores(request: Request) {
         submitted_count: stat?.submitted_count ?? 0,
         mcq_correct: stat?.mcq_correct ?? 0,
         mcq_total: stat?.mcq_total ?? 0,
+        ap: apForAssignment(
+          (attempts ?? []).filter((row) => row.assignment_id === exam.id),
+          frqScale.ids.get(exam.paper_id) ?? [],
+          frqScale.max.get(exam.paper_id) ?? 0,
+          exam.score_max,
+        ),
       };
     }),
   });
@@ -96,7 +154,7 @@ export const Route = createFileRoute("/api/teacher/assignments")({
           const [{ data: papers }, { data: imports }] = await Promise.all([
             db
               .from("mock_papers")
-              .select("id,slug,title,year,total_seconds,description,created_at")
+              .select("id,slug,title,year,total_seconds,frq_seconds,break_seconds,description,created_at")
               .not("slug", "like", "frq-%")
               .order("sort_order")
               .order("year", { ascending: false }),
@@ -113,7 +171,7 @@ export const Route = createFileRoute("/api/teacher/assignments")({
         }
         const { data } = await db
           .from("school_assignments")
-          .select("id,title,exam_code,starts_at,ends_at,results_published,paper_id,created_at")
+          .select("id,title,exam_code,starts_at,ends_at,results_published,paper_id,created_at,mcq_seconds,frq_seconds,break_seconds,score_max")
           .eq("class_id", cls.id)
           .order("created_at", { ascending: false });
         const now = Date.now();
@@ -130,9 +188,10 @@ export const Route = createFileRoute("/api/teacher/assignments")({
             : Promise.resolve({ data: [] as { id: string; slug: string; title: string }[] }),
           db.from("school_roster").select("id", { count: "exact", head: true }).eq("class_id", cls.id),
           assignmentIds.length
-            ? db.from("school_attempts").select("assignment_id,submitted_at,mcq_correct,mcq_total").in("assignment_id", assignmentIds)
-            : Promise.resolve({ data: [] as { assignment_id: string; submitted_at: string | null; mcq_correct: number | null; mcq_total: number | null }[] }),
+            ? db.from("school_attempts").select("assignment_id,submitted_at,mcq_correct,mcq_total,frq_answers").in("assignment_id", assignmentIds)
+            : Promise.resolve({ data: [] as AttemptScoreRow[] }),
         ]);
+        const frqScale = await frqScales(db, paperIds);
         const paperMap = new Map((papers ?? []).map((p) => [p.id, p]));
         const stats = new Map<string, { submitted_count: number; mcq_correct: number; mcq_total: number }>();
         for (const row of attempts ?? []) {
@@ -156,6 +215,12 @@ export const Route = createFileRoute("/api/teacher/assignments")({
               submitted_count: stat?.submitted_count ?? 0,
               mcq_correct: stat?.mcq_correct ?? 0,
               mcq_total: stat?.mcq_total ?? 0,
+              ap: apForAssignment(
+                (attempts ?? []).filter((row) => row.assignment_id === a.id),
+                frqScale.ids.get(a.paper_id) ?? [],
+                frqScale.max.get(a.paper_id) ?? 0,
+                a.score_max,
+              ),
             };
           }),
         });
@@ -173,6 +238,10 @@ export const Route = createFileRoute("/api/teacher/assignments")({
           source?: "existing" | "random";
           starts_at?: string;
           ends_at?: string;
+          mcq_minutes?: number;
+          frq_minutes?: number;
+          break_minutes?: number;
+          score_max?: number;
           publish_answers?: boolean;
           ai_grade?: boolean;
         };
@@ -183,6 +252,16 @@ export const Route = createFileRoute("/api/teacher/assignments")({
         if (!Number.isFinite(starts) || !Number.isFinite(ends) || ends <= starts) {
           return jsonErr("请设置有效的开考和截止时间");
         }
+        const mcqMinutes = Math.round(Number(body.mcq_minutes));
+        const frqMinutes = Math.round(Number(body.frq_minutes));
+        const breakMinutes = frqMinutes > 0 ? Math.round(Number(body.break_minutes)) : 0;
+        const sectionError = sectionMinutesError(mcqMinutes, frqMinutes, breakMinutes);
+        if (sectionError) return jsonErr(sectionError);
+        const scoreMax = Math.round(Number(body.score_max));
+        const maxError = scoreMaxError(scoreMax);
+        if (maxError) return jsonErr(maxError);
+        const sectionMs = sectionTotalMinutes(mcqMinutes, frqMinutes, breakMinutes) * 60 * 1000;
+        if (ends - starts + 90_000 < sectionMs) return jsonErr("截止时间要盖住选择题、休息和大题");
         let paperId = body.paper_id;
         if (body.source === "random") {
           const paper = await createFixedRandomSchoolPaper(`${title}（随机卷）`);
@@ -214,6 +293,10 @@ export const Route = createFileRoute("/api/teacher/assignments")({
             exam_code: examCode,
             starts_at: new Date(starts).toISOString(),
             ends_at: new Date(ends).toISOString(),
+            mcq_seconds: mcqMinutes * 60,
+            frq_seconds: frqMinutes * 60,
+            break_seconds: breakMinutes * 60,
+            score_max: scoreMax,
             results_published: body.publish_answers === true,
             created_by: u.userId,
           })
@@ -222,15 +305,15 @@ export const Route = createFileRoute("/api/teacher/assignments")({
         if (error || !data) return jsonErr(error?.message ?? "创建失败", 500);
         let aiGradeSaved = body.ai_grade !== true;
         if (process.env.SUPABASE_SERVICE_ROLE_KEY && paperId) {
-          const minutes = Math.max(10, Math.round((ends - starts) / 60000));
           const { data: paper } = await db.from("mock_papers").select("slug, description").eq("id", paperId).maybeSingle();
           if (paper?.slug?.startsWith("school-")) {
             const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
             const updated = await supabaseAdmin
               .from("mock_papers")
               .update({
-                total_seconds: minutes * 60,
-                frq_seconds: Math.max(15 * 60, minutes * 60 - 10 * 60),
+                total_seconds: mcqMinutes * 60,
+                frq_seconds: frqMinutes * 60,
+                break_seconds: breakMinutes * 60,
                 description: withExamAiGrade(paper.description, body.ai_grade === true),
               })
               .eq("id", paperId);

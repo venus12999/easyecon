@@ -1,0 +1,16 @@
+---
+description: Apply database migrations through Lovable Cloud, not a Supabase dashboard login
+alwaysApply: true
+---
+
+# Database changes go through Lovable
+
+This app's database is Lovable Cloud project `umyzlbrjnklkpxmbdhvf`. There is no separate Supabase dashboard account for it.
+
+When a change needs a new migration under `supabase/migrations/`:
+
+- Write the SQL file in the repo.
+- Tell Venus to apply it in Lovable, and name the migration files.
+- Do not ask Venus to sign in at supabase.com. A GitHub login there belongs to a different, paused project and cannot run SQL on this database.
+
+After Venus says Lovable finished, verify the new columns or constraints against the live API before treating the migration as applied.
