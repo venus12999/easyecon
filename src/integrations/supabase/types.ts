@@ -685,38 +685,50 @@ export type Database = {
       }
       school_assignments: {
         Row: {
+          break_seconds: number | null
           class_id: string
           created_at: string
           created_by: string
           ends_at: string
           exam_code: string
+          frq_seconds: number | null
           id: string
+          mcq_seconds: number | null
           paper_id: string
           results_published: boolean
+          score_max: number | null
           starts_at: string
           title: string
         }
         Insert: {
+          break_seconds?: number | null
           class_id: string
           created_at?: string
           created_by: string
           ends_at: string
           exam_code: string
+          frq_seconds?: number | null
           id?: string
+          mcq_seconds?: number | null
           paper_id: string
           results_published?: boolean
+          score_max?: number | null
           starts_at: string
           title: string
         }
         Update: {
+          break_seconds?: number | null
           class_id?: string
           created_at?: string
           created_by?: string
           ends_at?: string
           exam_code?: string
+          frq_seconds?: number | null
           id?: string
+          mcq_seconds?: number | null
           paper_id?: string
           results_published?: boolean
+          score_max?: number | null
           starts_at?: string
           title?: string
         }
