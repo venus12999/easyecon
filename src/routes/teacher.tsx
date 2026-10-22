@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -203,10 +203,12 @@ type GradeFrq = {
   ai_score: number | null;
   ai_failed?: boolean;
   ai_error?: string | null;
+  ai_tries?: number;
   needs_review?: boolean;
   ai_comment: string | null;
   ai_suggestions: string | null;
   breakdown: { point: string; awarded: boolean; comment: string; points?: number; earned?: number }[];
+  parts?: { key: string; label: string; max: number; max_known: boolean; ai_earned: number | null; manual_earned: number | null; points: { point: string; awarded: boolean; comment: string; points?: number; earned?: number }[] }[];
   manual_score: number | null;
   manual_comment: string | null;
 };
@@ -226,6 +228,7 @@ type GradeRow = {
   frqs: GradeFrq[];
   frq_score: number | null;
   frq_max: number;
+  collected_reason?: "deadline" | null;
 };
 type PdfImport = { id: string; filename: string; page_count: number; status: string; paper_id: string | null; created_at: string };
 type PdfPage = { id: string; page_number: number; image_url: string; extracted_text: string | null };
@@ -256,10 +259,74 @@ function mcqProgressLabel(row: GradeRow) {
   return total ? `已交 ${answered}/${total}` : "已交";
 }
 
-function rowStatusLabel(row: GradeRow) {
-  if (row.status === "submitted") return "已交";
+const GRADE_TRY_LIMIT = 3;
+
+function ungradedAnswerCount(row: GradeRow) {
+  return (row.frqs ?? []).filter((frq) => (frq.answer_text.trim() || frq.file_url) && frq.manual_score == null && frq.ai_score == null).length;
+}
+
+function frqStillRetrying(frq: GradeFrq) {
+  if (frq.manual_score != null || frq.ai_score != null) return false;
+  if (!frq.answer_text.trim() && !frq.file_url) return false;
+  if (!frq.ai_failed) return true;
+  return (frq.ai_tries ?? 1) < GRADE_TRY_LIMIT;
+}
+
+function autoCollected(row: GradeRow, endsAt?: string | null) {
+  if (row.status !== "submitted") return false;
+  if (row.collected_reason === "deadline") return true;
+  if (!endsAt || !row.submitted_at) return false;
+  const submitted = Date.parse(row.submitted_at);
+  const ends = Date.parse(endsAt);
+  return Number.isFinite(submitted) && Number.isFinite(ends) && submitted >= ends;
+}
+
+function rowStatusLabel(row: GradeRow, endsAt?: string | null) {
+  if (row.status === "submitted") return autoCollected(row, endsAt) ? "截止后自动收卷" : "已交";
   if (row.status !== "in_progress") return "未交";
   return mcqHandedIn(row) ? "选择题已交" : "作答中";
+}
+
+function frqHeaderLabel(row: GradeRow) {
+  const left = ungradedAnswerCount(row);
+  if (left > 0) return ` · 大题还有 ${left} 题没批完`;
+  if (row.frq_score == null) return " · 大题还没有分数";
+  return ` · 大题 ${row.frq_score}/${row.frq_max}`;
+}
+
+type GradeCache = {
+  meta: { title: string; results_published: boolean; ends_at: string; ai_grade: boolean; score_max: number | null };
+  rows: GradeRow[];
+};
+
+function gradeCacheKey(id: string) {
+  return `easyecon-gradebook:${id}`;
+}
+
+function lastGradeId() {
+  if (typeof sessionStorage === "undefined") return "";
+  return sessionStorage.getItem("easyecon-gradebook-last") ?? "";
+}
+
+function readGradeCache(id: string): GradeCache | null {
+  if (!id || typeof sessionStorage === "undefined") return null;
+  try {
+    const parsed = JSON.parse(sessionStorage.getItem(gradeCacheKey(id)) ?? "") as GradeCache;
+    if (!parsed?.meta || !Array.isArray(parsed.rows)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeGradeCache(id: string, cache: GradeCache) {
+  if (!id || typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem("easyecon-gradebook-last", id);
+    sessionStorage.setItem(gradeCacheKey(id), JSON.stringify(cache));
+  } catch {
+    /* 成绩册太大时忽略缓存，刷新会再读一次 */
+  }
 }
 
 function beijingTime(iso: string | null) {
@@ -412,10 +479,11 @@ function gradeAp(row: GradeRow) {
     return apMicroScore({ mcqCorrect: null, mcqTotal: null, frqEarned: null, frqMax: null });
   }
   const hasFrq = row.frq_max > 0;
+  const frqOpen = ungradedAnswerCount(row) > 0;
   return apMicroScore({
     mcqCorrect: row.mcq_correct,
     mcqTotal: row.mcq_total,
-    frqEarned: hasFrq ? row.frq_score : null,
+    frqEarned: hasFrq && !frqOpen ? row.frq_score : null,
     frqMax: hasFrq ? row.frq_max : null,
   });
 }
@@ -582,14 +650,15 @@ function TeacherHome() {
   const [cropPick, setCropPick] = useState<{ index: number; pageUrl: string } | null>(null);
   const [endsAt, setEndsAt] = useState(() => toLocalInput(new Date(Date.now() + sectionTotalMinutes(MCQ_MINUTES_DEFAULT, FRQ_MINUTES_DEFAULT, BREAK_MINUTES_DEFAULT) * 60 * 1000)));
   const [creating, setCreating] = useState(false);
-  const [gradeId, setGradeId] = useState(search.exam ?? "");
-  const [gradeRows, setGradeRows] = useState<GradeRow[]>([]);
+  const [gradeId, setGradeId] = useState(() => search.exam || lastGradeId());
+  const [gradeRows, setGradeRows] = useState<GradeRow[]>(() => readGradeCache(search.exam || lastGradeId())?.rows ?? []);
   const [gradeFocusId, setGradeFocusId] = useState<string | null>(null);
   const [manualDraft, setManualDraft] = useState<Record<string, string>>({});
+  const [partDraft, setPartDraft] = useState<Record<string, string>>({});
   const [commentDraft, setCommentDraft] = useState<Record<string, string>>({});
   const [gradeBusy, setGradeBusy] = useState<"save" | "ai" | "collect" | "end" | null>(null);
   const [endConfirm, setEndConfirm] = useState(false);
-  const [gradeMeta, setGradeMeta] = useState<{ title: string; results_published: boolean; ends_at: string; ai_grade: boolean; score_max: number | null } | null>(null);
+  const [gradeMeta, setGradeMeta] = useState<GradeCache["meta"] | null>(() => readGradeCache(search.exam || lastGradeId())?.meta ?? null);
   const [gradeNote, setGradeNote] = useState("");
   const gradingLock = useRef(false);
   const autoQueued = useRef("");
@@ -916,15 +985,18 @@ function TeacherHome() {
             frqs: [],
             frq_score: null,
             frq_max: 0,
+            collected_reason: null,
           })),
     );
-    setGradeMeta({
+    const meta = {
       title: j.assignment.title,
       results_published: j.assignment.results_published,
       ends_at: j.assignment.ends_at,
       ai_grade: j.assignment.ai_grade !== false,
       score_max: typeof j.assignment.score_max === "number" ? j.assignment.score_max : null,
-    });
+    };
+    setGradeMeta(meta);
+    writeGradeCache(id, { meta, rows: rows.length > 0 ? rows : [] });
     return rows;
   }
 
@@ -935,12 +1007,17 @@ function TeacherHome() {
     }
     setGradeFocusId(row.roster_id);
     const draft: Record<string, string> = {};
+    const parts: Record<string, string> = {};
     const notes: Record<string, string> = {};
     for (const frq of row.frqs ?? []) {
       draft[frq.frq_id] = frq.manual_score == null ? "" : String(frq.manual_score);
       notes[frq.frq_id] = frq.manual_comment ?? "";
+      for (const part of frq.parts ?? []) {
+        parts[`${frq.frq_id}:${part.key}`] = part.manual_earned == null ? "" : String(part.manual_earned);
+      }
     }
     setManualDraft(draft);
+    setPartDraft(parts);
     setCommentDraft(notes);
   }
 
@@ -949,14 +1026,55 @@ function TeacherHome() {
     if (!gradeId || !row) return;
     const manual: Record<string, number | null> = {};
     const comments: Record<string, string | null> = {};
+    const parts: Record<string, Record<string, number | null>> = {};
     for (const frq of row.frqs ?? []) {
-      const raw = (manualDraft[frq.frq_id] ?? "").trim();
       const note = (commentDraft[frq.frq_id] ?? "").trim();
       if (note.length > 2000) {
         toast.error(`第 ${frq.sort_order} 题的评语不超过 2000 字`);
         return;
       }
       comments[frq.frq_id] = note || null;
+      const pieces = frq.parts ?? [];
+      if (pieces.length >= 2) {
+        const hadParts = pieces.some((part) => part.manual_earned != null);
+        const anyTyped = pieces.some((part) => (partDraft[`${frq.frq_id}:${part.key}`] ?? "").trim() !== "");
+        if (!anyTyped && !hadParts) {
+          manual[frq.frq_id] = frq.manual_score;
+          continue;
+        }
+        const bucket: Record<string, number | null> = {};
+        let sum = 0;
+        let any = false;
+        for (const part of pieces) {
+          const raw = (partDraft[`${frq.frq_id}:${part.key}`] ?? "").trim();
+          const cap = part.max_known ? Math.min(part.max, frq.max_score) : frq.max_score;
+          if (!raw) {
+            bucket[part.key] = null;
+            sum += part.ai_earned ?? 0;
+            continue;
+          }
+          if (!/^\d+$/.test(raw)) {
+            toast.error(`第 ${frq.sort_order} 题${part.label}要填整数`);
+            return;
+          }
+          const score = Number(raw);
+          if (score > cap) {
+            toast.error(`第 ${frq.sort_order} 题${part.label}的分数要在 0 到 ${cap} 之间`);
+            return;
+          }
+          bucket[part.key] = score;
+          sum += score;
+          any = true;
+        }
+        if (any && sum > frq.max_score) {
+          toast.error(`第 ${frq.sort_order} 题各小问加起来是 ${sum}，不能超过满分 ${frq.max_score}`);
+          return;
+        }
+        parts[frq.frq_id] = bucket;
+        manual[frq.frq_id] = null;
+        continue;
+      }
+      const raw = (manualDraft[frq.frq_id] ?? "").trim();
       if (!raw) {
         manual[frq.frq_id] = null;
         continue;
@@ -972,7 +1090,7 @@ function TeacherHome() {
     try {
       const r = await authFetch("/api/teacher/gradebook", {
         method: "POST",
-        body: JSON.stringify({ assignment_id: gradeId, roster_id: row.roster_id, manual, comments }),
+        body: JSON.stringify({ assignment_id: gradeId, roster_id: row.roster_id, manual, comments, parts }),
       });
       const j = await r.json();
       if (!r.ok) {
@@ -989,7 +1107,7 @@ function TeacherHome() {
   }
 
   function pendingAiRows(rows: GradeRow[]) {
-    return rows.filter((row) => row.status === "submitted" && (row.frqs ?? []).some((frq) => frq.ai_score == null && !frq.ai_failed && (frq.answer_text.trim() || frq.file_url)));
+    return rows.filter((row) => row.status === "submitted" && (row.frqs ?? []).some((frq) => frqStillRetrying(frq)));
   }
 
   async function runGradeQueue(rosterIds: string[], manual: boolean) {
@@ -1001,10 +1119,12 @@ function TeacherHome() {
     if (manual) setGradeBusy("ai");
     setGradeNote("正在逐题批改，每题写完就保存");
     let failed = false;
+    let leftover = false;
     try {
       for (const rosterId of rosterIds) {
         let busyWaits = 0;
-        for (let step = 0; step < 8; step++) {
+        let consecutiveErrors = 0;
+        for (let step = 0; step < 24; step++) {
           if (gradeTicket.current !== ticket) return;
           let response: Response;
           try {
@@ -1030,7 +1150,7 @@ function TeacherHome() {
             busyWaits += 1;
             if (busyWaits > 8) {
               toast.message("另一边正在批改这名学生，请稍后再试");
-              failed = true;
+              leftover = true;
               break;
             }
             setGradeNote("另一边正在批这一题，稍等后继续");
@@ -1039,19 +1159,32 @@ function TeacherHome() {
             continue;
           }
           busyWaits = 0;
-          if (!response.ok) {
-            toast.error(body.error ?? "这一题没批完。已经批完的题目已保存，再点一次会继续。");
-            failed = true;
-            break;
+          if (!response.ok || body.error) {
+            const fatal = !!body.error && /额度|尚未配置|请求过多/.test(body.error);
+            if (fatal || !response.ok) {
+              toast.error(body.error ?? "这一题没批完。已经批完的题目已保存，再点一次会继续。");
+              failed = true;
+              break;
+            }
+            consecutiveErrors += 1;
+            leftover = true;
+            setGradeNote(`${body.error}。其余题目会继续批`);
+            if (consecutiveErrors >= GRADE_TRY_LIMIT) break;
+            await new Promise((resolve) => window.setTimeout(resolve, 1500));
+            continue;
           }
+          consecutiveErrors = 0;
           if (body.done || body.pending === 0) break;
           setGradeNote(body.graded_sort ? `第 ${body.graded_sort} 题已写入，还剩 ${body.pending} 题` : `还剩 ${body.pending} 题`);
         }
         if (failed) break;
       }
-      if (!failed && gradeTicket.current === ticket) {
-        setGradeNote("");
-        toast.success("AI 批改已写入");
+      if (gradeTicket.current === ticket) {
+        if (failed || leftover) setGradeNote("还有题目没批完。已经批完的已保存，可以再试一次。");
+        else {
+          setGradeNote("");
+          toast.success("AI 批改已写入");
+        }
       }
     } finally {
       if (autoQueued.current === `${gradeId}:${ticket}`) {
@@ -1156,7 +1289,7 @@ function TeacherHome() {
       return [
         row.student_id,
         row.student_name,
-        row.status === "submitted" ? "已交卷" : row.status === "in_progress" ? (mcqHandedIn(row) ? "选择题已交" : "作答中") : "未交",
+        rowStatusLabel(row, gradeMeta?.ends_at),
         ap.score ?? (ap.reason === "frq-pending" ? "待大题出分" : ""),
         ap.composite ?? "",
         pointsOnScale(ap.composite, gradeMeta?.score_max) ?? "",
@@ -1685,11 +1818,26 @@ function TeacherHome() {
   const selectedPaper = libraryPapers.find((p) => p.id === paperId);
   const alreadyPublished = imports.find((imp) => imp.id === activeImport)?.status === "published";
 
+  useLayoutEffect(() => {
+    const id = search.exam || lastGradeId();
+    if (!id) return;
+    const cached = readGradeCache(id);
+    if (!cached?.rows.length) return;
+    const sameExam = gradeId === id;
+    setGradeId((current) => (current === id ? current : id));
+    setGradeRows((current) => (sameExam && current.length > 0 ? current : cached.rows));
+    setGradeMeta((current) => (sameExam && current ? current : cached.meta));
+  }, [search.exam, gradeId]);
+
   useEffect(() => {
-    if (page !== "scores" || gradeMeta || assignments.length === 0) return;
-    const preferred = search.exam && assignments.some((item) => item.id === search.exam) ? search.exam : assignments[0].id;
+    if (page !== "scores" || assignments.length === 0) return;
+    const preferred = search.exam && assignments.some((item) => item.id === search.exam)
+      ? search.exam
+      : gradeId && assignments.some((item) => item.id === gradeId)
+        ? gradeId
+        : assignments[0].id;
     void loadGradebook(preferred, { keepPage: true });
-  }, [page, gradeMeta, assignments, search.exam]);
+  }, [page, assignments, search.exam, gradeId]);
 
   useEffect(() => {
     if (paperId) return;
@@ -1825,7 +1973,7 @@ function TeacherHome() {
     if (row.mcq_correct == null || !row.mcq_total) return best;
     return Math.max(best, row.mcq_correct / row.mcq_total);
   }, -1);
-  const scoresPending = page === "scores" && !gradeMeta;
+  const scoresPending = page === "scores" && !gradeMeta && gradeRows.length === 0;
   const reviewRows = gradeRows.filter((row) => (row.frqs ?? []).some((frq) => frq.needs_review));
   const questionNotes = frqClassNotes(gradeRows);
   const pendingFrqCount = gradeRows.reduce((sum, row) => sum + (row.status === "submitted" ? (row.frqs ?? []).filter((frq) => frq.manual_score == null && frq.ai_score == null && (frq.answer_text.trim() || frq.file_url)).length : 0), 0);
@@ -2563,9 +2711,14 @@ function TeacherHome() {
                       ? "这里是全部教师的考试成绩。考试截止后会批完全部大题，点某一行再看这名学生的答卷。"
                       : "先看全班成绩。考试截止后会自动批完全部大题，点某一行再看这名学生的答卷。"}
                   </p>
-                  {gradeNote ? (
+                  {gradeNote || (pendingFrqCount > 0 && !examStillOpen && gradeMeta?.ai_grade !== false) ? (
                     <div className="mt-1 flex flex-wrap items-center gap-2">
-                      <p className="text-sm text-muted-foreground">{gradeNote}{pendingFrqCount > 0 && !gradeNote.includes("还剩") ? `，还剩 ${pendingFrqCount} 题` : ""}</p>
+                      {classGradeDue || gradeBusy === "ai" ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
+                      <p className="text-sm text-muted-foreground">
+                        {gradeNote
+                          ? `${gradeNote}${pendingFrqCount > 0 && !gradeNote.includes("还剩") ? `，还剩 ${pendingFrqCount} 题` : ""}`
+                          : `还有 ${pendingFrqCount} 题没批完。已经批完的已保存，可以再试一次。`}
+                      </p>
                       <Button size="sm" variant="outline" className="h-7" onClick={() => void regradeClass()}>重新批改未出分的题</Button>
                     </div>
                   ) : null}
@@ -2712,7 +2865,7 @@ function TeacherHome() {
                                     : score != null
                                       ? `${score}/${frq.max_score}`
                                       : frq.ai_failed
-                                        ? "未完成"
+                                        ? "没批完"
                                         : frq.answer_text.trim() || frq.file_url
                                           ? "截止后批改"
                                           : "未作答";
@@ -2724,8 +2877,8 @@ function TeacherHome() {
                                   );
                                 })}
                                 <TableCell>
-                                  <Pill tone={row.status === "submitted" || (row.status === "in_progress" && mcqHandedIn(row)) ? "ok" : row.status === "in_progress" ? "live" : "muted"}>
-                                    {rowStatusLabel(row)}
+                                  <Pill tone={autoCollected(row, gradeMeta?.ends_at) ? "warn" : row.status === "submitted" || (row.status === "in_progress" && mcqHandedIn(row)) ? "ok" : row.status === "in_progress" ? "live" : "muted"}>
+                                    {rowStatusLabel(row, gradeMeta?.ends_at)}
                                   </Pill>
                                 </TableCell>
                               </TableRow>
@@ -2959,9 +3112,13 @@ function TeacherHome() {
                   <DialogTitle>{row.student_name} 的答卷</DialogTitle>
                   <DialogDescription>
                     {row.student_id}
-                    {row.status === "submitted" && row.submitted_at ? ` · 交卷 ${beijingTime(row.submitted_at)}` : ""}
+                    {autoCollected(row, gradeMeta?.ends_at)
+                      ? ` · 截止后自动收卷 ${beijingTime(row.submitted_at)}`
+                      : row.status === "submitted" && row.submitted_at
+                        ? ` · 交卷 ${beijingTime(row.submitted_at)}`
+                        : ""}
                     {gradeNote ? ` · ${gradeNote}` : ""}
-                    {row.status === "in_progress" ? (mcqHandedIn(row) ? " · 选择题已交，正在做大题" : " · 还在作答，下面是目前已保存的内容") : row.frq_score == null ? " · 大题还没有分数" : ` · 大题 ${row.frq_score}/${row.frq_max}`}
+                    {row.status === "in_progress" ? (mcqHandedIn(row) ? " · 选择题已交，正在做大题" : " · 还在作答，下面是目前已保存的内容") : frqHeaderLabel(row)}
                   </DialogDescription>
                 </DialogHeader>
                 <div className="flex flex-wrap justify-end gap-2">
@@ -3006,7 +3163,7 @@ function TeacherHome() {
                   <h3 className="text-sm font-semibold">选择题</h3>
                   <p className="text-xs text-muted-foreground">
                     {mcqHandedIn(row) ? (row.mcq_correct != null ? `选择题已交，得 ${row.mcq_correct}/${row.mcq_total} 分。` : "选择题已交。") : "还没交选择题，先显示目前选了的选项。"}
-                    绿色是选对，红色是选错。
+                    绿色是选对，红色是选错。选择题按对错计分，不能改分。
                   </p>
                   <div className="flex flex-wrap gap-1">
                     {(row.mcqs ?? []).map((item) => (
@@ -3044,36 +3201,94 @@ function TeacherHome() {
                       {frq.ai_failed && frq.ai_error ? <p className="text-sm text-amber-800">{frq.ai_error}</p> : null}
                       {frq.ai_comment ? <p className="whitespace-pre-wrap text-sm text-muted-foreground">{frq.ai_comment}</p> : null}
                       {frq.ai_suggestions ? <p className="whitespace-pre-wrap text-sm text-muted-foreground">{frq.ai_suggestions}</p> : null}
-                      {frq.breakdown?.length ? (
+                      {(frq.parts?.length ?? 0) >= 2 ? (
+                        <div className="space-y-2">
+                          {row.status === "submitted" ? (
+                            <p className="text-xs text-muted-foreground">按小问改分。留空的小问继续用 AI 分数；AI 还没有的按 0 分。各小问加起来不能超过满分 {frq.max_score}。</p>
+                          ) : null}
+                          {frq.parts?.every((part) => part.points.length === 0) && frq.breakdown?.length ? (
+                            <ul className="space-y-1 text-xs text-muted-foreground">
+                              {frq.breakdown.map((point, pointIndex) => (
+                                <li key={`${frq.frq_id}-flat-${pointIndex}`}>{pointLabel(point)}</li>
+                              ))}
+                            </ul>
+                          ) : null}
+                          {frq.parts?.map((part) => {
+                            const cap = part.max_known ? Math.min(part.max, frq.max_score) : frq.max_score;
+                            return (
+                              <div key={part.key} className="space-y-1 rounded-lg bg-muted/50 p-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Label htmlFor={`part-${frq.frq_id}-${part.key}`} className="w-12 shrink-0 text-xs">{part.label}</Label>
+                                  {row.status === "submitted" ? (
+                                    <Input
+                                      id={`part-${frq.frq_id}-${part.key}`}
+                                      inputMode="numeric"
+                                      value={partDraft[`${frq.frq_id}:${part.key}`] ?? ""}
+                                      placeholder={part.ai_earned == null ? "AI 还没有" : `AI ${part.ai_earned}`}
+                                      className="h-8 max-w-28"
+                                      onChange={(e) => setPartDraft((current) => ({ ...current, [`${frq.frq_id}:${part.key}`]: e.target.value }))}
+                                    />
+                                  ) : (
+                                    <span className="text-xs tabular-nums">{part.ai_earned == null ? "还没有" : part.ai_earned}</span>
+                                  )}
+                                  {part.max_known ? <span className="text-xs text-muted-foreground">满分 {cap}</span> : null}
+                                </div>
+                                {part.points.length ? (
+                                  <ul className="space-y-1 text-xs text-muted-foreground">
+                                    {part.points.map((point, pointIndex) => (
+                                      <li key={`${frq.frq_id}-${part.key}-${pointIndex}`}>{pointLabel(point)}</li>
+                                    ))}
+                                  </ul>
+                                ) : null}
+                              </div>
+                            );
+                          })}
+                          {row.status === "submitted" ? (
+                            <p className="text-xs text-muted-foreground">
+                              {(() => {
+                                const pieces = frq.parts ?? [];
+                                const any = pieces.some((part) => (partDraft[`${frq.frq_id}:${part.key}`] ?? "").trim() !== "");
+                                if (!any) return `教师还没改这道题，目前用 AI 分数${frq.ai_score == null ? "" : ` ${frq.ai_score}/${frq.max_score}`}。`;
+                                const sum = pieces.reduce((total, part) => {
+                                  const value = (partDraft[`${frq.frq_id}:${part.key}`] ?? "").trim();
+                                  if (!/^\d+$/.test(value)) return total + (part.ai_earned ?? 0);
+                                  return total + Number(value);
+                                }, 0);
+                                return `教师给分合计 ${sum}/${frq.max_score}`;
+                              })()}
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : frq.breakdown?.length ? (
                         <ul className="space-y-1 text-xs text-muted-foreground">
                           {frq.breakdown.map((point, pointIndex) => (
                             <li key={`${frq.frq_id}-${pointIndex}`}>{pointLabel(point)}</li>
                           ))}
                         </ul>
                       ) : null}
+                      {row.status === "submitted" && (frq.parts?.length ?? 0) < 2 ? (
+                        <div className="flex items-center gap-2">
+                          <Label htmlFor={`manual-${frq.frq_id}`} className="shrink-0 text-xs">教师给分</Label>
+                          <Input
+                            id={`manual-${frq.frq_id}`}
+                            inputMode="numeric"
+                            value={manualDraft[frq.frq_id] ?? ""}
+                            placeholder="留空则用 AI 分数"
+                            className="max-w-40"
+                            onChange={(e) => setManualDraft((current) => ({ ...current, [frq.frq_id]: e.target.value }))}
+                          />
+                        </div>
+                      ) : null}
                       {row.status === "submitted" ? (
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2">
-                            <Label htmlFor={`manual-${frq.frq_id}`} className="shrink-0 text-xs">教师给分</Label>
-                            <Input
-                              id={`manual-${frq.frq_id}`}
-                              inputMode="numeric"
-                              value={manualDraft[frq.frq_id] ?? ""}
-                              placeholder="留空则用 AI 分数"
-                              className="max-w-40"
-                              onChange={(e) => setManualDraft((current) => ({ ...current, [frq.frq_id]: e.target.value }))}
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label htmlFor={`comment-${frq.frq_id}`} className="text-xs">教师评语</Label>
-                            <Textarea
-                              id={`comment-${frq.frq_id}`}
-                              value={commentDraft[frq.frq_id] ?? ""}
-                              placeholder="写给这道题的批注，可以空着"
-                              rows={3}
-                              onChange={(e) => setCommentDraft((current) => ({ ...current, [frq.frq_id]: e.target.value }))}
-                            />
-                          </div>
+                        <div className="space-y-1">
+                          <Label htmlFor={`comment-${frq.frq_id}`} className="text-xs">教师评语</Label>
+                          <Textarea
+                            id={`comment-${frq.frq_id}`}
+                            value={commentDraft[frq.frq_id] ?? ""}
+                            placeholder="写给这道题的批注，可以空着"
+                            rows={3}
+                            onChange={(e) => setCommentDraft((current) => ({ ...current, [frq.frq_id]: e.target.value }))}
+                          />
                         </div>
                       ) : null}
                     </section>

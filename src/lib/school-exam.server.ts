@@ -5,6 +5,7 @@ import { printedQuestionNumber } from "@/lib/ap-exam-parse";
 import { readPageImage, readPointMarker, schoolExamAiOn, stripPageImage, stripPointMarker } from "@/lib/exam-flags";
 import { fixAp2025Frqs, fixAp2025Questions } from "@/lib/ap-2025-paper";
 import { answerNeedsReview, gradeFrqAnswer, pointsFromRubric, type FrqBreakdown } from "@/lib/frq-grade.server";
+import { groupFrqParts, resolvePartOverride } from "@/lib/frq-parts";
 import { splitImageTextRubric, splitTeacherFrq } from "@/lib/frq-teacher-fields";
 import { EXAM_LOCK_GRACE_MS, isUuid } from "@/lib/school-exam-session";
 import type { Json } from "@/integrations/supabase/types";
@@ -278,10 +279,21 @@ export type StoredFrqGrade = {
   ai_breakdown?: FrqBreakdown[];
   manual_score: number | null;
   manual_comment: string | null;
+  manual_parts?: Record<string, number> | null;
   ai_failed?: boolean;
   ai_error?: string | null;
+  ai_tries?: number;
+  retry_after?: string | null;
   needs_review?: boolean;
 };
+
+const GRADE_TRY_LIMIT = 3;
+
+function gradeAttemptCount(grade?: StoredFrqGrade) {
+  if (!grade) return 0;
+  if (typeof grade.ai_tries === "number") return grade.ai_tries;
+  return grade.ai_failed ? 1 : 0;
+}
 
 export function readStoredGrades(raw: unknown): Record<string, StoredFrqGrade> {
   if (!raw || typeof raw !== "object") return {};
@@ -313,12 +325,25 @@ export function readStoredGrades(raw: unknown): Record<string, StoredFrqGrade> {
       ai_breakdown: breakdown,
       manual_score: typeof g.manual_score === "number" ? g.manual_score : null,
       manual_comment: typeof g.manual_comment === "string" ? g.manual_comment : null,
+      manual_parts: readManualParts(g.manual_parts),
       ai_failed: g.ai_failed === true,
       ai_error: typeof g.ai_error === "string" ? g.ai_error : null,
+      ai_tries: typeof g.ai_tries === "number" ? g.ai_tries : undefined,
+      retry_after: typeof g.retry_after === "string" ? g.retry_after : null,
       needs_review: g.needs_review === true,
     };
   }
   return out;
+}
+
+function readManualParts(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const out: Record<string, number> = {};
+  for (const [key, score] of Object.entries(value as Record<string, unknown>)) {
+    if (!/^[a-e]$/.test(key) || typeof score !== "number" || !Number.isInteger(score) || score < 0) continue;
+    out[key] = score;
+  }
+  return Object.keys(out).length ? out : null;
 }
 
 function explainGradeError(error: string, sort?: number | null) {
@@ -327,7 +352,7 @@ function explainGradeError(error: string, sort?: number | null) {
   if (error === "missing_max_score") return `${which} 没有满分，请老师先填写再批改`;
   if (error === "rate_limited") return `${which} 没批完：AI 评分请求过多。已经批完的题目已保存，稍后再试会继续`;
   if (error === "credits_exhausted") return `${which} 没批完：AI 评分额度不足。已经批完的题目已保存`;
-  return `${which} 没批完。已经批完的题目已保存，可以稍后重试这名学生`;
+  return `${which} 没批完。已经批完的题目已保存，其余题目会继续批`;
 }
 
 function positiveScore(...values: Array<number | null | undefined>) {
@@ -348,16 +373,31 @@ export function planSchoolGrade(
   includeFailed = false,
 ) {
   const blanks: string[] = [];
-  const pending: typeof frqs = [];
+  const fresh: typeof frqs = [];
+  const retry: typeof frqs = [];
+  let cooling = 0;
   for (const frq of frqs) {
-    if (grades[frq.id]?.ai_score != null) continue;
-    if (!includeFailed && grades[frq.id]?.ai_failed) continue;
+    const grade = grades[frq.id];
+    if (grade?.ai_score != null || grade?.manual_score != null) continue;
+    const tries = gradeAttemptCount(grade);
+    const givenUp = grade?.ai_failed === true && tries >= GRADE_TRY_LIMIT;
+    if (givenUp && !includeFailed) continue;
     const text = items[frq.id]?.text?.trim() ?? "";
     const file = items[frq.id]?.fileUrl ?? "";
-    if (!text && !file) blanks.push(frq.id);
-    else pending.push(frq);
+    if (!text && !file) {
+      blanks.push(frq.id);
+      continue;
+    }
+    const retryAt = grade?.retry_after ? Date.parse(grade.retry_after) : NaN;
+    if (!includeFailed && Number.isFinite(retryAt) && retryAt > Date.now()) {
+      cooling += 1;
+      continue;
+    }
+    if (tries > 0 || grade?.ai_failed) retry.push(frq);
+    else fresh.push(frq);
   }
-  return { blanks, next: pending[0] ?? null, pending: pending.length };
+  const queue = includeFailed ? [...retry, ...fresh] : [...fresh, ...retry];
+  return { blanks, next: queue[0] ?? null, pending: queue.length + cooling, cooling };
 }
 
 export function readSubmittedAt(raw: unknown, column: string | null) {
@@ -366,12 +406,18 @@ export function readSubmittedAt(raw: unknown, column: string | null) {
   return stamped || column;
 }
 
-function withSubmitStamp(raw: unknown, at: string) {
+function withSubmitStamp(raw: unknown, at: string, collected?: "deadline") {
   const parsed = parseFrqAnswers(raw);
   const base = raw && typeof raw === "object" && !Array.isArray(raw) ? { ...(raw as Record<string, unknown>) } : {};
   const progress = { ...(parsed.progress ?? {}) };
   if (typeof progress.submitted_at !== "string" || !progress.submitted_at) progress.submitted_at = at;
+  if (collected === "deadline") progress.collected_reason = "deadline";
   return { ...base, items: parsed.items, progress };
+}
+
+export function readCollectedReason(raw: unknown) {
+  const progress = parseFrqAnswers(raw).progress;
+  return progress?.collected_reason === "deadline" ? "deadline" as const : null;
 }
 
 function packFrqAnswers(raw: unknown, grades: Record<string, StoredFrqGrade>): Json {
@@ -410,7 +456,31 @@ export type SchoolGradeStep = {
   gradedSort: number | null;
   error: string | null;
   notice?: string | null;
+  released?: boolean;
 };
+
+function markGradeRetry(prev: StoredFrqGrade | undefined, maxScore: number | null, error: string, reason: string) {
+  const tries = gradeAttemptCount(prev) + 1;
+  const hardStop = error === "credits_exhausted" || error === "ai_not_configured" || error === "missing_max_score";
+  const giveUp = hardStop || tries >= GRADE_TRY_LIMIT;
+  return {
+    giveUp,
+    grade: {
+      max_score: positiveScore(prev?.max_score, maxScore),
+      ai_score: null,
+      ai_comment: null,
+      ai_suggestions: null,
+      ai_failed: giveUp,
+      ai_error: reason,
+      ai_tries: tries,
+      retry_after: giveUp ? null : new Date(Date.now() + (error === "rate_limited" ? 15000 : 4000)).toISOString(),
+      manual_score: prev?.manual_score ?? null,
+      manual_comment: prev?.manual_comment ?? null,
+      manual_parts: prev?.manual_parts ?? null,
+      needs_review: prev?.needs_review === true,
+    } satisfies StoredFrqGrade,
+  };
+}
 
 /** Grade at most one answered FRQ, and keep every finished score before the next model call. */
 export async function gradeNextSchoolFrq(attemptId: string, paperId: string, opts?: { force?: boolean; retryFailed?: boolean }): Promise<SchoolGradeStep> {
@@ -449,11 +519,13 @@ export async function gradeNextSchoolFrq(attemptId: string, paperId: string, opt
       ai_suggestions: null,
       manual_score: prev?.manual_score ?? null,
       manual_comment: prev?.manual_comment ?? null,
+      manual_parts: prev?.manual_parts ?? null,
     };
   }
   if (!plan.next) {
     if (plan.blanks.length) await saveGradeState(attemptId, attempt.frq_answers, grades, null);
-    return { pending: 0, done: true, busy: false, gradedSort: null, error: null };
+    const waiting = plan.cooling > 0;
+    return { pending: plan.pending, done: !waiting, busy: waiting, gradedSort: null, error: null };
   }
   const lockUntil = new Date(Date.now() + 20_000).toISOString();
   await saveGradeState(attemptId, attempt.frq_answers, grades, lockUntil);
@@ -483,18 +555,10 @@ export async function gradeNextSchoolFrq(attemptId: string, paperId: string, opt
     if (!graded.ok) {
       const prev = grades[frq.id];
       const reason = explainGradeError(graded.error, shownQuestionOrder(full));
-      grades[frq.id] = {
-        max_score: positiveScore(prev?.max_score, full.max_score),
-        ai_score: null,
-        ai_comment: null,
-        ai_suggestions: null,
-        ai_failed: true,
-        ai_error: reason,
-        manual_score: prev?.manual_score ?? null,
-        manual_comment: prev?.manual_comment ?? null,
-      };
+      const marked = markGradeRetry(prev, full.max_score, graded.error, reason);
+      grades[frq.id] = marked.grade;
       await saveGradeState(attemptId, base, grades, null);
-      return { pending: plan.pending, done: false, busy: false, gradedSort: null, error: reason };
+      return { pending: plan.pending, done: false, busy: false, gradedSort: null, error: reason, released: marked.giveUp };
     }
     const prev = grades[frq.id];
     grades[frq.id] = {
@@ -505,9 +569,12 @@ export async function gradeNextSchoolFrq(attemptId: string, paperId: string, opt
       ai_breakdown: graded.grade.breakdown,
       ai_failed: false,
       ai_error: null,
+      ai_tries: 0,
+      retry_after: null,
       needs_review: graded.grade.needs_review === true || answerNeedsReview(answer?.text),
       manual_score: prev?.manual_score ?? null,
       manual_comment: prev?.manual_comment ?? null,
+      manual_parts: prev?.manual_parts ?? null,
     };
     await saveGradeState(attemptId, base, grades, null);
     const left = plan.pending - 1;
@@ -519,18 +586,10 @@ export async function gradeNextSchoolFrq(attemptId: string, paperId: string, opt
     const saved = readStoredGrades(base);
     const prev = saved[frq.id];
     const reason = explainGradeError("ai_failed", shownQuestionOrder(frq));
-    saved[frq.id] = {
-      max_score: positiveScore(prev?.max_score, frq.max_score),
-      ai_score: null,
-      ai_comment: null,
-      ai_suggestions: null,
-      ai_failed: true,
-      ai_error: reason,
-      manual_score: prev?.manual_score ?? null,
-      manual_comment: prev?.manual_comment ?? null,
-    };
+    const marked = markGradeRetry(prev, frq.max_score, "ai_failed", reason);
+    saved[frq.id] = marked.grade;
     await saveGradeState(attemptId, base, saved, null).catch(() => undefined);
-    return { pending: plan.pending, done: false, busy: false, gradedSort: null, error: reason };
+    return { pending: plan.pending, done: false, busy: false, gradedSort: null, error: reason, released: marked.giveUp };
   }
 }
 
@@ -610,6 +669,7 @@ export async function gradeFinishedExamStep(assignmentId: string): Promise<Schoo
   ]);
   const submitted = (attempts ?? []).filter((row) => row.submitted_at);
   let pending = 0;
+  let cooling = 0;
   let nextAttempt: string | null = null;
   let anyLocked = false;
   for (const row of submitted) {
@@ -617,16 +677,17 @@ export async function gradeFinishedExamStep(assignmentId: string): Promise<Schoo
     const parsed = parseFrqAnswers(row.frq_answers);
     const plan = planSchoolGrade(frqs ?? [], parsed.items, readStoredGrades(row.frq_answers));
     pending += plan.pending;
+    cooling += plan.cooling;
     if (locked && plan.next) anyLocked = true;
     if (!locked && !nextAttempt && plan.next) nextAttempt = row.id;
   }
   if (!nextAttempt) {
-    if (anyLocked) return { ...idle, done: false, busy: true, pending };
+    if (anyLocked || cooling > 0) return { ...idle, done: false, busy: true, pending };
     return idle;
   }
   const step = await gradeNextSchoolFrq(nextAttempt, assignment.paper_id);
   if (step.busy) return { ...idle, done: false, busy: true, pending };
-  const consumed = step.gradedSort != null || !!step.error;
+  const consumed = step.gradedSort != null || step.released === true;
   const left = Math.max(0, pending - (consumed ? 1 : 0));
   if (fatalGradeError(step.error)) return { ...step, pending: left, done: false, waiting: false };
   return { ...step, error: null, notice: step.error, pending: left, done: left === 0, waiting: false };
@@ -637,15 +698,34 @@ export async function saveManualFrqScores(
   rawAnswers: unknown,
   manual: Record<string, number | null>,
   comments: Record<string, string | null> = {},
+  partScores: Record<string, Record<string, number | null>> = {},
 ): Promise<Json> {
-  const { data: frqs } = await supabaseAdmin.from("paper_frqs").select("id,max_score").eq("paper_id", paperId);
-  const maxById = new Map((frqs ?? []).map((f) => [f.id, positiveScore(f.max_score)]));
+  const { data: frqs } = await supabaseAdmin.from("paper_frqs").select("id,max_score,content,image_text,sort_order").eq("paper_id", paperId);
+  const list = frqs ?? [];
+  const ids = list.map((frq) => frq.id);
+  const { data: rubrics } = ids.length
+    ? await supabaseAdmin.from("paper_frq_rubrics").select("frq_id,rubric_note").in("frq_id", ids)
+    : { data: [] as { frq_id: string; rubric_note: string | null }[] };
+  const rubricById = new Map((rubrics ?? []).map((row) => [row.frq_id, row.rubric_note]));
+  const byId = new Map(list.map((frq) => [frq.id, frq]));
   const grades = readStoredGrades(rawAnswers);
-  for (const id of new Set([...Object.keys(manual), ...Object.keys(comments)])) {
-    const max = maxById.get(id);
-    if (max == null) continue;
+  for (const id of new Set([...Object.keys(manual), ...Object.keys(comments), ...Object.keys(partScores)])) {
+    const frq = byId.get(id);
+    if (!frq) continue;
+    const max = positiveScore(frq.max_score);
     const prev = grades[id];
-    const score = Object.prototype.hasOwnProperty.call(manual, id) ? manual[id] : prev?.manual_score ?? null;
+    const rubric = rubricById.get(id)?.trim() || splitImageTextRubric(frq.image_text).rubric || splitTeacherFrq(frq.content).rubric_note;
+    const parts = groupFrqParts({
+      breakdown: prev?.ai_breakdown,
+      content: splitTeacherFrq(frq.content).content,
+      rubric,
+      maxScore: max,
+    });
+    const override = resolvePartOverride(parts, partScores[id], max, frq.sort_order ?? 0);
+    if (override.error) throw new Error(override.error);
+    const score = override.used
+      ? override.manual_score
+      : Object.prototype.hasOwnProperty.call(manual, id) ? manual[id] : prev?.manual_score ?? null;
     const note = Object.prototype.hasOwnProperty.call(comments, id) ? (comments[id] ?? "").trim() : prev?.manual_comment ?? null;
     grades[id] = {
       max_score: prev?.max_score || max,
@@ -655,9 +735,12 @@ export async function saveManualFrqScores(
       ai_breakdown: prev?.ai_breakdown,
       ai_failed: prev?.ai_failed === true && prev?.ai_score == null,
       ai_error: prev?.ai_error ?? null,
+      ai_tries: prev?.ai_tries,
+      retry_after: prev?.retry_after ?? null,
       needs_review: prev?.needs_review === true,
       manual_score: score == null ? null : Math.max(0, Math.min(max, Math.round(score))),
       manual_comment: note || null,
+      manual_parts: override.used ? override.manual_parts : score == null ? null : prev?.manual_parts ?? null,
     };
   }
   return packFrqAnswers(rawAnswers, grades);
@@ -673,10 +756,12 @@ export type TeacherFrqView = {
   ai_score: number | null;
   ai_failed?: boolean;
   ai_error?: string | null;
+  ai_tries?: number;
   needs_review?: boolean;
   ai_comment: string | null;
   ai_suggestions: string | null;
   breakdown: FrqBreakdown[];
+  parts: { key: string; label: string; max: number; max_known: boolean; ai_earned: number | null; manual_earned: number | null; points: FrqBreakdown[] }[];
   manual_score: number | null;
   manual_comment: string | null;
 };
@@ -712,25 +797,42 @@ export function teacherFrqViews(
               }];
             })
           : [];
+      const maxScore = positiveScore(stored?.max_score, prior?.ai_max_score, frq.max_score);
       const needsReview = stored?.needs_review === true || answerNeedsReview(answer?.text) || /建议复核|需老师复核/.test(stored?.ai_comment ?? prior?.ai_overall ?? "");
       if (needsReview && breakdown.length === 0) {
         const rubric = frq.rubric_note?.trim() || splitImageTextRubric(frq.image_text).rubric || splitTeacherFrq(frq.content).rubric_note;
         breakdown = pointsFromRubric(rubric);
       }
+      const parts = groupFrqParts({
+        breakdown,
+        content: splitTeacherFrq(frq.content).content,
+        rubric: frq.rubric_note,
+        maxScore,
+      }).map((part) => ({
+        key: part.key,
+        label: part.label,
+        max: part.max,
+        max_known: part.max_known,
+        ai_earned: part.ai_earned,
+        manual_earned: stored?.manual_parts?.[part.key] ?? null,
+        points: part.points,
+      }));
       return {
         frq_id: frq.id,
         title: frq.title,
         sort_order: frq.sort_order,
-        max_score: positiveScore(stored?.max_score, prior?.ai_max_score, frq.max_score),
+        max_score: maxScore,
         answer_text: answer?.text ?? "",
         file_url: answer?.fileUrl ?? null,
         ai_score: stored?.ai_score ?? prior?.ai_score ?? null,
         ai_failed: stored?.ai_failed === true && stored?.ai_score == null,
         ai_error: stored?.ai_failed && stored?.ai_score == null ? stored?.ai_error ?? null : null,
+        ai_tries: stored?.ai_score == null ? gradeAttemptCount(stored) : 0,
         needs_review: needsReview,
         ai_comment: stored?.ai_comment ?? prior?.ai_overall ?? null,
         ai_suggestions: stored?.ai_suggestions ?? prior?.ai_suggestions ?? null,
         breakdown,
+        parts,
         manual_score: stored?.manual_score ?? null,
         manual_comment: stored?.manual_comment ?? null,
       };
@@ -770,6 +872,7 @@ export async function closeSchoolAttempt(
   attemptId: string,
   paperId: string,
   patch?: { mcq_detail?: unknown; frq_answers?: unknown; duration_seconds?: number | null },
+  opts?: { collected?: "deadline" },
 ) {
   const { data: current } = await supabaseAdmin.from("school_attempts").select(ATTEMPT_FIELDS).eq("id", attemptId).maybeSingle();
   if (!current || current.submitted_at) return current;
@@ -791,7 +894,7 @@ export async function closeSchoolAttempt(
     .update({
       submitted_at: submittedAt,
       mcq_detail: mcqDetail,
-      frq_answers: withSubmitStamp(patch?.frq_answers ?? current.frq_answers, submittedAt) as Json,
+      frq_answers: withSubmitStamp(patch?.frq_answers ?? current.frq_answers, submittedAt, opts?.collected) as Json,
       duration_seconds: patch?.duration_seconds ?? current.duration_seconds,
       mcq_total: mcqTotal,
       mcq_correct: mcqCorrect,
@@ -816,8 +919,8 @@ export async function releaseGradeLocks(assignmentId: string) {
     const grades = readStoredGrades(row.frq_answers);
     let changed = typeof parsed.progress?.grading_until === "string";
     for (const [id, grade] of Object.entries(grades)) {
-      if (grade.ai_score == null && grade.manual_score == null && grade.ai_failed) {
-        grades[id] = { ...grade, ai_failed: false, ai_error: null };
+      if (grade.ai_score == null && grade.manual_score == null && (grade.ai_failed || (grade.ai_tries ?? 0) > 0)) {
+        grades[id] = { ...grade, ai_failed: false, ai_error: null, ai_tries: 0, retry_after: null };
         changed = true;
       }
     }
@@ -880,7 +983,7 @@ export async function collectFinishedExam(assignmentId: string, known?: { endsAt
   let closed = 0;
   for (const row of openAttempts ?? []) {
     try {
-      const saved = await closeSchoolAttempt(row.id, paperId);
+      const saved = await closeSchoolAttempt(row.id, paperId, undefined, { collected: "deadline" });
       if (saved?.submitted_at) closed += 1;
     } catch (error) {
       console.error("collect attempt", row.id, error);
@@ -892,7 +995,7 @@ export async function collectFinishedExam(assignmentId: string, known?: { endsAt
 export async function finalizeIfOverdue(attempt: AttemptRow, paperId: string, endsAt: string) {
   if (attempt.submitted_at) return attempt;
   if (Date.now() < Date.parse(endsAt)) return attempt;
-  const closed = await closeSchoolAttempt(attempt.id, paperId);
+  const closed = await closeSchoolAttempt(attempt.id, paperId, undefined, { collected: "deadline" });
   return closed ? { ...attempt, ...closed } : attempt;
 }
 

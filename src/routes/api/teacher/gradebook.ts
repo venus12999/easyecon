@@ -5,7 +5,7 @@ import { jsonErr } from "@/lib/json-api";
 import { accountNames, ensureTeacherClass, getTeacherDb, isSchoolAdmin, verifyTeacherRequest } from "@/lib/teacher-auth.server";
 import { isUuid } from "@/lib/school-exam-session";
 import { schoolExamAiOn } from "@/lib/exam-flags";
-import { alignFrqNumbers, closeSchoolAttempt, collectFinishedExam, continueGradeBatch, drainSchoolGrades, gradeBatchToken, gradeNextSchoolFrq, mcqSectionClosed, readSubmittedAt, releaseGradeLocks, saveManualFrqScores, teacherFrqViews, teacherMcqViews } from "@/lib/school-exam.server";
+import { alignFrqNumbers, closeSchoolAttempt, collectFinishedExam, continueGradeBatch, drainSchoolGrades, gradeBatchToken, gradeNextSchoolFrq, mcqSectionClosed, readCollectedReason, readSubmittedAt, releaseGradeLocks, saveManualFrqScores, teacherFrqViews, teacherMcqViews } from "@/lib/school-exam.server";
 import { splitImageTextRubric, splitTeacherFrq } from "@/lib/frq-teacher-fields";
 
 async function teacherAssignment(userId: string, jwt: string, assignmentId: string, email: string | null) {
@@ -96,6 +96,7 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
           const mcqClosed = !!a && (!!a.submitted_at || mcqSectionClosed(a.frq_answers));
           const scoredMcq = mcqs.filter((item) => item.is_correct != null);
           const scored = views.filter((v) => (v.manual_score ?? v.ai_score) != null);
+          const frqStillOpen = views.some((v) => (v.answer_text.trim() || v.file_url) && v.manual_score == null && v.ai_score == null);
           return {
             roster_id: r.id,
             student_id: r.student_id,
@@ -110,8 +111,9 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
             frq_answers: Object.fromEntries(views.map((v) => [v.frq_id, { text: v.answer_text, fileUrl: v.file_url }])),
             mcqs,
             frqs: views,
-            frq_score: scored.length ? views.reduce((sum, v) => sum + (v.manual_score ?? v.ai_score ?? 0), 0) : null,
+            frq_score: frqStillOpen || !scored.length ? null : views.reduce((sum, v) => sum + (v.manual_score ?? v.ai_score ?? 0), 0),
             frq_max: views.reduce((sum, v) => sum + v.max_score, 0),
+            collected_reason: a ? readCollectedReason(a.frq_answers) : null,
             status: a?.submitted_at ? "submitted" : a ? "in_progress" : "missing",
           };
         });
@@ -128,6 +130,7 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
           action?: string;
           manual?: Record<string, number | null>;
           comments?: Record<string, string | null>;
+          parts?: Record<string, Record<string, number | null>>;
         };
         if (body.action === "batch" && body.assignment_id && request.headers.get("x-grade-token") === gradeBatchToken(body.assignment_id)) {
           const step = await drainSchoolGrades(body.assignment_id);
@@ -191,10 +194,16 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
         if (body.action === "ai") {
           if (Date.now() < Date.parse(owned.assignment.ends_at)) return jsonErr("考试还没结束，截止后批改");
           const step = await gradeNextSchoolFrq(attempt.id, owned.assignment.paper_id, { force: true, retryFailed: true });
-          if (step.error) return jsonErr(step.error, 502);
+          if (step.error && /额度|尚未配置|请求过多/.test(step.error)) return jsonErr(step.error, 502);
+          if (step.error) return Response.json({ ok: false, error: step.error, done: false, pending: step.pending, busy: step.busy, graded_sort: null });
           return Response.json({ ok: true, done: step.done, pending: step.pending, busy: step.busy, graded_sort: step.gradedSort });
         }
-        const next = await saveManualFrqScores(owned.assignment.paper_id, attempt.frq_answers, body.manual ?? {}, body.comments ?? {});
+        let next: Json;
+        try {
+          next = await saveManualFrqScores(owned.assignment.paper_id, attempt.frq_answers, body.manual ?? {}, body.comments ?? {}, body.parts ?? {});
+        } catch (error) {
+          return jsonErr(error instanceof Error ? error.message : "分数没能保存", 400);
+        }
         const { error } = await supabaseAdmin.from("school_attempts").update({ frq_answers: next }).eq("id", attempt.id);
         if (error) return jsonErr(error.message, 500);
         return Response.json({ ok: true });
