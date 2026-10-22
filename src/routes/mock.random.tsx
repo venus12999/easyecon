@@ -366,7 +366,7 @@ function Mock() {
               : j.error === "rate_limited"
                 ? "AI 评分请求过多，请稍后重试"
                 : j.error === "ai_not_configured" || j.error === "server_misconfigured"
-                  ? "AI 评分尚未配置（需要 Gemini 接口密钥），请联系管理员"
+                  ? "AI 评分尚未配置，请联系管理员"
                 : j.error || "AI 评分失败，请稍后重试";
         toast.error(message);
         return false;

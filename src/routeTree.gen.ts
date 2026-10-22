@@ -9,127 +9,62 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as AdminRouteImport } from './routes/admin'
-import { Route as AdminTutorRouteImport } from './routes/admin-tutor'
-import { Route as AuthRouteImport } from './routes/auth'
-import { Route as ExamRouteImport } from './routes/exam'
-import { Route as FrqRouteImport } from './routes/frq'
-import { Route as HistoryRouteImport } from './routes/history'
-import { Route as OrdersRouteImport } from './routes/orders'
-import { Route as PricingRouteImport } from './routes/pricing'
-import { Route as ProfileRouteImport } from './routes/profile'
-import { Route as ResetPasswordRouteImport } from './routes/reset-password'
-import { Route as TeacherRouteImport } from './routes/teacher'
-import { Route as TermsRouteImport } from './routes/terms'
-import { Route as TutorRouteImport } from './routes/tutor'
-import { Route as TutorBookingsRouteImport } from './routes/tutor-bookings'
 import { Route as WrongRouteImport } from './routes/wrong'
-import { Route as ApiAiExplainRouteImport } from './routes/api/ai-explain'
-import { Route as ApiFeedbackRouteImport } from './routes/api/feedback'
-import { Route as ApiManualPaymentsRouteImport } from './routes/api/manual-payments'
-import { Route as ApiMediaRouteImport } from './routes/api/media'
-import { Route as ApiMembershipRouteImport } from './routes/api/membership'
-import { Route as LegalPrivacyRouteImport } from './routes/legal.privacy'
-import { Route as LegalRefundsRouteImport } from './routes/legal.refunds'
-import { Route as LegalTermsRouteImport } from './routes/legal.terms'
-import { Route as MockIndexRouteImport } from './routes/mock.index'
-import { Route as MockSlugRouteImport } from './routes/mock.$slug'
-import { Route as MockRandomRouteImport } from './routes/mock.random'
+import { Route as TutorBookingsRouteImport } from './routes/tutor-bookings'
+import { Route as TutorRouteImport } from './routes/tutor'
+import { Route as TermsRouteImport } from './routes/terms'
+import { Route as TeacherRouteImport } from './routes/teacher'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as ProfileRouteImport } from './routes/profile'
+import { Route as PricingRouteImport } from './routes/pricing'
+import { Route as OrdersRouteImport } from './routes/orders'
+import { Route as HistoryRouteImport } from './routes/history'
+import { Route as FrqRouteImport } from './routes/frq'
+import { Route as ExamRouteImport } from './routes/exam'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AdminTutorRouteImport } from './routes/admin-tutor'
+import { Route as AdminRouteImport } from './routes/admin'
+import { Route as IndexRouteImport } from './routes/index'
 import { Route as PracticeIndexRouteImport } from './routes/practice.index'
+import { Route as MockIndexRouteImport } from './routes/mock.index'
 import { Route as PracticeSlugRouteImport } from './routes/practice.$slug'
-import { Route as ApiAdminAuditRouteImport } from './routes/api/admin/audit'
-import { Route as ApiAdminFeedbackRouteImport } from './routes/api/admin/feedback'
-import { Route as ApiAdminFrqsRouteImport } from './routes/api/admin/frqs'
-import { Route as ApiAdminLoginRouteImport } from './routes/api/admin/login'
-import { Route as ApiAdminManualPaymentsRouteImport } from './routes/api/admin/manual-payments'
-import { Route as ApiAdminQuestionsRouteImport } from './routes/api/admin/questions'
-import { Route as ApiAdminReanalyzeRouteImport } from './routes/api/admin/reanalyze'
-import { Route as ApiAdminTeacherUploadsRouteImport } from './routes/api/admin/teacher-uploads'
-import { Route as ApiAdminUploadImageRouteImport } from './routes/api/admin/upload-image'
-import { Route as ApiAdminUsersRouteImport } from './routes/api/admin/users'
-import { Route as ApiExamAttemptRouteImport } from './routes/api/exam/attempt'
-import { Route as ApiExamEnterRouteImport } from './routes/api/exam/enter'
-import { Route as ApiExamPaperRouteImport } from './routes/api/exam/paper'
-import { Route as ApiExamSessionRouteImport } from './routes/api/exam/session'
-import { Route as ApiFrqGradeRouteImport } from './routes/api/frq/grade'
-import { Route as ApiFrqUploadRouteImport } from './routes/api/frq/upload'
-import { Route as ApiMembershipMockAccessRouteImport } from './routes/api/membership/mock-access'
-import { Route as ApiTeacherAssignmentsRouteImport } from './routes/api/teacher/assignments'
-import { Route as ApiTeacherClassRouteImport } from './routes/api/teacher/class'
-import { Route as ApiTeacherGradebookRouteImport } from './routes/api/teacher/gradebook'
-import { Route as ApiTeacherPdfRouteImport } from './routes/api/teacher/pdf'
-import { Route as ApiTutorTakenSlotsRouteImport } from './routes/api/tutor/taken-slots'
+import { Route as MockRandomRouteImport } from './routes/mock.random'
+import { Route as MockSlugRouteImport } from './routes/mock.$slug'
+import { Route as LegalTermsRouteImport } from './routes/legal.terms'
+import { Route as LegalRefundsRouteImport } from './routes/legal.refunds'
+import { Route as LegalPrivacyRouteImport } from './routes/legal.privacy'
+import { Route as ApiMembershipRouteImport } from './routes/api/membership'
+import { Route as ApiMediaRouteImport } from './routes/api/media'
+import { Route as ApiManualPaymentsRouteImport } from './routes/api/manual-payments'
+import { Route as ApiFeedbackRouteImport } from './routes/api/feedback'
+import { Route as ApiAiExplainRouteImport } from './routes/api/ai-explain'
 import { Route as FrqReviewSlugRouteImport } from './routes/frq.review.$slug'
+import { Route as ApiTutorTakenSlotsRouteImport } from './routes/api/tutor/taken-slots'
+import { Route as ApiTeacherPdfRouteImport } from './routes/api/teacher/pdf'
+import { Route as ApiTeacherGradebookRouteImport } from './routes/api/teacher/gradebook'
+import { Route as ApiTeacherClassRouteImport } from './routes/api/teacher/class'
+import { Route as ApiTeacherAssignmentsRouteImport } from './routes/api/teacher/assignments'
+import { Route as ApiMembershipMockAccessRouteImport } from './routes/api/membership/mock-access'
+import { Route as ApiFrqUploadRouteImport } from './routes/api/frq/upload'
+import { Route as ApiFrqGradeRouteImport } from './routes/api/frq/grade'
+import { Route as ApiExamSessionRouteImport } from './routes/api/exam/session'
+import { Route as ApiExamPaperRouteImport } from './routes/api/exam/paper'
+import { Route as ApiExamEnterRouteImport } from './routes/api/exam/enter'
+import { Route as ApiExamAttemptRouteImport } from './routes/api/exam/attempt'
+import { Route as ApiAdminUsersRouteImport } from './routes/api/admin/users'
+import { Route as ApiAdminUploadImageRouteImport } from './routes/api/admin/upload-image'
+import { Route as ApiAdminTeacherUploadsRouteImport } from './routes/api/admin/teacher-uploads'
+import { Route as ApiAdminReanalyzeRouteImport } from './routes/api/admin/reanalyze'
+import { Route as ApiAdminQuestionsRouteImport } from './routes/api/admin/questions'
+import { Route as ApiAdminManualPaymentsRouteImport } from './routes/api/admin/manual-payments'
+import { Route as ApiAdminLoginRouteImport } from './routes/api/admin/login'
+import { Route as ApiAdminFrqsRouteImport } from './routes/api/admin/frqs'
+import { Route as ApiAdminFeedbackRouteImport } from './routes/api/admin/feedback'
+import { Route as ApiAdminAuditRouteImport } from './routes/api/admin/audit'
 
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminRoute = AdminRouteImport.update({
-  id: '/admin',
-  path: '/admin',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AdminTutorRoute = AdminTutorRouteImport.update({
-  id: '/admin-tutor',
-  path: '/admin-tutor',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuthRoute = AuthRouteImport.update({
-  id: '/auth',
-  path: '/auth',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ExamRoute = ExamRouteImport.update({
-  id: '/exam',
-  path: '/exam',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const FrqRoute = FrqRouteImport.update({
-  id: '/frq',
-  path: '/frq',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const HistoryRoute = HistoryRouteImport.update({
-  id: '/history',
-  path: '/history',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OrdersRoute = OrdersRouteImport.update({
-  id: '/orders',
-  path: '/orders',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PricingRoute = PricingRouteImport.update({
-  id: '/pricing',
-  path: '/pricing',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ProfileRoute = ProfileRouteImport.update({
-  id: '/profile',
-  path: '/profile',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ResetPasswordRoute = ResetPasswordRouteImport.update({
-  id: '/reset-password',
-  path: '/reset-password',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TeacherRoute = TeacherRouteImport.update({
-  id: '/teacher',
-  path: '/teacher',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TermsRoute = TermsRouteImport.update({
-  id: '/terms',
-  path: '/terms',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TutorRoute = TutorRouteImport.update({
-  id: '/tutor',
-  path: '/tutor',
+const WrongRoute = WrongRouteImport.update({
+  id: '/wrong',
+  path: '/wrong',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TutorBookingsRoute = TutorBookingsRouteImport.update({
@@ -137,64 +72,74 @@ const TutorBookingsRoute = TutorBookingsRouteImport.update({
   path: '/tutor-bookings',
   getParentRoute: () => rootRouteImport,
 } as any)
-const WrongRoute = WrongRouteImport.update({
-  id: '/wrong',
-  path: '/wrong',
+const TutorRoute = TutorRouteImport.update({
+  id: '/tutor',
+  path: '/tutor',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAiExplainRoute = ApiAiExplainRouteImport.update({
-  id: '/api/ai-explain',
-  path: '/api/ai-explain',
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiFeedbackRoute = ApiFeedbackRouteImport.update({
-  id: '/api/feedback',
-  path: '/api/feedback',
+const TeacherRoute = TeacherRouteImport.update({
+  id: '/teacher',
+  path: '/teacher',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiManualPaymentsRoute = ApiManualPaymentsRouteImport.update({
-  id: '/api/manual-payments',
-  path: '/api/manual-payments',
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiMediaRoute = ApiMediaRouteImport.update({
-  id: '/api/media',
-  path: '/api/media',
+const ProfileRoute = ProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiMembershipRoute = ApiMembershipRouteImport.update({
-  id: '/api/membership',
-  path: '/api/membership',
+const PricingRoute = PricingRouteImport.update({
+  id: '/pricing',
+  path: '/pricing',
   getParentRoute: () => rootRouteImport,
 } as any)
-const LegalPrivacyRoute = LegalPrivacyRouteImport.update({
-  id: '/legal/privacy',
-  path: '/legal/privacy',
+const OrdersRoute = OrdersRouteImport.update({
+  id: '/orders',
+  path: '/orders',
   getParentRoute: () => rootRouteImport,
 } as any)
-const LegalRefundsRoute = LegalRefundsRouteImport.update({
-  id: '/legal/refunds',
-  path: '/legal/refunds',
+const HistoryRoute = HistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
   getParentRoute: () => rootRouteImport,
 } as any)
-const LegalTermsRoute = LegalTermsRouteImport.update({
-  id: '/legal/terms',
-  path: '/legal/terms',
+const FrqRoute = FrqRouteImport.update({
+  id: '/frq',
+  path: '/frq',
   getParentRoute: () => rootRouteImport,
 } as any)
-const MockIndexRoute = MockIndexRouteImport.update({
-  id: '/mock/',
-  path: '/mock/',
+const ExamRoute = ExamRouteImport.update({
+  id: '/exam',
+  path: '/exam',
   getParentRoute: () => rootRouteImport,
 } as any)
-const MockSlugRoute = MockSlugRouteImport.update({
-  id: '/mock/$slug',
-  path: '/mock/$slug',
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
-const MockRandomRoute = MockRandomRouteImport.update({
-  id: '/mock/random',
-  path: '/mock/random',
+const AdminTutorRoute = AdminTutorRouteImport.update({
+  id: '/admin-tutor',
+  path: '/admin-tutor',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PracticeIndexRoute = PracticeIndexRouteImport.update({
@@ -202,109 +147,74 @@ const PracticeIndexRoute = PracticeIndexRouteImport.update({
   path: '/practice/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MockIndexRoute = MockIndexRouteImport.update({
+  id: '/mock/',
+  path: '/mock/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PracticeSlugRoute = PracticeSlugRouteImport.update({
   id: '/practice/$slug',
   path: '/practice/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAdminAuditRoute = ApiAdminAuditRouteImport.update({
-  id: '/api/admin/audit',
-  path: '/api/admin/audit',
+const MockRandomRoute = MockRandomRouteImport.update({
+  id: '/mock/random',
+  path: '/mock/random',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAdminFeedbackRoute = ApiAdminFeedbackRouteImport.update({
-  id: '/api/admin/feedback',
-  path: '/api/admin/feedback',
+const MockSlugRoute = MockSlugRouteImport.update({
+  id: '/mock/$slug',
+  path: '/mock/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAdminFrqsRoute = ApiAdminFrqsRouteImport.update({
-  id: '/api/admin/frqs',
-  path: '/api/admin/frqs',
+const LegalTermsRoute = LegalTermsRouteImport.update({
+  id: '/legal/terms',
+  path: '/legal/terms',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAdminLoginRoute = ApiAdminLoginRouteImport.update({
-  id: '/api/admin/login',
-  path: '/api/admin/login',
+const LegalRefundsRoute = LegalRefundsRouteImport.update({
+  id: '/legal/refunds',
+  path: '/legal/refunds',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAdminManualPaymentsRoute = ApiAdminManualPaymentsRouteImport.update({
-  id: '/api/admin/manual-payments',
-  path: '/api/admin/manual-payments',
+const LegalPrivacyRoute = LegalPrivacyRouteImport.update({
+  id: '/legal/privacy',
+  path: '/legal/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAdminQuestionsRoute = ApiAdminQuestionsRouteImport.update({
-  id: '/api/admin/questions',
-  path: '/api/admin/questions',
+const ApiMembershipRoute = ApiMembershipRouteImport.update({
+  id: '/api/membership',
+  path: '/api/membership',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAdminReanalyzeRoute = ApiAdminReanalyzeRouteImport.update({
-  id: '/api/admin/reanalyze',
-  path: '/api/admin/reanalyze',
+const ApiMediaRoute = ApiMediaRouteImport.update({
+  id: '/api/media',
+  path: '/api/media',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAdminTeacherUploadsRoute = ApiAdminTeacherUploadsRouteImport.update({
-  id: '/api/admin/teacher-uploads',
-  path: '/api/admin/teacher-uploads',
+const ApiManualPaymentsRoute = ApiManualPaymentsRouteImport.update({
+  id: '/api/manual-payments',
+  path: '/api/manual-payments',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAdminUploadImageRoute = ApiAdminUploadImageRouteImport.update({
-  id: '/api/admin/upload-image',
-  path: '/api/admin/upload-image',
+const ApiFeedbackRoute = ApiFeedbackRouteImport.update({
+  id: '/api/feedback',
+  path: '/api/feedback',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAdminUsersRoute = ApiAdminUsersRouteImport.update({
-  id: '/api/admin/users',
-  path: '/api/admin/users',
+const ApiAiExplainRoute = ApiAiExplainRouteImport.update({
+  id: '/api/ai-explain',
+  path: '/api/ai-explain',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiExamAttemptRoute = ApiExamAttemptRouteImport.update({
-  id: '/api/exam/attempt',
-  path: '/api/exam/attempt',
-  getParentRoute: () => rootRouteImport,
+const FrqReviewSlugRoute = FrqReviewSlugRouteImport.update({
+  id: '/review/$slug',
+  path: '/review/$slug',
+  getParentRoute: () => FrqRoute,
 } as any)
-const ApiExamEnterRoute = ApiExamEnterRouteImport.update({
-  id: '/api/exam/enter',
-  path: '/api/exam/enter',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiExamPaperRoute = ApiExamPaperRouteImport.update({
-  id: '/api/exam/paper',
-  path: '/api/exam/paper',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiExamSessionRoute = ApiExamSessionRouteImport.update({
-  id: '/api/exam/session',
-  path: '/api/exam/session',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiFrqGradeRoute = ApiFrqGradeRouteImport.update({
-  id: '/api/frq/grade',
-  path: '/api/frq/grade',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiFrqUploadRoute = ApiFrqUploadRouteImport.update({
-  id: '/api/frq/upload',
-  path: '/api/frq/upload',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiMembershipMockAccessRoute = ApiMembershipMockAccessRouteImport.update({
-  id: '/mock-access',
-  path: '/mock-access',
-  getParentRoute: () => ApiMembershipRoute,
-} as any)
-const ApiTeacherAssignmentsRoute = ApiTeacherAssignmentsRouteImport.update({
-  id: '/api/teacher/assignments',
-  path: '/api/teacher/assignments',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiTeacherClassRoute = ApiTeacherClassRouteImport.update({
-  id: '/api/teacher/class',
-  path: '/api/teacher/class',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiTeacherGradebookRoute = ApiTeacherGradebookRouteImport.update({
-  id: '/api/teacher/gradebook',
-  path: '/api/teacher/gradebook',
+const ApiTutorTakenSlotsRoute = ApiTutorTakenSlotsRouteImport.update({
+  id: '/api/tutor/taken-slots',
+  path: '/api/tutor/taken-slots',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiTeacherPdfRoute = ApiTeacherPdfRouteImport.update({
@@ -312,15 +222,105 @@ const ApiTeacherPdfRoute = ApiTeacherPdfRouteImport.update({
   path: '/api/teacher/pdf',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiTutorTakenSlotsRoute = ApiTutorTakenSlotsRouteImport.update({
-  id: '/api/tutor/taken-slots',
-  path: '/api/tutor/taken-slots',
+const ApiTeacherGradebookRoute = ApiTeacherGradebookRouteImport.update({
+  id: '/api/teacher/gradebook',
+  path: '/api/teacher/gradebook',
   getParentRoute: () => rootRouteImport,
 } as any)
-const FrqReviewSlugRoute = FrqReviewSlugRouteImport.update({
-  id: '/review/$slug',
-  path: '/review/$slug',
-  getParentRoute: () => FrqRoute,
+const ApiTeacherClassRoute = ApiTeacherClassRouteImport.update({
+  id: '/api/teacher/class',
+  path: '/api/teacher/class',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiTeacherAssignmentsRoute = ApiTeacherAssignmentsRouteImport.update({
+  id: '/api/teacher/assignments',
+  path: '/api/teacher/assignments',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMembershipMockAccessRoute = ApiMembershipMockAccessRouteImport.update({
+  id: '/mock-access',
+  path: '/mock-access',
+  getParentRoute: () => ApiMembershipRoute,
+} as any)
+const ApiFrqUploadRoute = ApiFrqUploadRouteImport.update({
+  id: '/api/frq/upload',
+  path: '/api/frq/upload',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiFrqGradeRoute = ApiFrqGradeRouteImport.update({
+  id: '/api/frq/grade',
+  path: '/api/frq/grade',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiExamSessionRoute = ApiExamSessionRouteImport.update({
+  id: '/api/exam/session',
+  path: '/api/exam/session',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiExamPaperRoute = ApiExamPaperRouteImport.update({
+  id: '/api/exam/paper',
+  path: '/api/exam/paper',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiExamEnterRoute = ApiExamEnterRouteImport.update({
+  id: '/api/exam/enter',
+  path: '/api/exam/enter',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiExamAttemptRoute = ApiExamAttemptRouteImport.update({
+  id: '/api/exam/attempt',
+  path: '/api/exam/attempt',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAdminUsersRoute = ApiAdminUsersRouteImport.update({
+  id: '/api/admin/users',
+  path: '/api/admin/users',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAdminUploadImageRoute = ApiAdminUploadImageRouteImport.update({
+  id: '/api/admin/upload-image',
+  path: '/api/admin/upload-image',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAdminTeacherUploadsRoute = ApiAdminTeacherUploadsRouteImport.update({
+  id: '/api/admin/teacher-uploads',
+  path: '/api/admin/teacher-uploads',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAdminReanalyzeRoute = ApiAdminReanalyzeRouteImport.update({
+  id: '/api/admin/reanalyze',
+  path: '/api/admin/reanalyze',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAdminQuestionsRoute = ApiAdminQuestionsRouteImport.update({
+  id: '/api/admin/questions',
+  path: '/api/admin/questions',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAdminManualPaymentsRoute = ApiAdminManualPaymentsRouteImport.update({
+  id: '/api/admin/manual-payments',
+  path: '/api/admin/manual-payments',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAdminLoginRoute = ApiAdminLoginRouteImport.update({
+  id: '/api/admin/login',
+  path: '/api/admin/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAdminFrqsRoute = ApiAdminFrqsRouteImport.update({
+  id: '/api/admin/frqs',
+  path: '/api/admin/frqs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAdminFeedbackRoute = ApiAdminFeedbackRouteImport.update({
+  id: '/api/admin/feedback',
+  path: '/api/admin/feedback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAdminAuditRoute = ApiAdminAuditRouteImport.update({
+  id: '/api/admin/audit',
+  path: '/api/admin/audit',
+  getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -706,102 +706,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin': {
-      id: '/admin'
-      path: '/admin'
-      fullPath: '/admin'
-      preLoaderRoute: typeof AdminRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/admin-tutor': {
-      id: '/admin-tutor'
-      path: '/admin-tutor'
-      fullPath: '/admin-tutor'
-      preLoaderRoute: typeof AdminTutorRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/auth': {
-      id: '/auth'
-      path: '/auth'
-      fullPath: '/auth'
-      preLoaderRoute: typeof AuthRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/exam': {
-      id: '/exam'
-      path: '/exam'
-      fullPath: '/exam'
-      preLoaderRoute: typeof ExamRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/frq': {
-      id: '/frq'
-      path: '/frq'
-      fullPath: '/frq'
-      preLoaderRoute: typeof FrqRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/history': {
-      id: '/history'
-      path: '/history'
-      fullPath: '/history'
-      preLoaderRoute: typeof HistoryRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/orders': {
-      id: '/orders'
-      path: '/orders'
-      fullPath: '/orders'
-      preLoaderRoute: typeof OrdersRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/pricing': {
-      id: '/pricing'
-      path: '/pricing'
-      fullPath: '/pricing'
-      preLoaderRoute: typeof PricingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/profile': {
-      id: '/profile'
-      path: '/profile'
-      fullPath: '/profile'
-      preLoaderRoute: typeof ProfileRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/reset-password': {
-      id: '/reset-password'
-      path: '/reset-password'
-      fullPath: '/reset-password'
-      preLoaderRoute: typeof ResetPasswordRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/teacher': {
-      id: '/teacher'
-      path: '/teacher'
-      fullPath: '/teacher'
-      preLoaderRoute: typeof TeacherRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/terms': {
-      id: '/terms'
-      path: '/terms'
-      fullPath: '/terms'
-      preLoaderRoute: typeof TermsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/tutor': {
-      id: '/tutor'
-      path: '/tutor'
-      fullPath: '/tutor'
-      preLoaderRoute: typeof TutorRouteImport
+    '/wrong': {
+      id: '/wrong'
+      path: '/wrong'
+      fullPath: '/wrong'
+      preLoaderRoute: typeof WrongRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/tutor-bookings': {
@@ -811,88 +720,102 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TutorBookingsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/wrong': {
-      id: '/wrong'
-      path: '/wrong'
-      fullPath: '/wrong'
-      preLoaderRoute: typeof WrongRouteImport
+    '/tutor': {
+      id: '/tutor'
+      path: '/tutor'
+      fullPath: '/tutor'
+      preLoaderRoute: typeof TutorRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/ai-explain': {
-      id: '/api/ai-explain'
-      path: '/api/ai-explain'
-      fullPath: '/api/ai-explain'
-      preLoaderRoute: typeof ApiAiExplainRouteImport
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/feedback': {
-      id: '/api/feedback'
-      path: '/api/feedback'
-      fullPath: '/api/feedback'
-      preLoaderRoute: typeof ApiFeedbackRouteImport
+    '/teacher': {
+      id: '/teacher'
+      path: '/teacher'
+      fullPath: '/teacher'
+      preLoaderRoute: typeof TeacherRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/manual-payments': {
-      id: '/api/manual-payments'
-      path: '/api/manual-payments'
-      fullPath: '/api/manual-payments'
-      preLoaderRoute: typeof ApiManualPaymentsRouteImport
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/media': {
-      id: '/api/media'
-      path: '/api/media'
-      fullPath: '/api/media'
-      preLoaderRoute: typeof ApiMediaRouteImport
+    '/profile': {
+      id: '/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof ProfileRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/membership': {
-      id: '/api/membership'
-      path: '/api/membership'
-      fullPath: '/api/membership'
-      preLoaderRoute: typeof ApiMembershipRouteImport
+    '/pricing': {
+      id: '/pricing'
+      path: '/pricing'
+      fullPath: '/pricing'
+      preLoaderRoute: typeof PricingRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/legal/privacy': {
-      id: '/legal/privacy'
-      path: '/legal/privacy'
-      fullPath: '/legal/privacy'
-      preLoaderRoute: typeof LegalPrivacyRouteImport
+    '/orders': {
+      id: '/orders'
+      path: '/orders'
+      fullPath: '/orders'
+      preLoaderRoute: typeof OrdersRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/legal/refunds': {
-      id: '/legal/refunds'
-      path: '/legal/refunds'
-      fullPath: '/legal/refunds'
-      preLoaderRoute: typeof LegalRefundsRouteImport
+    '/history': {
+      id: '/history'
+      path: '/history'
+      fullPath: '/history'
+      preLoaderRoute: typeof HistoryRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/legal/terms': {
-      id: '/legal/terms'
-      path: '/legal/terms'
-      fullPath: '/legal/terms'
-      preLoaderRoute: typeof LegalTermsRouteImport
+    '/frq': {
+      id: '/frq'
+      path: '/frq'
+      fullPath: '/frq'
+      preLoaderRoute: typeof FrqRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/mock/': {
-      id: '/mock/'
-      path: '/mock'
-      fullPath: '/mock/'
-      preLoaderRoute: typeof MockIndexRouteImport
+    '/exam': {
+      id: '/exam'
+      path: '/exam'
+      fullPath: '/exam'
+      preLoaderRoute: typeof ExamRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/mock/$slug': {
-      id: '/mock/$slug'
-      path: '/mock/$slug'
-      fullPath: '/mock/$slug'
-      preLoaderRoute: typeof MockSlugRouteImport
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/mock/random': {
-      id: '/mock/random'
-      path: '/mock/random'
-      fullPath: '/mock/random'
-      preLoaderRoute: typeof MockRandomRouteImport
+    '/admin-tutor': {
+      id: '/admin-tutor'
+      path: '/admin-tutor'
+      fullPath: '/admin-tutor'
+      preLoaderRoute: typeof AdminTutorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/practice/': {
@@ -902,6 +825,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PracticeIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/mock/': {
+      id: '/mock/'
+      path: '/mock'
+      fullPath: '/mock/'
+      preLoaderRoute: typeof MockIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/practice/$slug': {
       id: '/practice/$slug'
       path: '/practice/$slug'
@@ -909,144 +839,88 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PracticeSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/admin/audit': {
-      id: '/api/admin/audit'
-      path: '/api/admin/audit'
-      fullPath: '/api/admin/audit'
-      preLoaderRoute: typeof ApiAdminAuditRouteImport
+    '/mock/random': {
+      id: '/mock/random'
+      path: '/mock/random'
+      fullPath: '/mock/random'
+      preLoaderRoute: typeof MockRandomRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/admin/feedback': {
-      id: '/api/admin/feedback'
-      path: '/api/admin/feedback'
-      fullPath: '/api/admin/feedback'
-      preLoaderRoute: typeof ApiAdminFeedbackRouteImport
+    '/mock/$slug': {
+      id: '/mock/$slug'
+      path: '/mock/$slug'
+      fullPath: '/mock/$slug'
+      preLoaderRoute: typeof MockSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/admin/frqs': {
-      id: '/api/admin/frqs'
-      path: '/api/admin/frqs'
-      fullPath: '/api/admin/frqs'
-      preLoaderRoute: typeof ApiAdminFrqsRouteImport
+    '/legal/terms': {
+      id: '/legal/terms'
+      path: '/legal/terms'
+      fullPath: '/legal/terms'
+      preLoaderRoute: typeof LegalTermsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/admin/login': {
-      id: '/api/admin/login'
-      path: '/api/admin/login'
-      fullPath: '/api/admin/login'
-      preLoaderRoute: typeof ApiAdminLoginRouteImport
+    '/legal/refunds': {
+      id: '/legal/refunds'
+      path: '/legal/refunds'
+      fullPath: '/legal/refunds'
+      preLoaderRoute: typeof LegalRefundsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/admin/manual-payments': {
-      id: '/api/admin/manual-payments'
-      path: '/api/admin/manual-payments'
-      fullPath: '/api/admin/manual-payments'
-      preLoaderRoute: typeof ApiAdminManualPaymentsRouteImport
+    '/legal/privacy': {
+      id: '/legal/privacy'
+      path: '/legal/privacy'
+      fullPath: '/legal/privacy'
+      preLoaderRoute: typeof LegalPrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/admin/questions': {
-      id: '/api/admin/questions'
-      path: '/api/admin/questions'
-      fullPath: '/api/admin/questions'
-      preLoaderRoute: typeof ApiAdminQuestionsRouteImport
+    '/api/membership': {
+      id: '/api/membership'
+      path: '/api/membership'
+      fullPath: '/api/membership'
+      preLoaderRoute: typeof ApiMembershipRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/admin/reanalyze': {
-      id: '/api/admin/reanalyze'
-      path: '/api/admin/reanalyze'
-      fullPath: '/api/admin/reanalyze'
-      preLoaderRoute: typeof ApiAdminReanalyzeRouteImport
+    '/api/media': {
+      id: '/api/media'
+      path: '/api/media'
+      fullPath: '/api/media'
+      preLoaderRoute: typeof ApiMediaRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/admin/teacher-uploads': {
-      id: '/api/admin/teacher-uploads'
-      path: '/api/admin/teacher-uploads'
-      fullPath: '/api/admin/teacher-uploads'
-      preLoaderRoute: typeof ApiAdminTeacherUploadsRouteImport
+    '/api/manual-payments': {
+      id: '/api/manual-payments'
+      path: '/api/manual-payments'
+      fullPath: '/api/manual-payments'
+      preLoaderRoute: typeof ApiManualPaymentsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/admin/upload-image': {
-      id: '/api/admin/upload-image'
-      path: '/api/admin/upload-image'
-      fullPath: '/api/admin/upload-image'
-      preLoaderRoute: typeof ApiAdminUploadImageRouteImport
+    '/api/feedback': {
+      id: '/api/feedback'
+      path: '/api/feedback'
+      fullPath: '/api/feedback'
+      preLoaderRoute: typeof ApiFeedbackRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/admin/users': {
-      id: '/api/admin/users'
-      path: '/api/admin/users'
-      fullPath: '/api/admin/users'
-      preLoaderRoute: typeof ApiAdminUsersRouteImport
+    '/api/ai-explain': {
+      id: '/api/ai-explain'
+      path: '/api/ai-explain'
+      fullPath: '/api/ai-explain'
+      preLoaderRoute: typeof ApiAiExplainRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/exam/attempt': {
-      id: '/api/exam/attempt'
-      path: '/api/exam/attempt'
-      fullPath: '/api/exam/attempt'
-      preLoaderRoute: typeof ApiExamAttemptRouteImport
-      parentRoute: typeof rootRouteImport
+    '/frq/review/$slug': {
+      id: '/frq/review/$slug'
+      path: '/review/$slug'
+      fullPath: '/frq/review/$slug'
+      preLoaderRoute: typeof FrqReviewSlugRouteImport
+      parentRoute: typeof FrqRoute
     }
-    '/api/exam/enter': {
-      id: '/api/exam/enter'
-      path: '/api/exam/enter'
-      fullPath: '/api/exam/enter'
-      preLoaderRoute: typeof ApiExamEnterRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/exam/paper': {
-      id: '/api/exam/paper'
-      path: '/api/exam/paper'
-      fullPath: '/api/exam/paper'
-      preLoaderRoute: typeof ApiExamPaperRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/exam/session': {
-      id: '/api/exam/session'
-      path: '/api/exam/session'
-      fullPath: '/api/exam/session'
-      preLoaderRoute: typeof ApiExamSessionRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/frq/grade': {
-      id: '/api/frq/grade'
-      path: '/api/frq/grade'
-      fullPath: '/api/frq/grade'
-      preLoaderRoute: typeof ApiFrqGradeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/frq/upload': {
-      id: '/api/frq/upload'
-      path: '/api/frq/upload'
-      fullPath: '/api/frq/upload'
-      preLoaderRoute: typeof ApiFrqUploadRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/membership/mock-access': {
-      id: '/api/membership/mock-access'
-      path: '/mock-access'
-      fullPath: '/api/membership/mock-access'
-      preLoaderRoute: typeof ApiMembershipMockAccessRouteImport
-      parentRoute: typeof ApiMembershipRoute
-    }
-    '/api/teacher/assignments': {
-      id: '/api/teacher/assignments'
-      path: '/api/teacher/assignments'
-      fullPath: '/api/teacher/assignments'
-      preLoaderRoute: typeof ApiTeacherAssignmentsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/teacher/class': {
-      id: '/api/teacher/class'
-      path: '/api/teacher/class'
-      fullPath: '/api/teacher/class'
-      preLoaderRoute: typeof ApiTeacherClassRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/teacher/gradebook': {
-      id: '/api/teacher/gradebook'
-      path: '/api/teacher/gradebook'
-      fullPath: '/api/teacher/gradebook'
-      preLoaderRoute: typeof ApiTeacherGradebookRouteImport
+    '/api/tutor/taken-slots': {
+      id: '/api/tutor/taken-slots'
+      path: '/api/tutor/taken-slots'
+      fullPath: '/api/tutor/taken-slots'
+      preLoaderRoute: typeof ApiTutorTakenSlotsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/teacher/pdf': {
@@ -1056,19 +930,145 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiTeacherPdfRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/tutor/taken-slots': {
-      id: '/api/tutor/taken-slots'
-      path: '/api/tutor/taken-slots'
-      fullPath: '/api/tutor/taken-slots'
-      preLoaderRoute: typeof ApiTutorTakenSlotsRouteImport
+    '/api/teacher/gradebook': {
+      id: '/api/teacher/gradebook'
+      path: '/api/teacher/gradebook'
+      fullPath: '/api/teacher/gradebook'
+      preLoaderRoute: typeof ApiTeacherGradebookRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/frq/review/$slug': {
-      id: '/frq/review/$slug'
-      path: '/review/$slug'
-      fullPath: '/frq/review/$slug'
-      preLoaderRoute: typeof FrqReviewSlugRouteImport
-      parentRoute: typeof FrqRoute
+    '/api/teacher/class': {
+      id: '/api/teacher/class'
+      path: '/api/teacher/class'
+      fullPath: '/api/teacher/class'
+      preLoaderRoute: typeof ApiTeacherClassRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/teacher/assignments': {
+      id: '/api/teacher/assignments'
+      path: '/api/teacher/assignments'
+      fullPath: '/api/teacher/assignments'
+      preLoaderRoute: typeof ApiTeacherAssignmentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/membership/mock-access': {
+      id: '/api/membership/mock-access'
+      path: '/mock-access'
+      fullPath: '/api/membership/mock-access'
+      preLoaderRoute: typeof ApiMembershipMockAccessRouteImport
+      parentRoute: typeof ApiMembershipRoute
+    }
+    '/api/frq/upload': {
+      id: '/api/frq/upload'
+      path: '/api/frq/upload'
+      fullPath: '/api/frq/upload'
+      preLoaderRoute: typeof ApiFrqUploadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/frq/grade': {
+      id: '/api/frq/grade'
+      path: '/api/frq/grade'
+      fullPath: '/api/frq/grade'
+      preLoaderRoute: typeof ApiFrqGradeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/exam/session': {
+      id: '/api/exam/session'
+      path: '/api/exam/session'
+      fullPath: '/api/exam/session'
+      preLoaderRoute: typeof ApiExamSessionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/exam/paper': {
+      id: '/api/exam/paper'
+      path: '/api/exam/paper'
+      fullPath: '/api/exam/paper'
+      preLoaderRoute: typeof ApiExamPaperRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/exam/enter': {
+      id: '/api/exam/enter'
+      path: '/api/exam/enter'
+      fullPath: '/api/exam/enter'
+      preLoaderRoute: typeof ApiExamEnterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/exam/attempt': {
+      id: '/api/exam/attempt'
+      path: '/api/exam/attempt'
+      fullPath: '/api/exam/attempt'
+      preLoaderRoute: typeof ApiExamAttemptRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/users': {
+      id: '/api/admin/users'
+      path: '/api/admin/users'
+      fullPath: '/api/admin/users'
+      preLoaderRoute: typeof ApiAdminUsersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/upload-image': {
+      id: '/api/admin/upload-image'
+      path: '/api/admin/upload-image'
+      fullPath: '/api/admin/upload-image'
+      preLoaderRoute: typeof ApiAdminUploadImageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/teacher-uploads': {
+      id: '/api/admin/teacher-uploads'
+      path: '/api/admin/teacher-uploads'
+      fullPath: '/api/admin/teacher-uploads'
+      preLoaderRoute: typeof ApiAdminTeacherUploadsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/reanalyze': {
+      id: '/api/admin/reanalyze'
+      path: '/api/admin/reanalyze'
+      fullPath: '/api/admin/reanalyze'
+      preLoaderRoute: typeof ApiAdminReanalyzeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/questions': {
+      id: '/api/admin/questions'
+      path: '/api/admin/questions'
+      fullPath: '/api/admin/questions'
+      preLoaderRoute: typeof ApiAdminQuestionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/manual-payments': {
+      id: '/api/admin/manual-payments'
+      path: '/api/admin/manual-payments'
+      fullPath: '/api/admin/manual-payments'
+      preLoaderRoute: typeof ApiAdminManualPaymentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/login': {
+      id: '/api/admin/login'
+      path: '/api/admin/login'
+      fullPath: '/api/admin/login'
+      preLoaderRoute: typeof ApiAdminLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/frqs': {
+      id: '/api/admin/frqs'
+      path: '/api/admin/frqs'
+      fullPath: '/api/admin/frqs'
+      preLoaderRoute: typeof ApiAdminFrqsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/feedback': {
+      id: '/api/admin/feedback'
+      path: '/api/admin/feedback'
+      fullPath: '/api/admin/feedback'
+      preLoaderRoute: typeof ApiAdminFeedbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/admin/audit': {
+      id: '/api/admin/audit'
+      path: '/api/admin/audit'
+      fullPath: '/api/admin/audit'
+      preLoaderRoute: typeof ApiAdminAuditRouteImport
+      parentRoute: typeof rootRouteImport
     }
   }
 }

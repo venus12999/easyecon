@@ -7,6 +7,7 @@ import {
   closeSchoolAttempt,
   collectFinishedExam,
   continueGradeBatch,
+  fatalGradeError,
   finalizeIfOverdue,
   gradeFinishedExamStep,
   inExamWindow,
@@ -106,7 +107,7 @@ export const Route = createFileRoute("/api/exam/attempt")({
 
         if (action === "grade") {
           const step = await gradeFinishedExamStep(bundle.assignment.id);
-          const fatal = !!step.error && /额度|尚未配置|请求过多/.test(step.error);
+          const fatal = fatalGradeError(step.error);
           if (!step.waiting && !step.busy && !step.done && !fatal) continueGradeBatch(request, bundle.assignment.id);
           if (fatal && step.error) return jsonErr(step.error, 502);
           return Response.json({ ok: true, waiting: step.waiting, done: step.done, pending: step.pending, busy: step.busy, graded_sort: step.gradedSort });

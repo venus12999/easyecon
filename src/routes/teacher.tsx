@@ -26,6 +26,7 @@ import {
   Users,
 } from "lucide-react";
 import { isAdminEmail } from "@/lib/admin-emails";
+import { isBlankStudentAnswer } from "@/lib/frq-answer";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,6 +49,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { authFetch } from "@/lib/auth-fetch";
 import { applyKnownApAnswerKey, looksLikeProvidedFigure, parseApExamPages, readPrintedScore, studentVisibleQuestion, withUniqueQuestionNumbers, type ParsedExamItem } from "@/lib/ap-exam-parse";
 import { CUSTOM_SCORE_MAX_DEFAULT, apBasisText, apDistributionText, apMicroScore, apScoreText, formatScaledScore, pointsOnScale, scoreMaxError, summarizeApScores, type ApClassSummary, type ApScore } from "@/lib/ap-score";
+import { ap2025Clock } from "@/lib/ap-2025-paper";
 import { BREAK_MINUTES_DEFAULT, FRQ_MINUTES_DEFAULT, MCQ_MINUTES_DEFAULT, sectionMinutesError, sectionTimingLabel, sectionTotalMinutes } from "@/lib/exam-sections";
 import { splitTeacherFrq } from "@/lib/frq-teacher-fields";
 import { cropImageBlob, cropRectsForQuestions, cropUrlFromPage } from "@/lib/exam-page-crop";
@@ -161,7 +163,7 @@ export const Route = createFileRoute("/teacher")({
   component: TeacherHome,
 });
 
-type RosterRow = { id: string; student_id: string; student_name: string; user_id: string | null; account_name?: string | null };
+type RosterRow = { id: string; student_id: string; student_name: string; user_id: string | null; account_name?: string | null; id_locked?: boolean };
 type Paper = {
   id: string;
   slug: string;
@@ -191,6 +193,7 @@ type Assignment = {
   submitted_count?: number;
   mcq_correct?: number;
   mcq_total?: number;
+  pending_frq?: number;
   ap?: ApClassSummary;
 };
 type GradeFrq = {
@@ -230,7 +233,7 @@ type GradeRow = {
   frq_max: number;
   collected_reason?: "deadline" | null;
 };
-type PdfImport = { id: string; filename: string; page_count: number; status: string; paper_id: string | null; created_at: string };
+type PdfImport = { id: string; filename: string; page_count: number; status: string; paper_id: string | null; created_at: string; item_count?: number };
 type PdfPage = { id: string; page_number: number; image_url: string; extracted_text: string | null };
 type PdfItem = TeacherPdfItem;
 
@@ -259,15 +262,15 @@ function mcqProgressLabel(row: GradeRow) {
   return total ? `已交 ${answered}/${total}` : "已交";
 }
 
-const GRADE_TRY_LIMIT = 3;
+const GRADE_TRY_LIMIT = 4;
 
 function ungradedAnswerCount(row: GradeRow) {
-  return (row.frqs ?? []).filter((frq) => (frq.answer_text.trim() || frq.file_url) && frq.manual_score == null && frq.ai_score == null).length;
+  return (row.frqs ?? []).filter((frq) => !isBlankStudentAnswer(frq.answer_text, frq.file_url) && frq.manual_score == null && frq.ai_score == null).length;
 }
 
 function frqStillRetrying(frq: GradeFrq) {
   if (frq.manual_score != null || frq.ai_score != null) return false;
-  if (!frq.answer_text.trim() && !frq.file_url) return false;
+  if (isBlankStudentAnswer(frq.answer_text, frq.file_url)) return false;
   if (!frq.ai_failed) return true;
   return (frq.ai_tries ?? 1) < GRADE_TRY_LIMIT;
 }
@@ -326,6 +329,25 @@ function writeGradeCache(id: string, cache: GradeCache) {
     sessionStorage.setItem(gradeCacheKey(id), JSON.stringify(cache));
   } catch {
     /* 成绩册太大时忽略缓存，刷新会再读一次 */
+  }
+}
+
+function readAssignmentCache(): Assignment[] {
+  if (typeof sessionStorage === "undefined") return [];
+  try {
+    const parsed = JSON.parse(sessionStorage.getItem("easyecon-teacher-assignments") ?? "");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeAssignmentCache(rows: Assignment[]) {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem("easyecon-teacher-assignments", JSON.stringify(rows));
+  } catch {
+    /* 名单太大时忽略，刷新会再读一次 */
   }
 }
 
@@ -461,17 +483,23 @@ const NAV: { id: TeacherPage; label: string; icon: typeof Users }[] = [
   { id: "pdf", label: "PDF 出题", icon: FileUp },
 ];
 
-function paperSectionMinutes(paper: Pick<Paper, "total_seconds" | "frq_seconds" | "break_seconds">) {
-  const mcq = Math.max(10, Math.round((paper.total_seconds || MCQ_MINUTES_DEFAULT * 60) / 60));
-  const rawFrq = Math.round((paper.frq_seconds ?? FRQ_MINUTES_DEFAULT * 60) / 60);
+function paperSectionMinutes(paper: Pick<Paper, "slug" | "total_seconds" | "frq_seconds" | "break_seconds">) {
+  const clock = ap2025Clock(paper.slug, {
+    total_seconds: paper.total_seconds || MCQ_MINUTES_DEFAULT * 60,
+    frq_seconds: paper.frq_seconds,
+    break_seconds: paper.break_seconds,
+  });
+  const storedMcq = Math.round(clock.total_seconds / 60);
+  const mcq = Math.min(180, Math.max(10, storedMcq > 90 ? MCQ_MINUTES_DEFAULT : storedMcq));
+  const rawFrq = Math.round((clock.frq_seconds ?? FRQ_MINUTES_DEFAULT * 60) / 60);
   const frq = rawFrq <= 0 ? 0 : Math.max(10, Math.min(180, rawFrq));
-  const breakMinutes = frq > 0 ? Math.min(20, Math.max(0, Math.round((paper.break_seconds ?? BREAK_MINUTES_DEFAULT * 60) / 60))) : 0;
+  const breakMinutes = frq > 0 ? Math.min(20, Math.max(0, Math.round((clock.break_seconds ?? BREAK_MINUTES_DEFAULT * 60) / 60))) : 0;
   return { mcq: Math.min(180, mcq), frq, breakMinutes };
 }
 
 function assignmentTiming(exam: Pick<Assignment, "mcq_seconds" | "frq_seconds" | "break_seconds" | "starts_at" | "ends_at">) {
   return sectionTimingLabel(exam.mcq_seconds, exam.frq_seconds, exam.break_seconds)
-    ?? `总时长 ${Math.max(1, Math.round((Date.parse(exam.ends_at) - Date.parse(exam.starts_at)) / 60000))} 分钟`;
+    ?? `开考到截止 ${Math.max(1, Math.round((Date.parse(exam.ends_at) - Date.parse(exam.starts_at)) / 60000))} 分钟`;
 }
 
 function gradeAp(row: GradeRow) {
@@ -580,21 +608,28 @@ function sortPdfItems(items: PdfItem[]) {
 }
 
 function paperPickerLabel(p: Paper) {
-  if (p.slug.startsWith("school-")) {
-    const day = p.created_at
-      ? new Date(p.created_at).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })
-      : "";
-    return `${p.title} · 本校导入${day ? ` ${day}` : ""}`;
-  }
-  return p.year ? `${p.title} · ${p.year}` : p.title;
+  const timing = paperSectionMinutes(p);
+  const time = sectionTimingLabel(timing.mcq * 60, timing.frq * 60, timing.breakMinutes * 60);
+  const name = p.slug.startsWith("school-")
+    ? `${p.title} · 本校导入${p.created_at ? ` ${new Date(p.created_at).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" })}` : ""}`
+    : p.year ? `${p.title} · ${p.year}` : p.title;
+  return time ? `${name} · ${time}` : name;
+}
+
+function importStatusLabel(imp: PdfImport) {
+  if (typeof imp.item_count === "number" && imp.item_count === 0 && (imp.status === "published" || imp.status === "reviewing")) return "识别失败";
+  if (imp.status === "published") return "已交给管理员";
+  if (imp.status === "reviewing") return "待确认";
+  if (imp.status === "rendered") return "未提交";
+  return "处理中";
 }
 
 function importChipLabel(imp: PdfImport) {
   const when = imp.created_at
     ? new Date(imp.created_at).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })
     : "";
-  const status = imp.status === "published" ? "已提交" : imp.status === "rendered" ? "未提交" : imp.status;
-  return `${imp.filename.replace(/\.pdf$/i, "")} · ${status}${when ? ` · ${when}` : ""} · ${imp.id.slice(0, 4)}`;
+  const count = typeof imp.item_count === "number" ? ` · ${imp.item_count} 题` : "";
+  return `${imp.filename.replace(/\.pdf$/i, "")} · ${importStatusLabel(imp)}${count}${when ? ` · ${when}` : ""} · ${imp.id.slice(0, 4)}`;
 }
 
 function emptyItem(page: number, order: number, kind: "mcq" | "frq"): PdfItem {
@@ -637,6 +672,8 @@ function TeacherHome() {
   const [csvText, setCsvText] = useState("学号,姓名\n");
   const [papers, setPapers] = useState<Paper[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [examsLoaded, setExamsLoaded] = useState(false);
+  const [rosterDup, setRosterDup] = useState<null | { rows: { student_id: string; student_name: string }[]; replace: boolean; duplicates: string[] }>(null);
   const [title, setTitle] = useState("");
   const [source, setSource] = useState<"existing" | "random">("existing");
   const [paperId, setPaperId] = useState("");
@@ -684,7 +721,6 @@ function TeacherHome() {
   const [rosterQuery, setRosterQuery] = useState("");
   const [scoreQuery, setScoreQuery] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [snapshot, setSnapshot] = useState<{ id: string; rows: GradeRow[]; scoreMax: number | null } | null>(null);
   const [copied, setCopied] = useState("");
   const [studentEditor, setStudentEditor] = useState<null | { id: string | null; student_id: string; student_name: string }>(null);
   const [studentEditorError, setStudentEditorError] = useState("");
@@ -725,13 +761,24 @@ function TeacherHome() {
       authFetch("/api/teacher/assignments"),
       authFetch("/api/teacher/assignments?papers=1"),
     ]);
-    if (a.ok) setAssignments((await a.json()).assignments ?? []);
+    if (a.ok) {
+      const rows = ((await a.json()).assignments ?? []) as Assignment[];
+      setAssignments(rows);
+      writeAssignmentCache(rows);
+    }
+    setExamsLoaded(true);
     if (p.ok) setPapers((await p.json()).papers ?? []);
   }, []);
 
   const loadPdfs = useCallback(async () => {
     const r = await authFetch("/api/teacher/pdf");
     if (r.ok) setImports((await r.json()).imports ?? []);
+  }, []);
+
+  useLayoutEffect(() => {
+    const cached = readAssignmentCache();
+    if (cached.length === 0) return;
+    setAssignments((current) => (current.length > 0 ? current : cached));
   }, []);
 
   useEffect(() => {
@@ -788,8 +835,7 @@ function TeacherHome() {
     return () => window.clearInterval(timer);
   }, [simOpen, simStage]);
 
-  async function importRoster(replace: boolean) {
-    const rows = parseRosterCsv(csvText);
+  async function importRoster(replace: boolean, onDuplicate?: "skip" | "update", rows = parseRosterCsv(csvText)) {
     if (rows.length === 0) {
       toast.error("没有读到学号/姓名");
       return;
@@ -800,22 +846,31 @@ function TeacherHome() {
     }
     const r = await authFetch("/api/teacher/class", {
       method: "POST",
-      body: JSON.stringify({ rows, replace }),
+      body: JSON.stringify({ rows, replace, on_duplicate: onDuplicate }),
     });
     const j = await r.json();
+    if (r.status === 409 && Array.isArray(j.duplicates)) {
+      setRosterDup({ rows, replace, duplicates: j.duplicates as string[] });
+      return;
+    }
     if (!r.ok) {
       toast.error(j.error ?? "导入失败");
       return;
     }
     setRoster(j.roster ?? []);
     setReplaceRosterOpen(false);
-    toast.success(`花名册 ${j.roster?.length ?? 0} 人`);
+    setRosterDup(null);
+    const added = typeof j.added === "number" ? j.added : j.roster?.length ?? 0;
+    const skipped = typeof j.skipped === "number" ? j.skipped : 0;
+    const updated = typeof j.updated === "number" ? j.updated : 0;
+    toast.success(`新增 ${added} 人${skipped ? `，跳过 ${skipped} 个重复学号` : ""}${updated ? `，更新 ${updated} 个姓名` : ""}`);
   }
 
   async function importTestRoster() {
+    if (!window.confirm("将添加 TEST01、TEST02、TEST03 三名测试学生。确定添加？")) return;
     const r = await authFetch("/api/teacher/class", {
       method: "POST",
-      body: JSON.stringify({ rows: TEST_ROSTER, replace: false }),
+      body: JSON.stringify({ rows: TEST_ROSTER, replace: false, on_duplicate: "skip" }),
     });
     const j = await r.json();
     if (!r.ok) {
@@ -855,6 +910,10 @@ function TeacherHome() {
         ),
       });
       const j = await r.json();
+      if (r.status === 409) {
+        setStudentEditorError("这个学号已在名册中。要改姓名，请打开原来那一行，这里不会自动改掉。");
+        return;
+      }
       if (!r.ok) {
         setStudentEditorError(j.error ?? "保存失败");
         return;
@@ -1130,7 +1189,7 @@ function TeacherHome() {
           try {
             response = await authFetch("/api/teacher/gradebook", {
               method: "POST",
-              signal: AbortSignal.timeout(38000),
+              signal: AbortSignal.timeout(100000),
               body: JSON.stringify({ assignment_id: gradeId, roster_id: rosterId, action: "ai" }),
             });
           } catch {
@@ -1160,7 +1219,7 @@ function TeacherHome() {
           }
           busyWaits = 0;
           if (!response.ok || body.error) {
-            const fatal = !!body.error && /额度|尚未配置|请求过多/.test(body.error);
+            const fatal = !!body.error && /尚未配置/.test(body.error);
             if (fatal || !response.ok) {
               toast.error(body.error ?? "这一题没批完。已经批完的题目已保存，再点一次会继续。");
               failed = true;
@@ -1430,6 +1489,10 @@ function TeacherHome() {
   }
 
   async function onPdfFile(file: File) {
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      toast.error("这不是 PDF。请换成 PDF 再上传，文件没有开始处理。");
+      return;
+    }
     setPdfBusy("正在把每一页渲染成图片…");
     setPdfNotice("");
     setPdfAiDone(false);
@@ -1600,11 +1663,16 @@ function TeacherHome() {
         }
         await runPdfAi(importId, nextItems);
       } else {
+        await authFetch("/api/teacher/pdf", {
+          method: "POST",
+          body: JSON.stringify({ action: "save-items", import_id: importId, items: [] }),
+        });
         const storageNote = storageNotes.length ? `页图也没保存：${storageNotes.join("；")}。` : "";
-        const msg = `${visionError || "没有切出题目。这份 PDF 的文字对不上官方试卷的「1. (A)(B)(C)(D)」格式，AI 也没有从页图里认出完整题目。"} ${storageNote}草稿已留下，可以手工加题。`.trim();
+        const msg = `${visionError || "没有切出题目。这份 PDF 的文字对不上官方试卷的「1. (A)(B)(C)(D)」格式，AI 也没有从页图里认出完整题目。"} ${storageNote}已标成识别失败，可以手工加题后再提交。`.trim();
         setPdfNotice(msg);
         setItems([]);
-        toast.error("没有切出题目");
+        await loadPdfs();
+        toast.error("没有切出题目，已标成识别失败");
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "PDF 处理失败");
@@ -1665,6 +1733,9 @@ function TeacherHome() {
       }),
     );
     const published = j.import?.status === "published";
+    if (applied.length === 0) {
+      setPdfNotice("这份导入没有题目，不能当作已提交的试卷。请重新上传，或手工加题。");
+    }
     setItems(withUniqueQuestionNumbers(applied));
     setPdfFindings([]);
     setPdfAiRan(false);
@@ -1854,23 +1925,6 @@ function TeacherHome() {
     }
   }, [libraryPapers, paperId, startsAt]);
 
-  useEffect(() => {
-    const id = assignments[0]?.id;
-    if (!id) {
-      setSnapshot(null);
-      return;
-    }
-    let cancel = false;
-    void authFetch(`/api/teacher/gradebook?assignment_id=${id}`).then(async (r) => {
-      if (!r.ok || cancel) return;
-      const j = await r.json();
-      if (!cancel) setSnapshot({ id, rows: j.rows ?? [], scoreMax: typeof j.assignment?.score_max === "number" ? j.assignment.score_max : null });
-    });
-    return () => {
-      cancel = true;
-    };
-  }, [assignments]);
-
   if (authLoading || (!ready && user && !denied && !checkFailed)) {
     return (
       <main className="flex min-h-screen items-center justify-center">
@@ -1964,10 +2018,19 @@ function TeacherHome() {
         ? `${mcqDoneCount} 人已交选择题`
         : `${inProgressCount} 人作答中`;
   const liveCount = assignments.filter((a) => examWindow(a.starts_at, a.ends_at).label === "进行中").length;
-  const overviewRate = mcqRate(snapshot?.rows ?? []);
-  const overviewAp = summarizeApScores((snapshot?.rows ?? []).filter((row) => row.status === "submitted").map(gradeAp), snapshot?.scoreMax);
+  const latestExam = assignments[0] ?? null;
+  const overviewRate = latestExam?.mcq_total ? Math.round(((latestExam.mcq_correct ?? 0) / latestExam.mcq_total) * 100) : null;
+  const overviewAp = latestExam?.ap ?? summarizeApScores([]);
+  const unsubmittedCount = latestExam ? Math.max(0, (latestExam.roster_count ?? 0) - (latestExam.submitted_count ?? 0)) : 0;
+  const openFrqCount = latestExam?.pending_frq ?? 0;
   const classAp = summarizeApScores(gradeRows.filter((row) => row.status === "submitted").map(gradeAp), gradeMeta?.score_max);
-  const pendingCount = snapshot ? snapshot.rows.filter((r) => r.status !== "submitted").length : 0;
+  const pendingCount = unsubmittedCount + openFrqCount;
+  const pendingHint = !latestExam
+    ? "暂无待处理事项"
+    : (() => {
+        const parts = [unsubmittedCount ? `${unsubmittedCount} 人尚未交卷` : "", openFrqCount ? `${openFrqCount} 道大题没批完` : ""].filter(Boolean);
+        return parts.length ? `最近一场${parts.join("，")}` : "最近一场没有待处理";
+      })();
   const gradeRate = mcqRate(gradeRows);
   const bestScore = gradeRows.reduce((best, row) => {
     if (row.mcq_correct == null || !row.mcq_total) return best;
@@ -2171,8 +2234,8 @@ function TeacherHome() {
               <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                 <StatCard label="我的学生" value={roster.length} hint={roster.length ? `${roster.filter((r) => r.user_id).length} 人已入场绑定` : "尚未导入学生"} icon={Users} />
                 <StatCard label="进行中的考试" value={liveCount} hint={assignments.length ? `共布置 ${assignments.length} 场` : "创建考试后会显示在这里"} icon={ClipboardList} />
-                <StatCard label="平均 AP 分" value={formatApAverage(overviewAp)} hint={overviewAp.averageCustom != null ? `折算均分 ${formatScaledScore(overviewAp.averageCustom, overviewAp.scoreMax)}` : overviewAp.scored ? `最近一场 1–5 分，选择题正确率 ${overviewRate ?? "—"}%` : overviewAp.pending ? "最近一场大题还没出分" : "最近一场还没有可换算的成绩"} icon={BarChart3} />
-                <StatCard label="待处理" value={pendingCount} hint={snapshot ? "最近一场尚未交卷" : "暂无待处理事项"} icon={Clock} />
+                <StatCard label="平均 AP 分" value={examsLoaded || assignments.length > 0 ? formatApAverage(overviewAp) : "—"} hint={overviewAp.average != null ? `最近一场已换算 ${overviewAp.scored} 人${openFrqCount ? `，另有 ${openFrqCount} 道大题没批完` : ""}${overviewRate != null ? `，选择题正确率 ${overviewRate}%` : ""}` : openFrqCount || overviewAp.pending ? "最近一场大题还没出分" : "最近一场还没有可换算的成绩"} icon={BarChart3} />
+                <StatCard label="待处理" value={examsLoaded || assignments.length > 0 ? pendingCount : "—"} hint={pendingHint} icon={Clock} />
               </div>
               <div className={cn("grid gap-4", roster.length > 0 && assignments.length > 0 ? "" : "lg:grid-cols-[1.35fr_1fr]")}>
                 {roster.length > 0 && assignments.length > 0 ? null : (
@@ -2220,7 +2283,9 @@ function TeacherHome() {
                   </div>
                   <Button onClick={() => go("exam")}><Plus className="h-4 w-4" />布置考试</Button>
                 </div>
-                {assignments.length === 0 ? (
+                {!examsLoaded && assignments.length === 0 ? (
+                  <EmptyState icon={ClipboardList} title="正在读取考试" hint="上次看到的考试会先留在这里。" />
+                ) : assignments.length === 0 ? (
                   <EmptyState icon={ClipboardList} title="还没有考试" hint="导入学生后，点击「布置考试」创建第一场考试。" />
                 ) : (
                   <div className="overflow-x-auto">
@@ -2577,7 +2642,7 @@ function TeacherHome() {
                             if (!Number.isFinite(mins)) return;
                             setMcqMinutes(mins);
                             const start = Date.parse(startsAt);
-                            if (!Number.isFinite(start) || mins < 10 || mins > 180) return;
+                            if (!Number.isFinite(start)) return;
                             setEndsAt(toLocalInput(new Date(start + sectionTotalMinutes(mins, frqMinutes, frqMinutes > 0 ? breakMinutes : 0) * 60 * 1000)));
                           }}
                         />
@@ -2612,13 +2677,16 @@ function TeacherHome() {
                             if (!Number.isFinite(mins)) return;
                             setBreakMinutes(mins);
                             const start = Date.parse(startsAt);
-                            if (!Number.isFinite(start) || mins < 0 || mins > 20) return;
+                            if (!Number.isFinite(start)) return;
                             setEndsAt(toLocalInput(new Date(start + sectionTotalMinutes(mcqMinutes, frqMinutes, mins) * 60 * 1000)));
                           }}
                         />
                       </Field>
                     </div>
-                    <Field label="满分" hint="学生得分按选择题三分之二、大题三分之一折到这个满分。AP 1–5 仍按 90 分综合分计算。">
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      这场合计 {sectionTotalMinutes(mcqMinutes, frqMinutes, frqMinutes > 0 ? breakMinutes : 0)} 分钟：选择题 {mcqMinutes} 分钟{frqMinutes > 0 ? ` + 休息 ${frqMinutes > 0 ? breakMinutes : 0} 分钟 + 大题 ${frqMinutes} 分钟` : ""}。截止时间按这个合计重算，也可以再延后。
+                    </p>
+                    <Field label="满分" hint="这里默认 100 分，是给学生看的折算分。AP 1–5 另外按 90 分综合分换算，两套分会一起留下。">
                       <Input
                         type="number"
                         min={10}
@@ -2662,7 +2730,11 @@ function TeacherHome() {
 
               <section className="space-y-3">
                 <h2 className="text-[15px] font-semibold">已布置的考试</h2>
-                {assignments.length === 0 ? (
+                {!examsLoaded && assignments.length === 0 ? (
+                  <div className="glass rounded-2xl">
+                    <EmptyState icon={ClipboardList} title="正在读取考试" hint="上次看到的考试会先留在这里。" />
+                  </div>
+                ) : assignments.length === 0 ? (
                   <div className="glass rounded-2xl">
                     <EmptyState icon={ClipboardList} title="还没有考试" hint="生成考试码后发给学生。考试码是 6 位字母和数字，例如 K7PGAD。" />
                   </div>
@@ -2725,7 +2797,11 @@ function TeacherHome() {
                 </div>
                 <Button variant="outline" disabled={!gradeRows.length} onClick={exportCsv}>导出成绩</Button>
               </div>
-              {assignments.length === 0 ? (
+              {!examsLoaded && assignments.length === 0 ? (
+                <div className="glass rounded-2xl">
+                  <EmptyState icon={BarChart3} title="正在读取考试" hint="上次看到的考试会先留在这里。" />
+                </div>
+              ) : assignments.length === 0 ? (
                 <div className="glass rounded-2xl">
                   <EmptyState icon={BarChart3} title="还没有可查看的考试" hint="先到「布置考试」生成考试码，学生交卷后这里会出现成绩。" />
                 </div>
@@ -2899,7 +2975,7 @@ function TeacherHome() {
             <div className="space-y-4">
               <div>
                 <h2 className="text-lg font-semibold">PDF 智能出题</h2>
-                <p className="mt-1 text-xs text-muted-foreground">上传试卷后会自动切题，并先让 AI 审一遍。确认后提交到后台，再去布置考试。</p>
+                <p className="mt-1 text-xs text-muted-foreground">上传试卷后会自动切题，并先让 AI 审一遍。提交后由管理员决定是否放进公开模考，老师不能自己公开。</p>
               </div>
               <section className="glass max-w-3xl rounded-2xl p-5">
                 <label
@@ -2934,7 +3010,7 @@ function TeacherHome() {
                     }}
                   />
                 </label>
-                <p className="mt-3 text-[11px] text-muted-foreground">草稿只对你可见。是否进入模拟考试或练习库，由管理员决定。</p>
+                <p className="mt-3 text-[11px] text-muted-foreground">草稿只对你可见。提交给管理员后，题目会锁定。公开模考里要不要出现，由管理员决定。</p>
               </section>
 
               {imports.length === 0 && !activeImport ? (
@@ -2979,8 +3055,8 @@ function TeacherHome() {
                       <Input placeholder="例如：2022 AP Micro" value={pdfTitle} onChange={(e) => setPdfTitle(e.target.value)} />
                     </Field>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <Button size="sm" onClick={() => setItems((xs) => [...xs, emptyItem(pages[0]?.page_number ?? 1, xs.length + 1, "mcq")])}>加选择题</Button>
-                      <Button size="sm" variant="outline" onClick={() => setItems((xs) => [...xs, emptyItem(pages[0]?.page_number ?? 1, xs.length + 1, "frq")])}>加大题</Button>
+                      <Button size="sm" disabled={alreadyPublished} onClick={() => setItems((xs) => [...xs, emptyItem(pages[0]?.page_number ?? 1, xs.length + 1, "mcq")])}>加选择题</Button>
+                      <Button size="sm" variant="outline" disabled={alreadyPublished} onClick={() => setItems((xs) => [...xs, emptyItem(pages[0]?.page_number ?? 1, xs.length + 1, "frq")])}>加大题</Button>
                       <Button size="sm" variant="outline" disabled={aiBusy || !items.length} onClick={() => void runPdfAi(activeImport, items)}>
                         {aiBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                         {aiBusy ? "AI 审核中…" : "再跑一遍 AI 审核"}
@@ -2995,7 +3071,7 @@ function TeacherHome() {
                       </Button>
                     </div>
                     {alreadyPublished && (
-                      <p className="mt-3 text-xs text-muted-foreground">这份卷已经提交。改题请重新上传 PDF，不要在这里再点提交，以免卷库里出现重复的学校卷。</p>
+                      <p className="mt-3 text-xs text-muted-foreground">已交给管理员审核，题目已锁定。老师不能自己把它放进公开模考。要改题请重新上传一份 PDF，避免卷库里出现重复的学校卷。</p>
                     )}
                     {aiBusy && <p className="mt-3 text-xs text-muted-foreground">AI 正在审核切题，审完后即可提交。</p>}
                     {!pdfAiDone && items.length > 0 && !aiBusy && !alreadyPublished && (
@@ -3044,6 +3120,7 @@ function TeacherHome() {
                     onRemove={(idx) => setItems((xs) => xs.filter((_, i) => i !== idx))}
                     onReplaceImage={(idx, file) => void replaceItemImage(idx, file)}
                     onRecrop={(idx) => void recropItem(idx)}
+                    locked={alreadyPublished}
                   />
                 </div>
               )}
@@ -3101,11 +3178,12 @@ function TeacherHome() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog open={gradeFocusId !== null} onOpenChange={(open) => { if (!open && !gradeBusy) setGradeFocusId(null); }}>
+      <Dialog open={gradeFocusId !== null} onOpenChange={(open) => { if (!open && gradeBusy && gradeBusy !== "ai") return; if (!open) setGradeFocusId(null); }}>
         <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto rounded-2xl">
           {(() => {
             const row = gradeRows.find((item) => item.roster_id === gradeFocusId);
             if (!row) return null;
+            const retryLeft = (row.frqs ?? []).filter((frq) => frqStillRetrying(frq)).length;
             return (
               <>
                 <DialogHeader>
@@ -3127,9 +3205,9 @@ function TeacherHome() {
                       {gradeBusy === "collect" ? "正在收卷" : "收这名学生的卷"}
                     </Button>
                   ) : (
-                    <Button variant="outline" disabled={gradeBusy !== null || examStillOpen} onClick={() => void gradeStudentWithAi()}>
+                    <Button variant="outline" disabled={(gradeBusy !== null && gradeBusy !== "ai") || examStillOpen} onClick={() => void gradeStudentWithAi()}>
                       {gradeBusy === "ai" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                      {examStillOpen ? "截止后批改" : gradeBusy === "ai" ? "正在重试" : "重试这名学生"}
+                      {examStillOpen ? "截止后批改" : gradeBusy === "ai" ? `正在批改${retryLeft ? `，还剩 ${retryLeft} 题` : ""}` : "重试这名学生"}
                     </Button>
                   )}
                 </div>
@@ -3296,7 +3374,7 @@ function TeacherHome() {
                   {(row.frqs ?? []).length === 0 ? <p className="text-sm text-muted-foreground">这份卷没有大题。</p> : null}
                 </div>
                 <div className="flex justify-end gap-2">
-                  <Button variant="outline" disabled={gradeBusy !== null} onClick={() => setGradeFocusId(null)}>关闭</Button>
+                  <Button variant="outline" disabled={gradeBusy !== null && gradeBusy !== "ai"} onClick={() => setGradeFocusId(null)}>关闭</Button>
                   {row.status === "submitted" ? (
                     <Button disabled={gradeBusy !== null || !(row.frqs ?? []).length} onClick={() => void saveManualScores()}>
                       {gradeBusy === "save" ? "正在保存" : "保存分数和评语"}
@@ -3345,17 +3423,56 @@ function TeacherHome() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={rosterDup !== null} onOpenChange={(open) => { if (!open) setRosterDup(null); }}>
+        <DialogContent className="max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>这些学号已经在名册里</DialogTitle>
+            <DialogDescription>
+              {rosterDup ? `${rosterDup.duplicates.length} 个学号重复：${rosterDup.duplicates.slice(0, 8).join("、")}${rosterDup.duplicates.length > 8 ? "…" : ""}。跳过会保留原来的姓名。更新会改成这份名单里的姓名。` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                const choice = rosterDup;
+                if (!choice) return;
+                void importRoster(choice.replace, "skip", choice.rows);
+              }}
+            >
+              跳过重复学号
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                const choice = rosterDup;
+                if (!choice) return;
+                void importRoster(choice.replace, "update", choice.rows);
+              }}
+            >
+              更新姓名
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={studentEditor !== null} onOpenChange={(open) => { if (!open) setStudentEditor(null); }}>
         <DialogContent className="max-w-md rounded-2xl">
           <DialogHeader>
             <DialogTitle>{studentEditor?.id ? "编辑学生" : "添加学生"}</DialogTitle>
-            <DialogDescription>学号在本班内不能重复。已有考试记录的学生不能从名册删除。</DialogDescription>
+            <DialogDescription>
+              {roster.find((row) => row.id === studentEditor?.id)?.id_locked
+                ? "这名学生已经入场，学号不能再改。姓名还可以改。"
+                : "学号在本班内不能重复。重复学号要明确选择跳过或更新，不会自动改姓名。"}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5">
               <Label htmlFor="student-id">学号</Label>
               <Input
                 id="student-id"
+                disabled={!!roster.find((row) => row.id === studentEditor?.id)?.id_locked}
                 value={studentEditor?.student_id ?? ""}
                 onChange={(e) => setStudentEditor((current) => current ? { ...current, student_id: e.target.value } : current)}
               />

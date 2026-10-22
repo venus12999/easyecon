@@ -1187,7 +1187,7 @@ function PaperRunner() {
           : j.error === "rate_limited"
             ? "AI 评分请求过多，请稍后重试"
             : j.error === "ai_not_configured" || j.error === "server_misconfigured"
-              ? "AI 评分尚未配置（需要 Gemini 接口密钥），请联系管理员"
+              ? "AI 评分尚未配置，请联系管理员"
             : j.error || "AI 评分失败，请稍后重试";
         toast.error(message);
         return false;
@@ -1410,9 +1410,11 @@ function PaperRunner() {
                     ? schoolEndsAt
                       ? `${String(Math.floor(remaining / 60)).padStart(2, "0")}:${String(remaining % 60).padStart(2, "0")}`
                       : "—"
-                    : Math.round(paper.total_seconds / 60)}
+                    : frqs.length > 0
+                      ? `${Math.round(paper.total_seconds / 60)}+${Math.round((paper.frq_seconds ?? 3600) / 60)}`
+                      : Math.round(paper.total_seconds / 60)}
                 </div>
-                <div className="text-xs text-muted-foreground mt-0.5">{isSchoolExam && schoolSections ? "选择+大题" : isSchoolExam ? "距离截止" : "分钟"}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">{(isSchoolExam && schoolSections) || (!isSchoolExam && frqs.length > 0) ? "选择+大题" : isSchoolExam ? "距离截止" : "分钟"}</div>
               </div>
             </div>
             {!user && !isSchoolExam && (
@@ -1716,9 +1718,7 @@ function PaperRunner() {
     const lowTime = remaining <= 5 * 60;
     const isMarked = marked.has(cur.id);
     const curCrossed = crossed[cur.id] ?? new Set<OptKey>();
-    const userName = isSchoolExam
-      ? (schoolStudentName || "考生")
-      : (user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Student");
+    const userName = isSchoolExam ? (schoolStudentName || "考生") : mode === "practice" ? "" : "考生";
     const toggleMark = () => {
       const next = new Set(marked);
       if (next.has(cur.id)) next.delete(cur.id);
@@ -1823,14 +1823,7 @@ function PaperRunner() {
           )}
         </header>
 
-        {/* Preview banner */}
-        {!isSchoolExam && (
-          <div className="bg-[#1a2b6b] text-white text-center text-xs font-bold tracking-widest py-1.5">
-            THIS IS A TEST PREVIEW
-          </div>
-        )}
-
-        {/* Body */}
+        {/* Question body */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden">
           <div className="max-w-3xl mx-auto px-4 py-4 sm:px-6 sm:py-6">
             {/* Question header bar */}
@@ -2057,15 +2050,26 @@ function PaperRunner() {
                     );
                   })}
                 </div>
+                <p className="mb-3 text-center text-xs text-slate-500">点题号回到那一题。交卷用底部右侧的按钮，这里不会交卷。</p>
+                {!isSchoolExam && mode === "practice" && frqs.length > 0 ? (
+                  <div className="mb-4 space-y-3 border-t border-slate-200 pt-4">
+                    <h4 className="text-sm font-semibold">大题预览</h4>
+                    <p className="text-xs text-slate-500">可以先看大题。这里只是预览，不会交卷，答案要等选择题交卷后才能写。</p>
+                    {frqs.map((item) => (
+                      <div key={item.id} className="rounded-lg border border-slate-200 p-3 text-left">
+                        <p className="text-sm font-semibold">{item.title || `Q${item.sort_order}`}</p>
+                        <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{item.content}</p>
+                        {item.image_url ? <div className="mt-2"><ExamFigure src={item.image_url} pageUrl={readPageImage(item.image_text)} alt="大题图表" /></div> : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
                 <div className="flex justify-center">
                   <button
-                    onClick={() => {
-                      setShowNav(false);
-                      setConfirmSubmit(true);
-                    }}
+                    onClick={() => setShowNav(false)}
                     className="rounded-full border-2 border-[#1a2b6b] text-[#1a2b6b] font-semibold px-5 py-2 text-sm hover:bg-[#1a2b6b] hover:text-white"
                   >
-                    Go to Review Page
+                    返回这道题
                   </button>
                 </div>
               </div>

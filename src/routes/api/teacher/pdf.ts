@@ -205,7 +205,15 @@ export const Route = createFileRoute("/api/teacher/pdf")({
           .eq("class_id", cls.id)
           .order("created_at", { ascending: false })
           .limit(30);
-        return Response.json({ imports: data ?? [] });
+        const ids = (data ?? []).map((row) => row.id);
+        const { data: itemRows } = ids.length
+          ? await db.from("school_pdf_items").select("import_id").in("import_id", ids)
+          : { data: [] as { import_id: string }[] };
+        const counts = new Map<string, number>();
+        for (const row of itemRows ?? []) counts.set(row.import_id, (counts.get(row.import_id) ?? 0) + 1);
+        return Response.json({
+          imports: (data ?? []).map((row) => ({ ...row, item_count: counts.get(row.id) ?? 0 })),
+        });
         } catch (e) {
           return jsonErr(e instanceof Error ? e.message : "教师接口失败", 500);
         }
@@ -350,6 +358,10 @@ export const Route = createFileRoute("/api/teacher/pdf")({
         if (action === "save-items") {
           const items = Array.isArray(body.items) ? body.items : [];
           await db.from("school_pdf_items").delete().eq("import_id", packed.import.id);
+          if (items.length === 0) {
+            await db.from("school_pdf_imports").update({ status: "rendered" }).eq("id", packed.import.id);
+            return jsonErr("没有认出题目");
+          }
           if (items.length > 0) {
             const { error } = await db.from("school_pdf_items").insert(
               items.map((it, i) => ({
@@ -390,7 +402,7 @@ export const Route = createFileRoute("/api/teacher/pdf")({
         if (action === "publish") {
           const fresh = await loadImport(packed.import.id, cls.id, db);
           if (!fresh) return jsonErr("not found", 404);
-          if (fresh.items.length === 0) return jsonErr("请先按页切题");
+          if (fresh.items.length === 0) return jsonErr("没有题目，不能提交");
           const pageMap = new Map(fresh.pages.map((p) => [p.page_number, p]));
           const images = body.item_images ?? {};
           const { data: kp } = await db.from("knowledge_points").select("id").eq("slug", "school-import").maybeSingle();

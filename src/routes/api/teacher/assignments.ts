@@ -4,7 +4,8 @@ import { apMicroScore, scoreMaxError, summarizeApScores, type ApClassSummary } f
 import { sectionMinutesError, sectionTotalMinutes } from "@/lib/exam-sections";
 import { withExamAiGrade } from "@/lib/exam-flags";
 import { jsonErr } from "@/lib/json-api";
-import { collectFinishedExam, continueGradeBatch, readStoredGrades, teacherFrqViews } from "@/lib/school-exam.server";
+import { isBlankStudentAnswer } from "@/lib/frq-answer";
+import { collectFinishedExam, continueGradeBatch, parseFrqAnswers, readStoredGrades, teacherFrqViews } from "@/lib/school-exam.server";
 import { ensureTeacherClass, getTeacherDb, isSchoolAdmin, verifyTeacherRequest } from "@/lib/teacher-auth.server";
 import { createFixedRandomSchoolPaper, makeExamCode } from "@/lib/school-random-paper.server";
 import { isUuid } from "@/lib/school-exam-session";
@@ -17,31 +18,42 @@ type AttemptScoreRow = {
   frq_answers?: unknown;
 };
 
-function apForAssignment(rows: AttemptScoreRow[], frqIds: string[], frqMax: number, scoreMax: number | null): ApClassSummary {
+function frqWasAnswered(raw: unknown, id: string) {
+  const item = parseFrqAnswers(raw).items[id];
+  if (!item || typeof item !== "object") return false;
+  const text = typeof item.text === "string" ? item.text : "";
+  return !isBlankStudentAnswer(text, typeof item.fileUrl === "string" ? item.fileUrl : null);
+}
+
+function apForAssignment(rows: AttemptScoreRow[], frqIds: string[], frqMax: number, scoreMax: number | null): { ap: ApClassSummary; pending_frq: number } {
+  let pendingFrq = 0;
   const results = rows
     .filter((row) => row.submitted_at)
     .map((row) => {
       const grades = readStoredGrades(row.frq_answers);
-      let earned: number | null = 0;
+      let earned = 0;
+      let open = false;
       if (frqMax > 0) {
         for (const id of frqIds) {
-          const grade = grades[id];
-          const score = grade?.manual_score ?? grade?.ai_score;
-          if (typeof score !== "number") {
-            earned = null;
-            break;
+          const score = grades[id]?.manual_score ?? grades[id]?.ai_score;
+          if (typeof score === "number") {
+            earned += score;
+            continue;
           }
-          earned += score;
+          if (frqWasAnswered(row.frq_answers, id)) {
+            open = true;
+            pendingFrq += 1;
+          }
         }
       }
       return apMicroScore({
         mcqCorrect: row.mcq_correct,
         mcqTotal: row.mcq_total,
-        frqEarned: frqMax > 0 ? earned : null,
+        frqEarned: frqMax > 0 && !open ? earned : null,
         frqMax: frqMax > 0 ? frqMax : null,
       });
     });
-  return summarizeApScores(results, scoreMax);
+  return { ap: summarizeApScores(results, scoreMax), pending_frq: pendingFrq };
 }
 
 async function frqScales(db: { from: typeof supabaseAdmin.from }, paperIds: string[]) {
@@ -125,7 +137,7 @@ async function listAllExamScores(request: Request) {
         submitted_count: stat?.submitted_count ?? 0,
         mcq_correct: stat?.mcq_correct ?? 0,
         mcq_total: stat?.mcq_total ?? 0,
-        ap: apForAssignment(
+        ...apForAssignment(
           (attempts ?? []).filter((row) => row.assignment_id === exam.id),
           frqScale.ids.get(exam.paper_id) ?? [],
           frqScale.max.get(exam.paper_id) ?? 0,
@@ -215,7 +227,7 @@ export const Route = createFileRoute("/api/teacher/assignments")({
               submitted_count: stat?.submitted_count ?? 0,
               mcq_correct: stat?.mcq_correct ?? 0,
               mcq_total: stat?.mcq_total ?? 0,
-              ap: apForAssignment(
+              ...apForAssignment(
                 (attempts ?? []).filter((row) => row.assignment_id === a.id),
                 frqScale.ids.get(a.paper_id) ?? [],
                 frqScale.max.get(a.paper_id) ?? 0,

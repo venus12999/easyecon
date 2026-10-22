@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { mediaSrc, mediaSrcRetry } from "@/lib/media-src";
 
 function pageCandidates(src: string) {
@@ -21,6 +21,10 @@ export function isThinFigure(width: number, height: number) {
   return width / Math.max(1, height) > 7 && height < 200;
 }
 
+function isCleanAsset(src: string) {
+  return src.split("?")[0].startsWith("/papers/");
+}
+
 /** Show the saved crop through this site, and fall back to the full page when the crop fails or is only a strip. */
 export function ExamFigure({
   src,
@@ -37,22 +41,27 @@ export function ExamFigure({
   const [usePage, setUsePage] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [broken, setBroken] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const retrying = useRef(false);
 
   useEffect(() => {
     setPages(null);
     setUsePage(false);
     setAttempt(0);
     setBroken(false);
+    setLoaded(false);
+    retrying.current = false;
   }, [src, pageUrl]);
 
   const shown = usePage && page ? page : crop;
   const busted = mediaSrcRetry(shown, attempt);
 
   async function recover(width: number, height: number) {
-    if (!isThinFigure(width, height) || usePage) return;
+    if (isCleanAsset(src) || !isThinFigure(width, height) || usePage) return;
     if (page) {
       setUsePage(true);
       setAttempt(0);
+      setLoaded(false);
       return;
     }
     const found = (await Promise.all(pageCandidates(src).map(loadSize))).filter((row): row is NonNullable<typeof row> => !!row && row.height >= 400);
@@ -61,21 +70,28 @@ export function ExamFigure({
   }
 
   function fail() {
+    if (retrying.current) return;
+    if (attempt < 4) {
+      retrying.current = true;
+      window.setTimeout(() => {
+        retrying.current = false;
+        setAttempt((n) => n + 1);
+      }, 400 * (attempt + 1));
+      return;
+    }
     if (!usePage && page && page !== crop) {
       setUsePage(true);
       setAttempt(0);
-      setBroken(false);
-      return;
-    }
-    if (attempt < 2) {
-      setAttempt((n) => n + 1);
+      setLoaded(false);
       return;
     }
     setBroken(true);
   }
 
   function retry() {
+    retrying.current = false;
     setBroken(false);
+    setLoaded(false);
     setUsePage(false);
     setPages(null);
     setAttempt((n) => n + 1);
@@ -104,12 +120,14 @@ export function ExamFigure({
         </div>
       ) : (
         <a href={busted} target="_blank" rel="noreferrer" className="block">
+          {!loaded ? <p className="mb-2 text-xs text-slate-500">正在加载图表…</p> : null}
           <img
             key={busted}
             src={busted}
             alt={alt}
             className="max-h-[70vh] max-w-full h-auto rounded border border-slate-300 bg-white"
             onLoad={(e) => {
+              setLoaded(true);
               const img = e.currentTarget;
               if (usePage) return;
               void recover(img.naturalWidth, img.naturalHeight);
@@ -118,17 +136,14 @@ export function ExamFigure({
           />
         </a>
       )}
-      <div className="flex flex-wrap gap-3 text-xs">
-        {page ? (
-          <button type="button" className="text-primary" onClick={() => { setUsePage(true); setBroken(false); setAttempt(0); }}>
+      {loaded && page ? (
+        <div className="flex flex-wrap gap-3 text-xs">
+          <button type="button" className="text-primary" onClick={() => { setUsePage(true); setBroken(false); setLoaded(false); setAttempt(0); }}>
             {usePage ? "正在显示原页" : "查看原页"}
           </button>
-        ) : null}
-        {page ? (
           <a href={page} target="_blank" rel="noreferrer" className="text-primary">打开原页</a>
-        ) : null}
-        <button type="button" className="text-primary" onClick={retry}>重新加载图表</button>
-      </div>
+        </div>
+      ) : null}
     </div>
   );
 }

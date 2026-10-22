@@ -103,6 +103,7 @@ export function PdfQuestionList({
   onRemove,
   onReplaceImage,
   onRecrop,
+  locked,
 }: {
   items: TeacherPdfItem[];
   findings: PdfAiFinding[];
@@ -111,6 +112,7 @@ export function PdfQuestionList({
   onRemove: (index: number) => void;
   onReplaceImage?: (index: number, file: File) => void;
   onRecrop?: (index: number) => void;
+  locked?: boolean;
 }) {
   const [editing, setEditing] = useState<number | null>(null);
   const [onlyFlagged, setOnlyFlagged] = useState(false);
@@ -147,6 +149,7 @@ export function PdfQuestionList({
           onRemove={onRemove}
           onReplaceImage={onReplaceImage}
           onRecrop={onRecrop}
+          locked={locked}
         />
       ))}
     </div>
@@ -164,6 +167,7 @@ function PdfQuestionCard({
   onRemove,
   onReplaceImage,
   onRecrop,
+  locked,
 }: {
   it: TeacherPdfItem;
   idx: number;
@@ -175,6 +179,7 @@ function PdfQuestionCard({
   onRemove: (index: number) => void;
   onReplaceImage?: (index: number, file: File) => void;
   onRecrop?: (index: number) => void;
+  locked?: boolean;
 }) {
   const [shot, setShot] = useState<"ok" | "weak" | "broken" | "none">("none");
   useEffect(() => {
@@ -304,10 +309,16 @@ function PdfQuestionCard({
                 )}
               </div>
               <div className="flex gap-2 shrink-0">
-                <Button size="sm" variant="outline" onClick={onToggle}>
-                  {open ? "收起" : "编辑"}
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => onRemove(idx)}>删除</Button>
+                {locked ? (
+                  <span className="text-xs text-muted-foreground">已锁定</span>
+                ) : (
+                  <>
+                    <Button size="sm" variant="outline" onClick={onToggle}>
+                      {open ? "收起" : "编辑"}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => onRemove(idx)}>删除</Button>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>

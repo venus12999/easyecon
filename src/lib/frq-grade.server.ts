@@ -1,3 +1,5 @@
+import { isBlankStudentAnswer } from "@/lib/frq-answer";
+import { GRADING_TIMEOUT_MS, gradingBaseUrl, gradingModel } from "@/lib/grading-config.server";
 import { splitImageTextRubric } from "@/lib/frq-teacher-fields";
 
 export const FRQ_GRADER_PROMPT = `你是 AP Microeconomics（AP 微观经济）资深阅卷官（Reader），按 AP 官方阅卷的方式为中国学生批改大题（FRQ）。题目可能是 College Board 原题，也可能是任课老师自编的题目。
@@ -210,6 +212,108 @@ function sanitizeGrade(g: FrqGradeResult & { needs_review?: boolean; suggestions
   };
 }
 
+type GradeImagePart = { type: "image_url"; image_url: { url: string } };
+type GradeUserContent = string | Array<{ type: "text"; text: string } | GradeImagePart>;
+
+function logGrade(fields: {
+  request_id: string;
+  model: string;
+  latency_ms: number;
+  ok: boolean;
+  status?: number;
+  prompt_tokens?: number | null;
+  completion_tokens?: number | null;
+  error?: string;
+}) {
+  console.info(JSON.stringify({ event: "frq_grade", ...fields }));
+}
+
+function blankGrade(maxScore: number): FrqGradeResult {
+  return {
+    total_score: 0,
+    max_score: maxScore,
+    breakdown: [{ point: "整题", awarded: false, comment: "未作答", points: maxScore, earned: 0 }],
+    overall_comment: "未作答",
+    suggestions: "",
+    needs_review: false,
+  };
+}
+
+async function completeGrade(input: {
+  requestId: string;
+  model: string;
+  system: string;
+  userContent: GradeUserContent;
+}): Promise<{ ok: true; content: string } | { ok: false; error: string; status: number }> {
+  const apiKey = process.env.LAOZHANG_API_KEY?.trim();
+  if (!apiKey) {
+    logGrade({ request_id: input.requestId, model: input.model, latency_ms: 0, ok: false, error: "not_configured" });
+    return { ok: false, error: "ai_not_configured", status: 0 };
+  }
+  const started = Date.now();
+  let status = 0;
+  try {
+    const upstream = await fetch(`${gradingBaseUrl()}/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      signal: AbortSignal.timeout(GRADING_TIMEOUT_MS),
+      body: JSON.stringify({
+        model: input.model,
+        temperature: 0,
+        max_tokens: 3072,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: input.system },
+          { role: "user", content: input.userContent },
+        ],
+      }),
+    });
+    status = upstream.status;
+    const latency = Date.now() - started;
+    if (status === 401 || status === 403) {
+      await upstream.body?.cancel();
+      logGrade({ request_id: input.requestId, model: input.model, latency_ms: latency, ok: false, status, error: "not_configured" });
+      return { ok: false, error: "ai_not_configured", status };
+    }
+    if (status === 429) {
+      await upstream.body?.cancel();
+      logGrade({ request_id: input.requestId, model: input.model, latency_ms: latency, ok: false, status, error: "rate_limited" });
+      return { ok: false, error: "rate_limited", status };
+    }
+    if (!upstream.ok) {
+      await upstream.body?.cancel();
+      logGrade({ request_id: input.requestId, model: input.model, latency_ms: latency, ok: false, status, error: "upstream" });
+      return { ok: false, error: "ai_failed", status };
+    }
+    const data = await upstream.json() as { choices?: Array<{ message?: { content?: unknown } }>; usage?: { prompt_tokens?: number; completion_tokens?: number; input_tokens?: number; output_tokens?: number } };
+    const usage = data.usage;
+    logGrade({
+      request_id: input.requestId,
+      model: input.model,
+      latency_ms: latency,
+      ok: true,
+      status,
+      prompt_tokens: usage?.prompt_tokens ?? usage?.input_tokens ?? null,
+      completion_tokens: usage?.completion_tokens ?? usage?.output_tokens ?? null,
+    });
+    return { ok: true, content: String(data.choices?.[0]?.message?.content ?? "") };
+  } catch (error) {
+    const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+    logGrade({
+      request_id: input.requestId,
+      model: input.model,
+      latency_ms: Date.now() - started,
+      ok: false,
+      status,
+      error: timedOut ? "timeout" : "network",
+    });
+    return { ok: false, error: "ai_failed", status };
+  }
+}
+
 export async function gradeFrqAnswer(input: {
   frq: FrqRow;
   rubricNote: string | null;
@@ -217,14 +321,12 @@ export async function gradeFrqAnswer(input: {
   answerFileUrl: string | null;
   answerFileKind: string | null;
 }): Promise<{ ok: true; grade: FrqGradeResult } | { ok: false; error: string }> {
-  const apiKey = process.env.LOVABLE_API_KEY;
-  if (!apiKey) return { ok: false, error: "ai_not_configured" };
-  const system = FRQ_GRADER_PROMPT;
   const frq = input.frq;
   const maxScore = frq.max_score ?? 0;
   if (maxScore < 1) return { ok: false, error: "missing_max_score" };
+  if (isBlankStudentAnswer(input.answerText, input.answerFileUrl)) return { ok: true, grade: blankGrade(maxScore) };
+  const model = gradingModel();
   const answerText = clipPrompt(input.answerText, 15000);
-  const hasText = !!answerText;
   const fileUrl = httpsUrl(input.answerFileUrl);
   const figureUrl = httpsUrl(frq.image_url);
   const hasFile = !!fileUrl;
@@ -246,60 +348,24 @@ export async function gradeFrqAnswer(input: {
   }
   userTextParts.push(answerLines.join("\n"));
   const userText = userTextParts.join("\n\n");
-  const attempts: Array<{ model: string; figure: boolean; answerImage: boolean; jsonMode: boolean; timeoutMs: number }> = [
-    { model: "google/gemini-2.5-flash", figure: true, answerImage: true, jsonMode: true, timeoutMs: 18000 },
-    { model: "google/gemini-2.5-flash", figure: false, answerImage: false, jsonMode: false, timeoutMs: 15000 },
-  ];
+  const images: GradeImagePart[] = [];
+  if (hasFile && input.answerFileKind === "image") images.push({ type: "image_url", image_url: { url: fileUrl } });
+  if (figureUrl) images.push({ type: "image_url", image_url: { url: figureUrl } });
+  const passes: GradeUserContent[] = [images.length ? [{ type: "text", text: userText }, ...images] : userText];
+  if (images.length) passes.push(userText);
   let lastError = "ai_failed";
-  const tried = new Set<string>();
-  for (const attempt of attempts) {
-    const images: Array<{ type: "image_url"; image_url: { url: string } }> = [];
-    if (attempt.answerImage && hasFile && input.answerFileKind === "image") images.push({ type: "image_url", image_url: { url: fileUrl } });
-    if (attempt.figure && figureUrl) images.push({ type: "image_url", image_url: { url: figureUrl } });
-    const signature = `${attempt.model}:${attempt.jsonMode}:${images.map((image) => image.image_url.url).join("|")}`;
-    if (tried.has(signature)) continue;
-    tried.add(signature);
-    const userContent = images.length ? [{ type: "text", text: userText }, ...images] : userText;
-    let upstream: Response;
-    try {
-      upstream = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        signal: AbortSignal.timeout(attempt.timeoutMs),
-        body: JSON.stringify({
-          model: attempt.model,
-          messages: [
-            { role: "system", content: system },
-            { role: "user", content: userContent },
-          ],
-          temperature: 0,
-          max_tokens: 3072,
-          ...(attempt.jsonMode ? { response_format: { type: "json_object" } } : {}),
-        }),
-      });
-    } catch (error) {
-      console.error("frq grade error", attempt.model, error);
-      lastError = "ai_failed";
+  for (let index = 0; index < passes.length; index += 1) {
+    const requestId = crypto.randomUUID();
+    const completed = await completeGrade({ requestId, model, system: FRQ_GRADER_PROMPT, userContent: passes[index] });
+    if (!completed.ok) {
+      lastError = completed.error;
+      if (completed.error === "ai_not_configured" || completed.status !== 400) break;
       continue;
     }
-    if (upstream.status === 429) {
-      lastError = "rate_limited";
-      continue;
-    }
-    if (upstream.status === 402) return { ok: false, error: "credits_exhausted" };
-    if (!upstream.ok) {
-      console.error("frq grade error", attempt.model, upstream.status, (await upstream.text()).slice(0, 300));
-      lastError = "ai_failed";
-      continue;
-    }
-    const data = await upstream.json();
-    const raw = String(data?.choices?.[0]?.message?.content ?? "");
-    const parsed = tryParseJson(raw);
+    const parsed = tryParseJson(completed.content);
     if (!parsed) {
       lastError = "ai_failed";
+      logGrade({ request_id: requestId, model, latency_ms: 0, ok: false, error: "bad_json" });
       continue;
     }
     const clean = sanitizeGrade(parsed);

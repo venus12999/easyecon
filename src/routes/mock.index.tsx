@@ -4,6 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Clock, FileText, Shuffle, ChevronRight, Loader2, History, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { sectionTimingLabel } from "@/lib/exam-sections";
+import { ap2025Clock } from "@/lib/ap-2025-paper";
 
 export const Route = createFileRoute("/mock/")({
   head: () => ({ meta: [{ title: "模考 · 真题卷库" }] }),
@@ -16,8 +18,19 @@ type Paper = {
   title: string;
   year: number | null;
   total_seconds: number;
+  frq_seconds?: number | null;
+  break_seconds?: number | null;
   description: string | null;
 };
+
+function libraryTiming(paper: Paper) {
+  const clock = ap2025Clock(paper.slug, paper);
+  const mcq = Math.round(clock.total_seconds / 60);
+  const frq = clock.frq_seconds == null ? 60 : Math.round(clock.frq_seconds / 60);
+  const breakMinutes = clock.break_seconds == null ? 10 : Math.round(clock.break_seconds / 60);
+  const mcqMinutes = mcq > 90 ? 70 : mcq;
+  return sectionTimingLabel(mcqMinutes * 60, frq * 60, frq > 0 ? breakMinutes * 60 : 0) ?? `选择题 ${mcqMinutes} 分钟`;
+}
 
 function MockLibrary() {
   const [papers, setPapers] = useState<Paper[] | null>(null);
@@ -27,7 +40,7 @@ function MockLibrary() {
   useEffect(() => {
     supabase
       .from("mock_papers")
-      .select("id,slug,title,year,total_seconds,description")
+      .select("id,slug,title,year,total_seconds,frq_seconds,break_seconds,description")
       .not("slug", "like", "frq-%")
       .not("slug", "like", "school-%")
       .order("sort_order", { ascending: true })
@@ -109,7 +122,7 @@ function MockLibrary() {
                       <div className="mt-1.5 flex items-center gap-3 text-xs text-muted-foreground">
                         <span className="inline-flex items-center gap-1">
                           <Clock className="h-3 w-3" />
-                          {Math.round(p.total_seconds / 60)} 分钟
+                          {libraryTiming(p)}
                         </span>
                         {p.year && <span>{p.year} 年</span>}
                         {best[p.slug] && (
