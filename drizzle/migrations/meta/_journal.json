@@ -8,6 +8,13 @@
       "when": 1792166870232,
       "tag": "0000_teacher_signup_role",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792676146233,
+      "tag": "0001_school_assignment_sections",
+      "breakpoints": true
     }
   ]
 }
