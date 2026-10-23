@@ -1,4 +1,4 @@
-import { looksLikeProvidedFigure, officialFrqMax, printedQuestionNumber, readPrintedScore, recoverOptionE, studentVisibleQuestion, withUniqueQuestionNumbers } from "@/lib/ap-exam-parse";
+import { looksLikeProvidedFigure, officialFrqMax, printedQuestionNumber, readableFrqLabel, readPrintedScore, recoverOptionE, studentVisibleQuestion, withUniqueQuestionNumbers } from "@/lib/ap-exam-parse";
 
 export type VisionExamItem = {
   kind: "mcq" | "frq";
@@ -65,7 +65,6 @@ function sanitizeItems(raw: unknown, pages: VisionPage[]): VisionExamItem[] {
     if (kind === "frq" && visible.length < 8 && fig && (content || stem).length >= 20) {
       visible = `Refer to ${fig[0].replace(/\s+/g, " ")}.`;
     }
-    const visibleStem = kind === "frq" ? studentVisibleQuestion(stem, pageText) : stem;
     const option_a = clip(rec.option_a, 500);
     const option_b = clip(rec.option_b, 500);
     const option_c = clip(rec.option_c, 500);
@@ -81,9 +80,11 @@ function sanitizeItems(raw: unknown, pages: VisionPage[]): VisionExamItem[] {
     const fromModel = Number.isFinite(modelScore) && modelScore >= 1 && modelScore <= 20 ? modelScore : 0;
     const modelNo = Number(rec.question_number);
     const printedNo = printedQuestionNumber(`${stem}\n${content}`);
+    const sortOrder = printedNo ?? (Number.isInteger(modelNo) && modelNo >= 1 && modelNo <= 80 ? modelNo : 0);
+    const visibleStem = kind === "frq" ? readableFrqLabel(studentVisibleQuestion(stem, pageText) || stem, visible, sortOrder || 1) : stem;
     items.push({
       kind,
-      sort_order: printedNo ?? (Number.isInteger(modelNo) && modelNo >= 1 && modelNo <= 80 ? modelNo : 0),
+      sort_order: sortOrder,
       page_number,
       stem: visibleStem || visible.slice(0, 180) || stem.slice(0, 180),
       option_a,
@@ -94,7 +95,7 @@ function sanitizeItems(raw: unknown, pages: VisionPage[]): VisionExamItem[] {
       correct_answer: kind === "mcq" && /^[A-E]$/.test(answer) ? answer : "",
       content: kind === "frq" ? visible : "",
       max_score: kind === "frq" ? officialFrqMax(`${stem}\n${content}`, fromModel > 0 && fromModel !== 9 ? fromModel : 0) : printed || fromModel || 1,
-      needs_image: looksLikeProvidedFigure(blob),
+      needs_image: looksLikeProvidedFigure(`${blob}\n${visible}`),
     });
   }
   return withUniqueQuestionNumbers(items);
@@ -111,11 +112,11 @@ export async function visionParseExamPages(pages: VisionPage[]): Promise<{ items
       text: [
         "下面是一份老师上传的试卷，按页给出图片和提取到的文字。",
         "只抽出页面上真正印出的题目，不要编造，不要把说明、封面、答题卡说明当成题。",
-        "选择题 kind=mcq，必须有题干，并且 A、B、C、D、E 都要原样抄下。卷面印了 E 时 option_e 不能空，也不要把 E 的文字并进 option_d。大题、简答、free-response 用 kind=frq。",
+        "选择题 kind=mcq。卷面是 A 到 E 五选一。option_a 到 option_e 都要原样抄下，option_e 不能空，也不要把 E 并进 option_d。E 经常在 D 的下一行或右栏。大题、简答、free-response 用 kind=frq。",
         "max_score 用卷面印出的分值。大题如果每个小问写了 (N points)，把各小问分值相加作为这道大题的满分。选择题没写分值就用 1。看不清分值时不要填 9。",
         "question_number 用卷面印的题号。选择题和大题如果连着编成 Q1、Q2、Q3、Q4，大题就要写成 3 和 4，不要把大题从 1 重新编号。",
         "页码用我标出的 page_number。看不清就不要猜那一题。",
-        "大题的 content 和 stem 只抄卷面上印出来的句子。不要描述图，不要写曲线怎么走，不要写交点、均衡价格或数量。卷面如果只写了 Refer to Figure 1，就只保留这句。",
+        "大题的 content 和 stem 只抄卷面上印出来的句子。题干写 table above、diagram above、上表、上图时，把这道题上方的表或图里印出的文字一并放进 content，不要丢掉。不要描述图，不要写曲线怎么走，不要写交点、均衡价格或数量。卷面如果只写了 Refer to Figure 1，就只保留这句。",
         ...pages.map((p) => `\n--- 第 ${p.page_number} 页文字 ---\n${p.text || "（这一页没有提取到文字）"}`),
       ].join("\n"),
     },

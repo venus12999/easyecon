@@ -1,6 +1,6 @@
 import * as pdfjs from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-import type { TextBox } from "@/lib/exam-page-crop";
+import { readingOrderText, type TextBox } from "@/lib/exam-page-crop";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -36,12 +36,10 @@ export async function rasterizePdf(
     });
     const textContent = await page.getTextContent();
     const boxes: TextBox[] = [];
-    const parts: string[] = [];
     for (const raw of textContent.items) {
       if (!raw || typeof raw !== "object" || !("str" in raw)) continue;
       const item = raw as { str: string; transform: number[]; width: number; height: number };
       const str = String(item.str ?? "");
-      parts.push(str);
       const [x, y] = viewport.convertToViewportPoint(item.transform[4], item.transform[5]);
       const h = Math.abs((item.transform[3] || item.height || 12) * (viewport.scale ?? scale));
       const w = Math.max(item.width * (viewport.scale ?? scale), str.length * 4);
@@ -50,7 +48,7 @@ export async function rasterizePdf(
     pages.push({
       page_number: i,
       blob,
-      extracted_text: parts.join(" ").replace(/\s+/g, " ").trim(),
+      extracted_text: readingOrderText(boxes),
       width: canvas.width,
       height: canvas.height,
       boxes,

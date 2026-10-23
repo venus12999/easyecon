@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { jsonErr } from "@/lib/json-api";
-import { studentVisibleQuestion, withUniqueQuestionNumbers } from "@/lib/ap-exam-parse";
+import { looksLikeProvidedFigure, readableFrqLabel, studentVisibleQuestion, withUniqueQuestionNumbers } from "@/lib/ap-exam-parse";
 import { withPageImage, withPointMarker } from "@/lib/exam-flags";
 import { packTeacherFrq, splitTeacherFrq, teacherGradingNote, withTeacherRubric } from "@/lib/frq-teacher-fields";
 import { fileToVisionPage, visionParseExamPages } from "@/lib/pdf-vision.server";
@@ -479,11 +479,11 @@ export const Route = createFileRoute("/api/teacher/pdf")({
               return {
                 paper_id: paper.id,
                 sort_order: it.sort_order,
-                title: (it.stem ?? "").trim() || `Q${it.sort_order}`,
+                title: readableFrqLabel(it.stem ?? "", unpacked.content, it.sort_order),
                 content: studentVisibleQuestion(unpacked.content, page?.extracted_text ?? "")
                   || studentVisibleQuestion(it.stem ?? "", page?.extracted_text ?? "")
                   || `见第 ${it.page_number} 页`,
-                image_url: crop || null,
+                image_url: crop || (looksLikeProvidedFigure(`${it.stem ?? ""} ${unpacked.content}`) ? page?.image_url ?? null : null),
                 image_text: withPageImage(withTeacherRubric(page?.extracted_text, grading), page?.image_url),
                 max_score: Number(it.max_score),
                 exclude_from_pool: true,

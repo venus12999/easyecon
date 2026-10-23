@@ -28,8 +28,34 @@ export function gradingModel() {
   return (GRADING_MODELS as readonly string[]).includes(requested) ? requested : DEFAULT_MODEL;
 }
 
+/**
+ * LaoZhang does not cap account RPM or concurrency. A 429 comes from the upstream model.
+ * Grading stays at one request so a limit does not turn into a retry loop.
+ */
 export function gradingConcurrency() {
-  return boundedInt(process.env.GRADING_CONCURRENCY, 3, 1, 8);
+  return boundedInt(process.env.GRADING_CONCURRENCY, 1, 1, 4);
+}
+
+/** Seconds or an HTTP date. Unusable values are ignored so the caller can fall back to exponential wait. */
+export function parseRetryAfter(header: string | null) {
+  const raw = header?.trim() ?? "";
+  if (!raw) return null;
+  if (/^\d+(\.\d+)?$/.test(raw)) {
+    const ms = Math.round(Number(raw) * 1000);
+    return ms >= 1000 && ms <= 15 * 60_000 ? ms : null;
+  }
+  const at = Date.parse(raw);
+  if (!Number.isFinite(at)) return null;
+  const ms = at - Date.now();
+  return ms >= 1000 && ms <= 15 * 60_000 ? ms : null;
+}
+
+/** Retry-After when the upstream sent one. Otherwise 20s, 40s, 80s, then 120s, plus a few seconds of jitter. */
+export function rateLimitWaitMs(previousTries: number, headerMs: number | null) {
+  const jitter = 1000 + Math.floor(Math.random() * 4000);
+  if (headerMs != null && headerMs >= 1000) return Math.min(180_000, headerMs + jitter);
+  const step = Math.min(3, Math.max(0, previousTries));
+  return Math.min(120_000, 20_000 * 2 ** step) + jitter;
 }
 
 export function gradingMaxRetries() {

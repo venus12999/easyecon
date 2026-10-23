@@ -2,6 +2,30 @@
 
 export type TextBox = { str: string; x: number; y: number; w: number; h: number };
 
+/** Keep line breaks and a right-column choice. Flattening the page into one line drops option E. */
+export function readingOrderText(boxes: TextBox[]) {
+  const lines: TextBox[][] = [];
+  const sorted = boxes.filter((box) => box.str.trim()).sort((a, b) => a.y - b.y || a.x - b.x);
+  for (const box of sorted) {
+    const line = lines.find((row) => Math.abs((row[0]?.y ?? box.y) - box.y) < Math.max(6, Math.min(row[0]?.h ?? box.h, box.h) * 0.7));
+    if (line) line.push(box);
+    else lines.push([box]);
+  }
+  return lines.map((line) => {
+    line.sort((a, b) => a.x - b.x);
+    let text = "";
+    let edge = -1;
+    for (const box of line) {
+      const piece = box.str.trim();
+      if (!piece) continue;
+      const gap = edge >= 0 ? box.x - edge : 0;
+      text += text && gap > 36 ? `\n${piece}` : text ? ` ${piece}` : piece;
+      edge = box.x + Math.max(box.w, piece.length * 4);
+    }
+    return text;
+  }).filter(Boolean).join("\n");
+}
+
 export type RasterPageCrop = {
   page_number: number;
   width: number;

@@ -1597,7 +1597,7 @@ function PaperRunner() {
                 <div className="font-semibold">
                   {isSchoolExam ? `Q${f.sort_order}` : `Question ${i + 1}`}
                   {shortFrqTitle(f.title, f.content) ? ` · ${shortFrqTitle(f.title, f.content)}` : ""}
-                  <span className="ml-2 text-xs text-muted-foreground">满分 {f.max_score} 分</span>
+                  <span className="ml-2 text-xs text-muted-foreground">· 满分 {f.max_score} 分</span>
                   {user && !grade && (
                     <span className="ml-2 text-[11px] text-muted-foreground font-normal">
                       {isSchoolExam
@@ -2244,7 +2244,7 @@ function PaperRunner() {
                         <div className="font-semibold">
                           {isSchoolExam ? `Q${f.sort_order}` : `Question ${i + 1}`}
                           {shortFrqTitle(f.title, f.content) ? ` · ${shortFrqTitle(f.title, f.content)}` : ""}
-                          <span className="ml-2 text-xs text-muted-foreground">满分 {f.max_score} 分</span>
+                          <span className="ml-2 text-xs text-muted-foreground">· 满分 {f.max_score} 分</span>
                         </div>
                         <FrqContent content={f.content} />
                         {frqFigureSrc(f) && (

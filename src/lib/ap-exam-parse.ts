@@ -22,7 +22,7 @@ export type ParsedExamItem = {
 };
 
 const IMAGE_HINT =
-  /graph provided|table provided|payoff matrix|shown in the graph|the graph shows|the graph provided|figure provided|figure\s*\d|combinations of donuts|based on the (table|graph|figure|payoff)|the table shows|refer to the (graph|table|figure)|the figure shows|diagram provided|diagram above|diagram below|the diagram|in the diagram|graph above|graph below|graph of|见(上|下)?(图|表)|如图|如表|下图|下表|上图|上表|图示|示意图|图\s*\d/i;
+  /graph provided|table provided|payoff matrix|shown in the graph|the graph shows|the graph provided|figure provided|figure\s*\d|combinations of donuts|based on the (table|graph|figure|payoff)|the table shows|refer to the (graph|table|figure)|the figure shows|diagram provided|diagram above|diagram below|the diagram|in the diagram|graph above|graph below|graph of|table above|table below|the table above|the table below|shown above|shown below|见(上|下)?(图|表)|如图|如表|下图|下表|上图|上表|图示|示意图|图\s*\d/i;
 
 /** Read a printed point value. Part marks like "(2 points)" are added up. */
 export function readPrintedScore(text: string, fallback: number) {
@@ -58,19 +58,58 @@ export function splitTrailingChoiceE(optionD: string, optionE: string) {
   return { option_d: match[1].trim(), option_e: match[2].trim() };
 }
 
-/** Fill a missing E from the page text after the stem, or from a choice glued onto D. */
+function choiceWindow(pageText: string, stem: string, optionD: string) {
+  const page = pageText;
+  const d = optionD.replace(/\s+/g, " ").trim();
+  const s = stem.replace(/\s+/g, " ").trim();
+  const anchors = [d.slice(0, 40), s.slice(0, 24), s.slice(0, 40)].filter((value) => value.length >= 8);
+  for (const anchor of anchors) {
+    const at = page.toLowerCase().indexOf(anchor.toLowerCase());
+    if (at < 0) continue;
+    return page.slice(at, at + 1600)
+      .replace(/（\s*([A-E])\s*）/g, "($1) ")
+      .replace(/\(\s*([A-E])\s*\)/g, "($1) ")
+      .replace(/(^|[\s])([A-E])\s*[.)、．)]\s+/g, "$1($2) ");
+  }
+  return "";
+}
+
+function optionEText(window: string) {
+  const match = window.match(/\(E\)\s*([\s\S]*?)(?=\(\s*[A-D]\s*\)|\n\s*\d{1,2}\s*[.)、．]|$)/i)
+    ?? window.match(/(?:^|\n)\s*E[.)、．]\s+([\s\S]*?)(?=\n\s*[A-D][.)、．]|\n\s*\d{1,2}\s*[.)、．]|$)/i);
+  return match?.[1]?.replace(/\s+/g, " ").trim() ?? "";
+}
+
+/** Fill a missing E from the page text after D or the stem, or from a choice glued onto D. */
 export function recoverOptionE(pageText: string, stem: string, optionD: string, optionE: string) {
   const split = splitTrailingChoiceE(optionD, optionE);
   if (split.option_e) return split;
-  const head = stem.replace(/\s+/g, " ").trim().slice(0, 48);
-  if (head.length < 12 || !pageText.trim()) return split;
-  const at = pageText.toLowerCase().indexOf(head.toLowerCase());
-  const window = at >= 0 ? pageText.slice(at, at + 4000) : pageText;
-  const match = window.match(/\(E\)\s*([\s\S]*?)(?=\(\s*[A-D]\s*\)|\n\s*\d{1,2}\s*[.)]|$)/i)
-    ?? window.match(/(?:^|\n)\s*E[.)]\s+([\s\S]*?)(?=\n\s*[A-D][.)]|\n\s*\d{1,2}\s*[.)]|$)/i);
-  const text = match?.[1]?.replace(/\s+/g, " ").trim() ?? "";
+  if (!pageText.trim()) return split;
+  const text = optionEText(choiceWindow(pageText, stem, split.option_d));
   if (!text || text.length > 500) return split;
   return { option_d: split.option_d, option_e: text };
+}
+
+export function fillOptionEFrom<T extends { kind: string; sort_order: number; stem?: string | null; option_e?: string | null }>(base: T[], extra: T[]): T[] {
+  return base.map((item) => {
+    if (item.kind !== "mcq" || (item.option_e ?? "").trim()) return item;
+    const stem = (item.stem ?? "").replace(/\s+/g, " ").trim().slice(0, 32).toLowerCase();
+    const hit = extra.find((other) => {
+      if (other.kind !== "mcq" || !(other.option_e ?? "").trim()) return false;
+      const otherStem = (other.stem ?? "").replace(/\s+/g, " ").trim().slice(0, 32).toLowerCase();
+      return other.sort_order === item.sort_order || (stem.length >= 12 && stem === otherStem);
+    });
+    return hit ? { ...item, option_e: hit.option_e ?? item.option_e } : item;
+  });
+}
+
+/** A bare "9" is a printed number, not the question title. */
+export function readableFrqLabel(stem: string, content: string, sort: number) {
+  const raw = stem.replace(/\s+/g, " ").trim();
+  const bare = !raw || /^\d{1,2}[.)、]?$/.test(raw) || raw.length < 8;
+  const source = (bare ? content : raw).replace(/\s+/g, " ").trim().replace(/^\d{1,2}\s*[.、.)]\s*/, "");
+  if (source.length < 8) return `第 ${sort} 题`;
+  return source.slice(0, 160);
 }
 
 /** Printed question number at the start of a stem, such as "Question 3" or "3." */
@@ -167,16 +206,42 @@ function findExpected(text: string, n: number, from: number) {
   return from + m.index + m[0].length - m[1].length;
 }
 
+function choiceRun(hits: { letter: string; index: number; end: number }[]) {
+  let best: typeof hits | null = null;
+  const order = ["A", "B", "C", "D", "E"];
+  for (let start = 0; start < hits.length; start += 1) {
+    if (hits[start]?.letter !== "A") continue;
+    const run = [hits[start]];
+    let next = 1;
+    for (let i = start + 1; i < hits.length && next < order.length; i += 1) {
+      if (hits[i]?.letter !== order[next]) continue;
+      run.push(hits[i]);
+      next += 1;
+    }
+    if (run.length >= 4) best = run;
+  }
+  return best;
+}
+
 function parseOptions(body: string) {
-  const hits = [...body.matchAll(/\(([A-E])\)\s*/g)];
-  if (hits.length < 4) return null;
-  const stem = clean(body.slice(0, hits[0].index));
+  const normalized = body
+    .replace(/（\s*([A-E])\s*）/gi, "($1)")
+    .replace(/\(\s*([A-E])\s*\)/gi, "($1)");
+  const hits: { letter: string; index: number; end: number }[] = [];
+  for (const match of normalized.matchAll(/(?:^|\s)(?:\(([A-E])\)|([A-E])\s*[.)、．)])(?=\s|$)/gi)) {
+    const letter = (match[1] || match[2] || "").toUpperCase();
+    if (!letter || match.index === undefined) continue;
+    hits.push({ letter, index: match.index, end: match.index + match[0].length });
+  }
+  const run = choiceRun(hits);
+  if (!run) return null;
+  const stem = clean(normalized.slice(0, run[0].index));
   const opts: Record<string, string> = {};
-  hits.forEach((h, i) => {
-    const start = h.index! + h[0].length;
-    const end = i + 1 < hits.length ? hits[i + 1].index! : body.length;
-    opts[h[1]] = clean(body.slice(start, end));
+  run.forEach((hit, i) => {
+    const end = i + 1 < run.length ? run[i + 1].index : normalized.length;
+    opts[hit.letter] = clean(normalized.slice(hit.end, end));
   });
+  if (!opts.A || !opts.B || !opts.C || !opts.D) return null;
   return { stem, opts };
 }
 
@@ -202,6 +267,16 @@ function parseMcqs(mcqText: string): ParsedExamItem[] {
     const parsed = parseOptions(chunk);
     from = start + String(n).length + 1;
     if (!parsed) continue;
+    const splitChoices = splitTrailingChoiceE(parsed.opts.D ?? "", parsed.opts.E ?? "");
+    parsed.opts.D = splitChoices.option_d;
+    parsed.opts.E = splitChoices.option_e;
+    if (!parsed.opts.E) {
+      const recovered = recoverOptionE(chunk, parsed.stem, parsed.opts.D, "");
+      if (recovered.option_e) {
+        parsed.opts.D = recovered.option_d;
+        parsed.opts.E = recovered.option_e;
+      }
+    }
     const lastKey = ["E", "D", "C", "B", "A"].find((k) => parsed.opts[k]);
     if (lastKey) {
       const leak = parsed.opts[lastKey].search(/\s+Questions?\s+\d+[-–]\d+/i);
@@ -243,22 +318,56 @@ function parseMcqs(mcqText: string): ParsedExamItem[] {
   return items;
 }
 
+function cleanFrq(s: string) {
+  return s
+    .replace(/\u00ad/g, "")
+    .replace(/<<<P\d+>>>/g, "\n")
+    .replace(/\bSTOP END OF SECTION II\b/gi, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/** The table or diagram printed above a question, kept with the question that refers to it. */
+function stimulusTail(previous: string) {
+  const lines = previous.split(/\n/).map((line) => line.trim()).filter(Boolean);
+  const tail: string[] = [];
+  for (let i = lines.length - 1; i >= 0 && tail.length < 16; i -= 1) {
+    const line = lines[i] ?? "";
+    if (/^\([a-e]\)/i.test(line)) break;
+    if (tail.length > 0 && line.length > 80 && !/\d/.test(line)) break;
+    tail.unshift(line);
+  }
+  const block = tail.join("\n");
+  const numbers = (block.match(/\d+/g) ?? []).length;
+  if (tail.length >= 3 && (numbers >= 4 || /table|figure|diagram|graph|价格|数量|工人/i.test(block))) return block;
+  return "";
+}
+
 function parseFrqs(frqText: string): ParsedExamItem[] {
   if (!frqText.trim()) return [];
   const items: ParsedExamItem[] = [];
   let from = 0;
+  const firstStart = findExpected(frqText, 1, 0);
+  let previousRaw = firstStart > 0 ? frqText.slice(0, firstStart) : "";
   for (let n = 1; n <= 6; n++) {
     const start = findExpected(frqText, n, from);
     if (start < 0) break;
     const next = findExpected(frqText, n + 1, start + String(n).length + 1);
     const end = next < 0 ? frqText.length : next;
-    const content = clean(frqText.slice(start + String(n).length + 1, end));
+    const raw = frqText.slice(start + String(n).length + 1, end);
+    let content = cleanFrq(raw);
+    if (/above|上表|上图|如上/i.test(content)) {
+      const stim = stimulusTail(previousRaw);
+      if (stim && !content.includes(stim.slice(0, 24))) content = `${stim}\n${content}`;
+    }
+    previousRaw = raw;
     if (content.length < 40) {
       from = start + String(n).length + 1;
       continue;
     }
     const page_number = pageOf(frqText, start);
-    const stem = content.slice(0, 180);
+    const stem = content.replace(/\s+/g, " ").slice(0, 180);
     items.push({
       kind: "frq",
       sort_order: n,
@@ -272,7 +381,7 @@ function parseFrqs(frqText: string): ParsedExamItem[] {
       correct_answer: "",
       content,
       max_score: readPrintedScore(content, 0),
-      needs_image: IMAGE_HINT.test(content),
+      needs_image: looksLikeProvidedFigure(content),
     });
     from = start + String(n).length + 1;
   }
@@ -333,7 +442,12 @@ export function parseApExamPages(pages: ExamPageText[]): ParsedExamItem[] {
       if (it.kind === "mcq" && keys[it.sort_order]) it.correct_answer = keys[it.sort_order];
     }
   }
-  return items;
+  const pageText = new Map(pages.map((page) => [page.page_number, page.extracted_text ?? ""]));
+  return items.map((item) => {
+    if (item.kind !== "mcq" || item.option_e.trim()) return item;
+    const recovered = recoverOptionE(pageText.get(item.page_number) ?? "", item.stem, item.option_d, item.option_e);
+    return recovered.option_e ? { ...item, option_d: recovered.option_d, option_e: recovered.option_e } : item;
+  });
 }
 
 export function examSlugFromFilename(filename: string) {

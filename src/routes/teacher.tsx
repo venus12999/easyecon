@@ -47,7 +47,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/hooks/use-auth";
 import { authFetch } from "@/lib/auth-fetch";
-import { applyKnownApAnswerKey, looksLikeProvidedFigure, parseApExamPages, readPrintedScore, studentVisibleQuestion, withUniqueQuestionNumbers, type ParsedExamItem } from "@/lib/ap-exam-parse";
+import { applyKnownApAnswerKey, fillOptionEFrom, looksLikeProvidedFigure, parseApExamPages, readableFrqLabel, readPrintedScore, studentVisibleQuestion, withUniqueQuestionNumbers, type ParsedExamItem } from "@/lib/ap-exam-parse";
 import { CUSTOM_SCORE_MAX_DEFAULT, apBasisText, apDistributionText, apMicroScore, apScoreText, formatScaledScore, pointsOnScale, scoreMaxError, summarizeApScores, type ApClassSummary, type ApScore } from "@/lib/ap-score";
 import { ap2025Clock } from "@/lib/ap-2025-paper";
 import { BREAK_MINUTES_DEFAULT, FRQ_MINUTES_DEFAULT, MCQ_MINUTES_DEFAULT, sectionMinutesError, sectionTimingLabel, sectionTotalMinutes } from "@/lib/exam-sections";
@@ -298,7 +298,13 @@ function rowStatusLabel(row: GradeRow, endsAt?: string | null) {
 }
 
 function frqHeaderLabel(row: GradeRow) {
-  const left = ungradedAnswerCount(row);
+  const answered = (row.frqs ?? []).filter((frq) => !isBlankStudentAnswer(frq.answer_text, frq.file_url));
+  const scored = answered.filter((frq) => frq.manual_score != null || frq.ai_score != null);
+  const left = answered.length - scored.length;
+  if (left > 0 && scored.length > 0) {
+    const earned = scored.reduce((sum, frq) => sum + (frq.manual_score ?? frq.ai_score ?? 0), 0);
+    return ` · 大题已出 ${earned} 分，还有 ${left} 题没批完`;
+  }
   if (left > 0) return ` · 大题还有 ${left} 题没批完`;
   if (row.frq_score == null) return " · 大题还没有分数";
   return ` · 大题 ${row.frq_score}/${row.frq_max}`;
@@ -308,6 +314,10 @@ type GradeCache = {
   meta: { title: string; results_published: boolean; ends_at: string; ai_grade: boolean; score_max: number | null };
   rows: GradeRow[];
 };
+
+function gradePauseKey(id: string) {
+  return `easyecon-grade-pause:${id}`;
+}
 
 function gradeCacheKey(id: string) {
   return `easyecon-gradebook:${id}`;
@@ -709,6 +719,8 @@ function TeacherHome() {
   const gradeTicket = useRef(0);
   const gradeNotice = useRef("");
   const gradePause = useRef(false);
+  const gradeHold = useRef(0);
+  const [gradePaused, setGradePaused] = useState(false);
   const [imports, setImports] = useState<PdfImport[]>([]);
   const [activeImport, setActiveImport] = useState<string>("");
   const [pages, setPages] = useState<PdfPage[]>([]);
@@ -1189,7 +1201,6 @@ function TeacherHome() {
     let leftover = false;
     try {
       for (const rosterId of rosterIds) {
-        let busyWaits = 0;
         let consecutiveErrors = 0;
         for (let step = 0; step < 24; step++) {
           if (gradeTicket.current !== ticket) return;
@@ -1205,7 +1216,7 @@ function TeacherHome() {
             failed = true;
             break;
           }
-          const body = (await response.json().catch(() => null)) as { error?: string; done?: boolean; pending?: number; busy?: boolean; graded_sort?: number | null } | null;
+          const body = (await response.json().catch(() => null)) as { error?: string; notice?: string; retry_at?: string | null; done?: boolean; pending?: number; busy?: boolean; graded_sort?: number | null } | null;
           if (gradeTicket.current !== ticket) return;
           await loadGradebook(gradeId, { keepPage: true });
           if (!body) {
@@ -1213,19 +1224,16 @@ function TeacherHome() {
             failed = true;
             break;
           }
-          if (body.busy) {
-            busyWaits += 1;
-            if (busyWaits > 8) {
-              toast.message("另一边正在批改这名学生，请稍后再试");
-              leftover = true;
-              break;
-            }
-            setGradeNote("另一边正在批这一题，稍等后继续");
-            await new Promise((resolve) => window.setTimeout(resolve, 2500));
-            step -= 1;
-            continue;
+          if (body.retry_at) {
+            const at = Date.parse(body.retry_at);
+            if (Number.isFinite(at)) gradeHold.current = Math.max(gradeHold.current, at);
           }
-          busyWaits = 0;
+          if (body.busy || (body.error && /请求过多|没批完/.test(body.error))) {
+            const waiting = body.notice || body.error || "";
+            if (waiting) setGradeNote(waiting);
+            leftover = true;
+            break;
+          }
           if (!response.ok || body.error) {
             const fatal = !!body.error && /尚未配置/.test(body.error);
             const limited = !!body.error && /请求过多/.test(body.error);
@@ -1235,23 +1243,24 @@ function TeacherHome() {
               break;
             }
             leftover = true;
-            setGradeNote(body.error ?? "这一题没批完。已经批完的题目已保存，再点一次会继续。");
-            if (!limited) {
-              consecutiveErrors += 1;
-              if (consecutiveErrors >= GRADE_TRY_LIMIT) break;
-            }
-            await new Promise((resolve) => window.setTimeout(resolve, limited ? 8000 : 1500));
+            setGradeNote(body.error ?? "这一题没批完。已经出分的会保留。");
+            if (limited) break;
+            consecutiveErrors += 1;
+            if (consecutiveErrors >= GRADE_TRY_LIMIT) break;
+            await new Promise((resolve) => window.setTimeout(resolve, 1500));
             continue;
           }
           consecutiveErrors = 0;
           if (body.done || body.pending === 0) break;
-          setGradeNote(body.graded_sort ? `第 ${body.graded_sort} 题已写入，还剩 ${body.pending} 题` : `还剩 ${body.pending} 题`);
+          if (body.notice) setGradeNote(body.notice);
+          else if (typeof body.pending === "number" && body.pending > 0) setGradeNote(`第 ${body.graded_sort ?? "这"} 题已写入，还有 ${body.pending} 题没批完`);
         }
         if (failed) break;
       }
       if (gradeTicket.current === ticket) {
-        if (failed || leftover) setGradeNote("还有题目没批完。已经批完的已保存，可以再试一次。");
-        else {
+        if (failed || leftover) {
+          setGradeNote((note) => /没批完|可重试|请求过多/.test(note) ? note : "还有题目没批完。已经出分的会保留，可以再试一次。");
+        } else {
           setGradeNote("");
           toast.success("AI 批改已写入");
         }
@@ -1267,26 +1276,44 @@ function TeacherHome() {
   function stopAutoGrade() {
     gradeTicket.current += 1;
     gradePause.current = true;
+    setGradePaused(true);
     gradingLock.current = false;
     setGradeBusy(null);
-    setGradeNote("已停止自动批改，已经批完的分数还在");
+    setGradeNote("");
+    if (!gradeId) return;
+    sessionStorage.setItem(gradePauseKey(gradeId), "1");
+    void authFetch("/api/teacher/gradebook", {
+      method: "POST",
+      body: JSON.stringify({ assignment_id: gradeId, action: "pause" }),
+    }).catch(() => undefined);
   }
 
   async function regradeClass() {
     if (!gradeId) return;
     gradePause.current = false;
+    setGradePaused(false);
+    sessionStorage.removeItem(gradePauseKey(gradeId));
     gradeNotice.current = "";
+    gradeHold.current = 0;
     setGradeNote("正在重新批改还没出分的大题");
     const response = await authFetch("/api/teacher/gradebook", {
       method: "POST",
       body: JSON.stringify({ assignment_id: gradeId, action: "regrade" }),
     });
-    const body = await response.json().catch(() => ({} as { error?: string }));
+    const body = await response.json().catch(() => ({} as { error?: string; notice?: string; busy?: boolean; retry_at?: string | null }));
     if (!response.ok) {
       toast.error(body.error ?? "重新批改没有开始");
       return;
     }
+    if (body.retry_at) {
+      const at = Date.parse(body.retry_at);
+      if (Number.isFinite(at)) gradeHold.current = Math.max(gradeHold.current, at);
+    }
     await loadGradebook(gradeId, { keepPage: true });
+    if (body.busy && (body.notice || body.retry_at)) {
+      setGradeNote(body.notice || "还没到可重试时间。已经出分的会保留。");
+      return;
+    }
     toast.success("已重新开始批改还没出分的大题");
   }
 
@@ -1303,18 +1330,37 @@ function TeacherHome() {
   const classGradeDue = !!gradeId && gradeMeta?.ai_grade !== false && !!gradeMeta && Date.parse(gradeMeta.ends_at) <= Date.now() && (gradeRows.some((row) => row.status === "in_progress") || pendingAiRows(gradeRows).length > 0);
 
   useEffect(() => {
-    if (!classGradeDue || gradePause.current) return;
-    setGradeNote("考试已结束，正在批改全班大题");
+    const paused = !!gradeId && sessionStorage.getItem(gradePauseKey(gradeId)) === "1";
+    gradePause.current = paused;
+    setGradePaused(paused);
+    gradeNotice.current = "";
+    if (!paused) setGradeNote("");
+  }, [gradeId]);
+
+  useEffect(() => {
+    if (!classGradeDue || gradePaused || (gradeId && sessionStorage.getItem(gradePauseKey(gradeId)) === "1")) return;
+    setGradeNote("考试已结束，正在逐题批改。已经出分的会保留。");
     const kickClassGrade = () => {
-      if (gradePause.current) return;
+      if (gradePause.current || gradeHold.current > Date.now()) return;
       void authFetch("/api/teacher/gradebook", {
         method: "POST",
         body: JSON.stringify({ assignment_id: gradeId, action: "batch" }),
       }).then(async (response) => {
-        const body = await response.json().catch(() => ({} as { notice?: string; error?: string }));
+        const body = await response.json().catch(() => ({} as { notice?: string; error?: string; retry_at?: string | null }));
+        if (body.retry_at) {
+          const at = Date.parse(body.retry_at);
+          if (Number.isFinite(at)) gradeHold.current = Math.max(gradeHold.current, at);
+        }
         const message = body.notice || (!response.ok ? body.error : "");
         if (!message || message === gradeNotice.current) return;
         gradeNotice.current = message;
+        if (/已停止自动批改/.test(message)) {
+          gradePause.current = true;
+          setGradePaused(true);
+          if (gradeId) sessionStorage.setItem(gradePauseKey(gradeId), "1");
+          setGradeNote("");
+          return;
+        }
         if (/请求过多/.test(message)) {
           setGradeNote(message);
           return;
@@ -1329,16 +1375,10 @@ function TeacherHome() {
     }, 8000);
     return () => {
       window.clearInterval(timer);
-      setGradeNote("");
     };
     // Refresh the roster while the server finishes the class. Opening this page is only a backup if nobody was online at the deadline.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [classGradeDue, gradeId]);
-
-  useEffect(() => {
-    gradePause.current = false;
-    gradeNotice.current = "";
-  }, [gradeId]);
+  }, [classGradeDue, gradeId, gradePaused]);
 
   async function togglePublish(published: boolean) {
     if (!gradeId) return;
@@ -1571,7 +1611,6 @@ function TeacherHome() {
         }
       }
       const opened = await openImport(importId, { quietEmpty: true });
-      await loadPdfs();
       let parsed = applyKnownApAnswerKey(
         parseApExamPages(
           raster.map((page) => ({ page_number: page.page_number, extracted_text: page.extracted_text })),
@@ -1579,10 +1618,12 @@ function TeacherHome() {
         file.name,
       );
       let visionError = "";
-      if (parsed.length === 0) {
-        setPdfBusy("文字对不上官方试卷格式，正在让 AI 看页图…");
+      const missingChoiceE = parsed.some((item) => item.kind === "mcq" && !item.option_e.trim());
+      if (parsed.length === 0 || missingChoiceE) {
+        setPdfBusy(parsed.length === 0 ? "文字对不上官方试卷格式，正在让 AI 看页图…" : "有选择题缺了 E，正在对照页图补上…");
         const vision = await requestVisionParse(importId, raster);
-        parsed = applyKnownApAnswerKey(vision.items, file.name);
+        const seen = applyKnownApAnswerKey(vision.items, file.name);
+        parsed = parsed.length === 0 ? seen : fillOptionEFrom(parsed, seen);
         visionError = vision.error ?? "";
       }
       if (parsed.length > 0) {
@@ -1653,7 +1694,7 @@ function TeacherHome() {
             kind: it.kind,
             sort_order: it.sort_order,
             page_number: it.page_number,
-            stem: it.kind === "frq" ? studentVisibleQuestion(it.stem, pageText) || visible.slice(0, 80) : it.stem,
+            stem: it.kind === "frq" ? readableFrqLabel(studentVisibleQuestion(it.stem, pageText) || it.stem, visible, it.sort_order) : it.stem,
             option_a: it.option_a,
             option_b: it.option_b,
             option_c: it.option_c,
@@ -1665,7 +1706,7 @@ function TeacherHome() {
             reviewed: true,
             rubric_note: "",
             needs_image: it.needs_image,
-            image_url: crop,
+            image_url: crop ?? (it.needs_image ? pageUrl : null),
             page_image_url: pageUrl,
           };
         });
@@ -1768,7 +1809,7 @@ function TeacherHome() {
     if (applied.length === 0 && !opts?.quietEmpty) {
       setPdfNotice("这份导入没有题目，不能当作已提交的试卷。请重新上传，或手工加题。");
     }
-    setItems(withUniqueQuestionNumbers(applied));
+    if (!(applied.length === 0 && opts?.quietEmpty)) setItems(withUniqueQuestionNumbers(applied));
     setPdfFindings([]);
     setPdfAiRan(false);
     setPdfAiDone(published);
@@ -2085,7 +2126,7 @@ function TeacherHome() {
       : inProgressCount > 0
         ? "还有已开考的答卷没能收上。刷新后会再收一次，收完才能公布"
         : frqWaiting
-          ? "大题还没有分数，批完再公布"
+          ? `还有 ${pendingFrqCount} 道写过的大题没批完。已经出分的会保留，批完再公布`
           : "";
   const paperLabel = source === "random"
     ? "固定随机卷（60 道选择题 + 3 道大题）"
@@ -2817,15 +2858,15 @@ function TeacherHome() {
                       ? "这里是全部教师的考试成绩。考试截止后会批完全部大题，点某一行再看这名学生的答卷。"
                       : "先看全班成绩。考试截止后会自动批完全部大题，点某一行再看这名学生的答卷。"}
                   </p>
-                  {gradeNote || (pendingFrqCount > 0 && !examStillOpen && gradeMeta?.ai_grade !== false) ? (
+                  {!gradePaused && (gradeNote || (pendingFrqCount > 0 && !examStillOpen && gradeMeta?.ai_grade !== false)) ? (
                     <div className="mt-1 flex flex-wrap items-center gap-2">
                       {classGradeDue || gradeBusy === "ai" ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
                       <p className="text-sm text-muted-foreground">
                         {gradeNote
-                          ? `${gradeNote}${pendingFrqCount > 0 && !gradeNote.includes("还剩") ? `，还剩 ${pendingFrqCount} 题` : ""}`
+                          ? `${gradeNote}${pendingFrqCount > 0 && !/还剩|请求过多|没批完|可重试/.test(gradeNote) ? `，还有 ${pendingFrqCount} 题没批完` : ""}`
                           : pendingGradeError
                             ? pendingGradeError
-                            : `还有 ${pendingFrqCount} 题没批完。已经批完的已保存，可以再试一次。`}
+                            : `还有 ${pendingFrqCount} 题没批完。已经出分的会保留。`}
                       </p>
                       <Button size="sm" variant="outline" className="h-7" onClick={() => void regradeClass()}>重新批改未出分的题</Button>
                       {classGradeDue || gradeBusy === "ai" ? (
@@ -2834,7 +2875,12 @@ function TeacherHome() {
                     </div>
                   ) : null}
                 </div>
-                <Button variant="outline" disabled={!gradeRows.length} onClick={exportCsv}>导出成绩</Button>
+                <div className="flex flex-wrap gap-2">
+                  {gradePaused && pendingFrqCount > 0 ? (
+                    <Button variant="outline" onClick={() => void regradeClass()}>继续批改</Button>
+                  ) : null}
+                  <Button variant="outline" disabled={!gradeRows.length} onClick={exportCsv}>导出成绩</Button>
+                </div>
               </div>
               {!examsLoaded && assignments.length === 0 ? (
                 <div className="glass rounded-2xl">
@@ -3135,7 +3181,7 @@ function TeacherHome() {
                   {pdfNotice && (
                     <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-900">{pdfNotice}</p>
                   )}
-                  {items.length === 0 && (
+                  {items.length === 0 && !pdfBusy && (
                     <p className="rounded-xl border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">这份草稿里还没有题目。</p>
                   )}
                   {items.some((it) => frqScorePrompt(it, scoreAck[`${it.kind}-${it.sort_order}`])) ? (
@@ -3316,7 +3362,7 @@ function TeacherHome() {
                   {(row.frqs ?? []).map((frq) => (
                     <section key={frq.frq_id} className="space-y-2 rounded-xl border border-border/70 p-3">
                       <div className="flex items-baseline justify-between gap-3">
-                        <h3 className="text-sm font-semibold">Q{frq.sort_order}{frq.title ? ` · ${frq.title}` : ""}</h3>
+                        <h3 className="text-sm font-semibold">Q{frq.sort_order}{frq.title && !/^\d{1,2}[.)、]?$/.test(frq.title.trim()) ? ` · ${frq.title}` : ""}</h3>
                         <span className="text-xs text-muted-foreground">满分 {frq.max_score}</span>
                       </div>
                       <pre className="whitespace-pre-wrap rounded-lg bg-muted/60 p-3 text-xs">{frq.answer_text.trim() || "（没有文字答案）"}</pre>
@@ -3324,7 +3370,7 @@ function TeacherHome() {
                         <a href={frq.file_url} target="_blank" rel="noreferrer" className="text-xs text-primary underline">查看上传的答案</a>
                       ) : null}
                       <p className="text-sm">
-                        AI 分数：{frq.ai_score == null ? (frq.ai_failed ? "没批完" : "还没有") : `${frq.ai_score}/${frq.max_score}`}
+                        AI 分数：{frq.ai_score == null ? (frq.ai_error || frq.ai_failed ? "没批完" : "还没有") : `${frq.ai_score}/${frq.max_score}`}
                         {frq.needs_review ? <span className="ml-2 rounded bg-amber-200 px-1.5 py-0.5 text-xs font-semibold text-amber-950">建议复核</span> : null}
                       </p>
                       {frq.ai_score == null && frq.ai_error ? <p className="text-sm text-amber-800">{frq.ai_error}</p> : null}

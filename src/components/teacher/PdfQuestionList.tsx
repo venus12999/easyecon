@@ -214,7 +214,7 @@ function PdfQuestionCard({
                     <p className="text-sm line-clamp-2">{it.kind === "frq" ? (it.content || it.stem) : it.stem}</p>
                     {it.kind === "mcq" && !open && (
                       <p className="text-[11px] text-muted-foreground line-clamp-1 mt-1">
-                        A. {it.option_a} · B. {it.option_b} · C. {it.option_c} · D. {it.option_d}
+                        A. {it.option_a} · B. {it.option_b} · C. {it.option_c} · D. {it.option_d}{it.option_e ? ` · E. ${it.option_e}` : ""}
                         {it.correct_answer ? ` · 答案 ${it.correct_answer}` : ""}
                       </p>
                     )}

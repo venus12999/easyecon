@@ -379,7 +379,10 @@ export const Route = createFileRoute("/api/teacher/assignments")({
             const missing = (attempts ?? []).some((row) =>
               teacherFrqViews(row.frq_answers, frqs ?? [], row.user_id ? byUser.get(row.user_id) ?? [] : []).some((frq) => (frq.manual_score ?? frq.ai_score) == null),
             );
-            if (missing) return jsonErr("大题还没有分数，不能公布");
+            const anyScored = (attempts ?? []).some((row) =>
+              teacherFrqViews(row.frq_answers, frqs ?? [], row.user_id ? byUser.get(row.user_id) ?? [] : []).some((frq) => (frq.manual_score ?? frq.ai_score) != null),
+            );
+            if (missing) return jsonErr(anyScored ? "还有大题没批完。已经出分的会保留，批完再公布" : "大题还没有分数，不能公布");
           }
         }
         const { data, error } = await db

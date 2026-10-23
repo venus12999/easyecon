@@ -6,7 +6,7 @@ import { accountNames, ensureTeacherClass, getTeacherDb, isSchoolAdmin, verifyTe
 import { isUuid } from "@/lib/school-exam-session";
 import { schoolExamAiOn } from "@/lib/exam-flags";
 import { isBlankStudentAnswer } from "@/lib/frq-answer";
-import { alignFrqNumbers, closeSchoolAttempt, collectFinishedExam, continueGradeBatch, drainSchoolGrades, fatalGradeError, gradeBatchToken, gradeNextSchoolFrq, mcqSectionClosed, persistBlankFrqZeros, readCollectedReason, readSubmittedAt, releaseGradeLocks, saveManualFrqScores, teacherFrqViews, teacherMcqViews } from "@/lib/school-exam.server";
+import { alignFrqNumbers, closeSchoolAttempt, collectFinishedExam, continueGradeBatch, drainSchoolGrades, fatalGradeError, gradeBatchToken, gradeNextSchoolFrq, mcqSectionClosed, persistBlankFrqZeros, readCollectedReason, readSubmittedAt, releaseGradeLocks, resumeClassGrading, saveManualFrqScores, stopClassGrading, teacherFrqViews, teacherMcqViews } from "@/lib/school-exam.server";
 import { splitImageTextRubric, splitTeacherFrq } from "@/lib/frq-teacher-fields";
 
 async function teacherAssignment(userId: string, jwt: string, assignmentId: string, email: string | null) {
@@ -140,7 +140,7 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
           const fatal = fatalGradeError(step.error);
           if (!step.waiting && !step.busy && !step.done && !fatal) continueGradeBatch(request, body.assignment_id);
           if (fatal && step.error) return jsonErr(step.error, 502);
-          return Response.json({ ok: true, waiting: step.waiting, done: step.done, busy: step.busy, pending: step.pending, graded_sort: step.gradedSort, notice: step.notice ?? null });
+          return Response.json({ ok: true, waiting: step.waiting, done: step.done, busy: step.busy, pending: step.pending, graded_sort: step.gradedSort, notice: step.notice ?? null, retry_at: step.retryAt ?? null });
         }
         const u = await verifyTeacherRequest(request);
         if (u === "expired") return jsonErr("session_expired", 401);
@@ -151,21 +151,26 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
         if (!isUuid(assignmentId)) return jsonErr("missing fields");
         const owned = await teacherAssignment(u.userId, u.jwt, assignmentId, u.email);
         if (!owned) return jsonErr("not found", 404);
+        if (body.action === "pause") {
+          await stopClassGrading(assignmentId);
+          return Response.json({ ok: true });
+        }
         if (body.action === "regrade") {
           if (Date.now() < Date.parse(owned.assignment.ends_at)) return jsonErr("考试还没结束，截止后批改");
+          await resumeClassGrading(assignmentId);
           await releaseGradeLocks(assignmentId);
           const step = await drainSchoolGrades(assignmentId);
           const fatal = fatalGradeError(step.error);
           if (!step.waiting && !step.busy && !step.done && !fatal) continueGradeBatch(request, assignmentId);
           if (fatal && step.error) return jsonErr(step.error, 502);
-          return Response.json({ ok: true, waiting: step.waiting, done: step.done, busy: step.busy, pending: step.pending, graded_sort: step.gradedSort, notice: step.notice ?? null });
+          return Response.json({ ok: true, waiting: step.waiting, done: step.done, busy: step.busy, pending: step.pending, graded_sort: step.gradedSort, notice: step.notice ?? null, retry_at: step.retryAt ?? null });
         }
         if (body.action === "batch") {
           const step = await drainSchoolGrades(assignmentId);
           const fatal = fatalGradeError(step.error);
           if (!step.waiting && !step.busy && !step.done && !fatal) continueGradeBatch(request, assignmentId);
           if (fatal && step.error) return jsonErr(step.error, 502);
-          return Response.json({ ok: true, waiting: step.waiting, done: step.done, busy: step.busy, pending: step.pending, graded_sort: step.gradedSort, notice: step.notice ?? null });
+          return Response.json({ ok: true, waiting: step.waiting, done: step.done, busy: step.busy, pending: step.pending, graded_sort: step.gradedSort, notice: step.notice ?? null, retry_at: step.retryAt ?? null });
         }
         if (body.action !== "end" && !isUuid(rosterId)) return jsonErr("missing fields");
         if (body.action === "end") {
@@ -198,8 +203,9 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
           if (Date.now() < Date.parse(owned.assignment.ends_at)) return jsonErr("考试还没结束，截止后批改");
           const step = await gradeNextSchoolFrq(attempt.id, owned.assignment.paper_id, { force: true, retryFailed: true });
           if (step.error && fatalGradeError(step.error)) return jsonErr(step.error, 502);
-          if (step.error) return Response.json({ ok: false, error: step.error, done: false, pending: step.pending, busy: step.busy, graded_sort: null });
-          return Response.json({ ok: true, done: step.done, pending: step.pending, busy: step.busy, graded_sort: step.gradedSort });
+          if (step.busy && !step.error) return Response.json({ ok: true, done: false, pending: step.pending, busy: true, graded_sort: null, notice: step.notice ?? null, retry_at: step.retryAt ?? null });
+          if (step.error) return Response.json({ ok: false, error: step.error, done: false, pending: step.pending, busy: step.busy, graded_sort: null, notice: step.notice ?? step.error, retry_at: step.retryAt ?? null });
+          return Response.json({ ok: true, done: step.done, pending: step.pending, busy: step.busy, graded_sort: step.gradedSort, notice: step.notice ?? null, retry_at: step.retryAt ?? null });
         }
         let next: Json;
         try {

@@ -1,6 +1,6 @@
 import { officialFrqMax } from "@/lib/ap-exam-parse";
 import { isBlankStudentAnswer } from "@/lib/frq-answer";
-import { GRADING_TIMEOUT_MS, gradingBaseUrl, gradingModel } from "@/lib/grading-config.server";
+import { GRADING_TIMEOUT_MS, gradingBaseUrl, gradingModel, parseRetryAfter } from "@/lib/grading-config.server";
 import { scalePointsToMax } from "@/lib/frq-parts";
 import { splitImageTextRubric } from "@/lib/frq-teacher-fields";
 
@@ -247,7 +247,7 @@ async function completeGrade(input: {
   system: string;
   userContent: GradeUserContent;
   jsonObject?: boolean;
-}): Promise<{ ok: true; content: string } | { ok: false; error: string; status: number }> {
+}): Promise<{ ok: true; content: string } | { ok: false; error: string; status: number; retryAfterMs?: number | null }> {
   const apiKey = process.env.LAOZHANG_API_KEY?.trim();
   if (!apiKey) {
     logGrade({ request_id: input.requestId, model: input.model, latency_ms: 0, ok: false, error: "not_configured" });
@@ -282,9 +282,12 @@ async function completeGrade(input: {
       return { ok: false, error: "ai_not_configured", status };
     }
     if (status === 429 || status === 502 || status === 503 || status === 529) {
-      await upstream.body?.cancel();
-      logGrade({ request_id: input.requestId, model: input.model, latency_ms: latency, ok: false, status, error: "rate_limited" });
-      return { ok: false, error: "rate_limited", status };
+      const retryAfterMs = parseRetryAfter(upstream.headers.get("retry-after"));
+      const text = await upstream.text().catch(() => "");
+      const quota = /insufficient_user_quota|insufficient_quota/i.test(text.slice(0, 400));
+      logGrade({ request_id: input.requestId, model: input.model, latency_ms: latency, ok: false, status, error: quota ? "credits_exhausted" : "rate_limited" });
+      if (quota) return { ok: false, error: "credits_exhausted", status };
+      return { ok: false, error: "rate_limited", status, retryAfterMs };
     }
     if (!upstream.ok) {
       const overloaded = await upstreamLooksLimited(upstream);
@@ -358,7 +361,7 @@ export async function gradeFrqAnswer(input: {
   answerText: string | null;
   answerFileUrl: string | null;
   answerFileKind: string | null;
-}): Promise<{ ok: true; grade: FrqGradeResult } | { ok: false; error: string }> {
+}): Promise<{ ok: true; grade: FrqGradeResult } | { ok: false; error: string; retryAfterMs?: number | null }> {
   const frq = input.frq;
   const maxScore = officialFrqMax(`${frq.title ?? ""}\n${frq.content ?? ""}`, frq.max_score);
   if (maxScore < 1) return { ok: false, error: "missing_max_score" };
@@ -387,17 +390,21 @@ export async function gradeFrqAnswer(input: {
   userTextParts.push(answerLines.join("\n"));
   const userText = userTextParts.join("\n\n");
   const images: GradeImagePart[] = [];
-  if (hasFile && input.answerFileKind === "image") images.push({ type: "image_url", image_url: { url: fileUrl } });
-  if (figureUrl) images.push({ type: "image_url", image_url: { url: figureUrl } });
-  const passes: GradeUserContent[] = [images.length ? [{ type: "text", text: userText }, ...images] : userText];
-  if (images.length) passes.push(userText);
+  if (!answerText && hasFile && input.answerFileKind === "image") images.push({ type: "image_url", image_url: { url: fileUrl } });
+  if (!answerText && !images.length && figureUrl) images.push({ type: "image_url", image_url: { url: figureUrl } });
+  const passes: GradeUserContent[] = [answerText ? userText : images.length ? [{ type: "text", text: userText }, ...images] : userText];
+  if (answerText.trim().length > 0 && answerText.trim().length < 40 && hasFile && input.answerFileKind === "image") {
+    passes.push([{ type: "text", text: userText }, { type: "image_url", image_url: { url: fileUrl } }]);
+  }
   let lastError = "ai_failed";
+  let retryAfterMs: number | null = null;
   for (let index = 0; index < passes.length; index += 1) {
     const requestId = crypto.randomUUID();
     const completed = await completeGrade({ requestId, model, system: FRQ_GRADER_PROMPT, userContent: passes[index] });
     if (!completed.ok) {
       lastError = completed.error;
-      const retryWithoutImage = index === 0 && images.length > 0 && completed.error !== "ai_not_configured" && completed.error !== "rate_limited";
+      retryAfterMs = completed.retryAfterMs ?? retryAfterMs;
+      const retryWithoutImage = index === 0 && passes.length > 1 && completed.error !== "ai_not_configured" && completed.error !== "rate_limited";
       if (!retryWithoutImage) break;
       continue;
     }
@@ -418,5 +425,5 @@ export async function gradeFrqAnswer(input: {
     }
     return gradeFromParsed(parsed, gradingNote, maxScore, answerText);
   }
-  return { ok: false, error: lastError };
+  return { ok: false, error: lastError, retryAfterMs };
 }

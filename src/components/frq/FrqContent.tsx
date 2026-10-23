@@ -24,7 +24,7 @@ function stripTags(s: string) {
 /** Skip the 180-char stem dump so the heading stays “Question 1”, not the whole prompt. */
 export function shortFrqTitle(title: string | null | undefined, content: string) {
   const t = (title ?? "").replace(/\s+/g, " ").trim();
-  if (!t) return "";
+  if (!t || /^\d{1,2}[.)、]?$/.test(t)) return "";
   const c = (content ?? "").replace(/\s+/g, " ").trim();
   if (t.length > 72) return "";
   if (c.startsWith(t.slice(0, Math.min(32, t.length)))) return "";
