@@ -24,12 +24,54 @@ export type ParsedExamItem = {
 const IMAGE_HINT =
   /graph provided|table provided|payoff matrix|shown in the graph|the graph shows|the graph provided|figure provided|figure\s*\d|combinations of donuts|based on the (table|graph|figure|payoff)|the table shows|the table represents|the following table|refer to the (graph|table|figure)|the figure shows|diagram provided|diagram above|diagram below|the diagram|in the diagram|graph above|graph below|graph of|table above|table below|the table above|the table below|shown above|shown below|见(上|下)?(图|表)|如图|如表|下图|下表|上图|上表|图示|示意图|图\s*\d/i;
 
-/** PDF extraction splits words and curve labels. Put them back before anyone reads the question. */
+/** A full exam page, not a cropped table or graph. These scans are not the question figure. */
+export function isFullPageScan(url: string | null | undefined) {
+  return !!url && /\/page-\d+\.(png|jpe?g|webp)(?:$|\?)/i.test(url);
+}
+
+/** PDF extraction splits words, compounds, and decimals. Put them back before anyone reads the question. */
 export function repairPrintedSpacing(text: string) {
   return text
     .replace(/\b(short|long)\s*-\s*(run)\b/gi, "$1-$2")
+    .replace(/\b([A-Za-z]{3,})\s+([-–])\s+([A-Za-z]{3,})\b/g, "$1-$3")
     .replace(/\bequil\s+ibrium\b/gi, "equilibrium")
-    .replace(/\b([PQ])\s+([FGMSfgms])\b/g, (_match, left: string, right: string) => `${left}${right.toUpperCase()}`);
+    .replace(/\b([PQ])\s+([FGMSfgms])\b/g, (_match, left: string, right: string) => `${left}${right.toUpperCase()}`)
+    .replace(/([+\-−–—])\s+(\d+)\s*\.\s*(\d+)/g, "$1$2.$3")
+    .replace(/([+−])\s+(\d+\.\d+)/g, "$1$2")
+    .replace(/(\d)\s+\.\s+(\d)/g, "$1.$2");
+}
+
+/** Drop Markdown the extractor wrapped around a printed question. */
+export function plainPrintedText(text: string) {
+  return repairPrintedSpacing(text
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*\*/g, "")
+    .replace(/^\s*[-*•]\s+/gm, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .trim());
+}
+
+/**
+ * Keep an extracted FRQ about as long as the 2022 paper.
+ * 2022 FRQ 1 is 1,335 characters and FRQ 2 is 1,371: a stem, then (a)–(e), with i. ii. on their own lines.
+ */
+export function shapeOfficialFrq(text: string) {
+  let shaped = plainPrintedText(text)
+    .replace(/写出计算过程。?/g, "")
+    .replace(/(^|[.?!。\n])\s*(\([a-e]\))\s+/gi, "$1\n\n$2 ")
+    .replace(/([.?!。])\s+((?:iv|iii|ii|i)\.)\s+/g, "$1\n$2 ")
+    .split("\n")
+    .filter((line) => !/^\s*(scoring guideline|参考答案|评分标准)/i.test(line))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  const limit = 2400;
+  if (shaped.length > limit) {
+    const cut = shaped.slice(0, limit);
+    const lastBreak = Math.max(cut.lastIndexOf("\n\n"), cut.lastIndexOf("\n"));
+    shaped = (lastBreak > 800 ? cut.slice(0, lastBreak) : cut).trim();
+  }
+  return shaped;
 }
 
 /** Read a printed point value. Part marks like "(2 points)" are added up. */
@@ -365,7 +407,7 @@ function parseFrqs(frqText: string): ParsedExamItem[] {
     const next = findExpected(frqText, n + 1, start + String(n).length + 1);
     const end = next < 0 ? frqText.length : next;
     const raw = frqText.slice(start + String(n).length + 1, end);
-    let content = cleanFrq(raw);
+    let content = shapeOfficialFrq(cleanFrq(raw));
     if (/above|上表|上图|如上/i.test(content)) {
       const stim = stimulusTail(previousRaw);
       if (stim && !content.includes(stim.slice(0, 24))) content = `${stim}\n${content}`;

@@ -1161,13 +1161,13 @@ export async function closeSchoolAttempt(
 }
 
 /** Drop a leftover grading lock and let unfinished answers be graded again. */
-export async function releaseGradeLocks(assignmentId: string) {
+export async function releaseGradeLocks(assignmentId: string, opts?: { force?: boolean }) {
   const { data: attempts } = await supabaseAdmin.from("school_attempts").select("id,frq_answers").eq("assignment_id", assignmentId);
   for (const row of attempts ?? []) {
     const parsed = parseFrqAnswers(row.frq_answers);
     const untilRaw = parsed.progress?.grading_until;
     const until = typeof untilRaw === "string" ? Date.parse(untilRaw) : NaN;
-    const lockLive = Number.isFinite(until) && until > Date.now();
+    const lockLive = !opts?.force && Number.isFinite(until) && until > Date.now();
     const grades = readStoredGrades(row.frq_answers);
     let changed = typeof untilRaw === "string" && !lockLive;
     for (const [id, grade] of Object.entries(grades)) {

@@ -159,21 +159,13 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
         if (body.action === "regrade") {
           if (Date.now() < Date.parse(owned.assignment.ends_at)) return jsonErr("考试还没结束，截止后批改");
           await resumeClassGrading(assignmentId);
-          await releaseGradeLocks(assignmentId);
-          const step = await drainSchoolGrades(assignmentId);
-          const fatal = fatalGradeError(step.error);
-          if (!step.waiting && !step.busy && !step.done && !fatal) continueGradeBatch(request, assignmentId);
-          else if (step.busy && step.retryAt) scheduleGradeRetry(request, assignmentId, step.retryAt);
-          if (fatal && step.error) return jsonErr(step.error, 502);
-          return Response.json({ ok: true, waiting: step.waiting, done: step.done, busy: step.busy, pending: step.pending, graded_sort: step.gradedSort, notice: step.notice ?? null, retry_at: step.retryAt ?? null });
+          await releaseGradeLocks(assignmentId, { force: true });
+          continueGradeBatch(request, assignmentId);
+          return Response.json({ ok: true, busy: true, done: false, notice: "正在重新批改还没出分的大题。完成的分数会马上出现。" });
         }
         if (body.action === "batch") {
-          const step = await drainSchoolGrades(assignmentId);
-          const fatal = fatalGradeError(step.error);
-          if (!step.waiting && !step.busy && !step.done && !fatal) continueGradeBatch(request, assignmentId);
-          else if (step.busy && step.retryAt) scheduleGradeRetry(request, assignmentId, step.retryAt);
-          if (fatal && step.error) return jsonErr(step.error, 502);
-          return Response.json({ ok: true, waiting: step.waiting, done: step.done, busy: step.busy, pending: step.pending, graded_sort: step.gradedSort, notice: step.notice ?? null, retry_at: step.retryAt ?? null });
+          continueGradeBatch(request, assignmentId);
+          return Response.json({ ok: true, busy: true, done: false, notice: "正在逐题批改。完成的分数会马上出现。" });
         }
         if (body.action !== "end" && !isUuid(rosterId)) return jsonErr("missing fields");
         if (body.action === "end") {

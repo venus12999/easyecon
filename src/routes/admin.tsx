@@ -14,8 +14,39 @@ import { isLifetimeVipEmail } from "@/lib/lifetime-vip";
 import { ManualPaymentsPanel } from "@/components/admin/ManualPaymentsPanel";
 import { TeacherUploadsPanel } from "@/components/admin/TeacherUploadsPanel";
 import { ExamScoresPanel } from "@/components/admin/ExamScoresPanel";
+import { isFullPageScan, shapeOfficialFrq } from "@/lib/ap-exam-parse";
+import { cropFigureFromExamPage } from "@/lib/exam-page-crop";
 
 // 判断题干是否提示包含图表（导入时在题干里以「[此题含图…]」「见原 PDF」「见图」等方式标注）
+function StoredFigure({ src }: { src: string }) {
+  const [shown, setShown] = useState(src);
+  useEffect(() => {
+    if (!isFullPageScan(src)) {
+      setShown(src);
+      return;
+    }
+    let cancelled = false;
+    let objectUrl = "";
+    void (async () => {
+      try {
+        const res = await fetch(src);
+        if (!res.ok) return;
+        const crop = await cropFigureFromExamPage(await res.blob(), "frq");
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(crop);
+        setShown(objectUrl);
+      } catch {
+        if (!cancelled) setShown(src);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [src]);
+  return <img src={shown} alt="" className="max-h-32 rounded border border-border" />;
+}
+
 function hasImageMarker(stem: string): boolean {
   if (!stem) return false;
   return /\[\s*(此题|本题)?\s*含图|\[图|见原\s*PDF|见图|见下图|见上图|图\s*\d+|graph|figure|the\s+(above|following)\s+(graph|figure|diagram|table)/i.test(
@@ -1389,10 +1420,10 @@ function FrqPanel({ token }: { token: string }) {
               {list.map((f, i) => (
                 <div key={f.id} className="border rounded-md p-3 space-y-2">
                   <div className="font-semibold text-sm">Q{i + 1}{f.title ? ` · ${f.title}` : ""}</div>
-                  <p className="text-xs whitespace-pre-wrap text-muted-foreground">{f.content}</p>
+                  <p className="text-xs whitespace-pre-wrap text-muted-foreground">{shapeOfficialFrq(f.content)}</p>
                   {f.image_url && (
                     <div className="flex items-start gap-3">
-                      <img src={f.image_url} alt="" className="max-h-32 rounded border border-border" />
+                      <StoredFigure src={f.image_url} />
                       <Button size="sm" variant="outline" onClick={() => void extractText(f.id)}>
                         <Sparkles className="h-4 w-4" /> 提取图片文字
                       </Button>

@@ -257,10 +257,13 @@ function mcqHandedIn(row: GradeRow) {
 
 function mcqProgressLabel(row: GradeRow) {
   if (!mcqHandedIn(row)) return row.status === "in_progress" ? "作答中" : "—";
-  if (row.mcq_correct != null && row.mcq_total) return `已交 ${row.mcq_correct}/${row.mcq_total}`;
   const answered = (row.mcqs ?? []).filter((item) => item.picked).length;
   const total = row.mcq_total || row.mcqs?.length || 0;
-  return total ? `已交 ${answered}/${total}` : "已交";
+  const known = (row.mcqs ?? []).filter((item) => item.is_correct != null);
+  const correct = known.length ? known.filter((item) => item.is_correct).length : row.mcq_correct;
+  if (!total) return answered ? `已答 ${answered} 题` : "已交";
+  if (correct == null) return `已答 ${answered}/${total}`;
+  return `已答 ${answered}/${total}，对 ${correct}`;
 }
 
 const GRADE_TRY_LIMIT = 4;
@@ -539,7 +542,14 @@ function scaledLabel(result: ApScore, scoreMax: number | null | undefined) {
 
 function formatApAverage(summary: ApClassSummary | null | undefined) {
   if (!summary || summary.average == null) return summary?.pending ? "待出分" : "—";
-  return summary.average.toFixed(1);
+  const value = summary.average.toFixed(1);
+  return summary.pending > 0 ? `部分 ${value}` : value;
+}
+
+function formatClassScale(summary: ApClassSummary | null | undefined, scoreMax?: number | null) {
+  const base = formatScaledScore(summary?.averageCustom, scoreMax ?? summary?.scoreMax);
+  if (base === "—" || !summary?.pending) return base;
+  return `部分 ${base}`;
 }
 
 function mcqRate(rows: GradeRow[]) {
@@ -701,6 +711,7 @@ function TeacherHome() {
   const [cropPick, setCropPick] = useState<{ index: number; pageUrl: string } | null>(null);
   const [endsAt, setEndsAt] = useState(() => toBeijingInput(new Date(Date.now() + sectionTotalMinutes(MCQ_MINUTES_DEFAULT, FRQ_MINUTES_DEFAULT, BREAK_MINUTES_DEFAULT) * 60 * 1000)));
   const [creating, setCreating] = useState(false);
+  const [examFormError, setExamFormError] = useState("");
   const [gradeId, setGradeId] = useState(() => search.exam || lastGradeId());
   const [gradeRows, setGradeRows] = useState<GradeRow[]>(() => readGradeCache(search.exam || lastGradeId())?.rows ?? []);
   const [gradeFocusId, setGradeFocusId] = useState<string | null>(null);
@@ -1301,12 +1312,20 @@ function TeacherHome() {
     gradeHold.current = 0;
     setGradeRetryAt(0);
     setGradeNote("正在重新批改还没出分的大题");
-    const response = await authFetch("/api/teacher/gradebook", {
-      method: "POST",
-      body: JSON.stringify({ assignment_id: gradeId, action: "regrade" }),
-    });
+    let response: Response;
+    try {
+      response = await authFetch("/api/teacher/gradebook", {
+        method: "POST",
+        body: JSON.stringify({ assignment_id: gradeId, action: "regrade" }),
+      });
+    } catch {
+      setGradeNote("");
+      toast.error("重新批改的请求中断了。刷新成绩册能看到已经出来的分数。");
+      return;
+    }
     const body = await response.json().catch(() => ({} as { error?: string; notice?: string; busy?: boolean; retry_at?: string | null }));
     if (!response.ok) {
+      setGradeNote("");
       toast.error(body.error ?? "重新批改没有开始");
       return;
     }
@@ -1317,9 +1336,14 @@ function TeacherHome() {
         setGradeRetryAt(gradeHold.current);
       }
     }
-    await loadGradebook(gradeId, { keepPage: true });
+    const rows = await loadGradebook(gradeId, { keepPage: true });
+    if (rows && rows.every((row) => ungradedAnswerCount(row) === 0)) {
+      setGradeNote("");
+      toast.success("还没出分的大题已经批完");
+      return;
+    }
     if (body.busy && (body.notice || body.retry_at)) {
-      setGradeNote(body.notice || "还没到可重试时间。已经出分的会保留。");
+      setGradeNote(body.notice || "正在重新批改还没出分的大题。完成的分数会马上出现。");
       return;
     }
     toast.success("已重新开始批改还没出分的大题");
@@ -1351,6 +1375,11 @@ function TeacherHome() {
     const timer = window.setInterval(() => setGradeClock(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [gradeRetryAt, gradePaused]);
+
+  useEffect(() => {
+    if (classGradeDue) return;
+    setGradeNote((note) => /正在重新批改|正在逐题批改|完成的分数会马上出现/.test(note) ? "" : note);
+  }, [classGradeDue]);
 
   useEffect(() => {
     if (!classGradeDue || gradePaused || (gradeId && sessionStorage.getItem(gradePauseKey(gradeId)) === "1")) return;
@@ -1734,7 +1763,7 @@ function TeacherHome() {
             reviewed: true,
             rubric_note: "",
             needs_image: it.needs_image,
-            image_url: crop ?? (it.needs_image ? pageUrl : null),
+            image_url: crop,
             page_image_url: pageUrl,
           };
         });
@@ -2188,38 +2217,48 @@ function TeacherHome() {
   }
 
   function reviewExam() {
+    const fail = (message: string) => {
+      setExamFormError(message);
+      toast.error(message);
+    };
     if (roster.length === 0) {
-      toast.error("还没有学生。可以先点「导入测试学号」，或去学生名册粘贴名单。");
+      fail("还没有学生。可以先点「导入测试学号」，或去学生名册粘贴名单。");
       return;
     }
     if (!title.trim()) {
-      toast.error("请先填写考试名称");
+      fail("请先填写考试名称");
       return;
     }
     if (source === "existing" && !paperId) {
-      toast.error("请选择一份试卷");
+      fail("请选择一份试卷");
       return;
     }
     const starts = examInputMs(startsAt);
     const ends = examInputMs(endsAt);
     if (!Number.isFinite(starts) || !Number.isFinite(ends) || ends <= starts) {
-      toast.error("请设置有效的开考和截止时间");
+      fail("请设置有效的开考和截止时间");
       return;
     }
     const sectionError = sectionMinutesError(mcqMinutes, frqMinutes, frqMinutes > 0 ? breakMinutes : 0);
     if (sectionError) {
-      toast.error(sectionError);
+      fail(sectionError);
       return;
     }
     const maxError = scoreMaxError(scoreMax);
     if (maxError) {
-      toast.error(maxError);
+      fail(maxError);
       return;
     }
     const sectionMs = sectionTotalMinutes(mcqMinutes, frqMinutes, frqMinutes > 0 ? breakMinutes : 0) * 60 * 1000;
     if (ends - starts + 90_000 < sectionMs) {
-      toast.error("截止时间要盖住选择题、休息和大题");
+      fail("截止时间要盖住选择题、休息和大题");
       return;
+    }
+    if (starts < Date.now() - 30_000) {
+      setExamFormError("开始时间已经过去了。发布后学生可以马上用考试码进入。");
+      toast.message("开始时间已经过去了。发布后学生可以马上用考试码进入。");
+    } else {
+      setExamFormError("");
     }
     setExamStep("review");
   }
@@ -2337,7 +2376,7 @@ function TeacherHome() {
               <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                 <StatCard label="我的学生" value={roster.length} hint={roster.length ? `${roster.filter((r) => r.user_id).length} 人已入场绑定` : "尚未导入学生"} icon={Users} />
                 <StatCard label="进行中的考试" value={liveCount} hint={assignments.length ? `共布置 ${assignments.length} 场` : "创建考试后会显示在这里"} icon={ClipboardList} />
-                <StatCard label="平均 AP 分" value={examsLoaded || assignments.length > 0 ? formatApAverage(overviewAp) : "—"} hint={overviewAp.average != null ? `最近一场已换算 ${overviewAp.scored} 人${openFrqCount ? `，另有 ${openFrqCount} 道大题没批完` : ""}${overviewRate != null ? `，选择题正确率 ${overviewRate}%` : ""}` : openFrqCount || overviewAp.pending ? "最近一场大题还没出分" : "最近一场还没有可换算的成绩"} icon={BarChart3} />
+                <StatCard label="平均 AP 分" value={examsLoaded || assignments.length > 0 ? formatApAverage(overviewAp) : "—"} hint={overviewAp.average != null ? `最近一场已换算 ${overviewAp.scored} 人${overviewAp.pending ? `，还有 ${overviewAp.pending} 人没出完` : ""}${openFrqCount ? `，另有 ${openFrqCount} 道大题没批完` : ""}${overviewRate != null ? `，选择题正确率 ${overviewRate}%` : ""}` : openFrqCount || overviewAp.pending ? "最近一场大题还没出分" : "最近一场还没有可换算的成绩"} icon={BarChart3} />
                 <StatCard label="待处理" value={examsLoaded || assignments.length > 0 ? pendingCount : "—"} hint={pendingHint} icon={Clock} />
               </div>
               <div className={cn("grid gap-4", roster.length > 0 && assignments.length > 0 ? "" : "lg:grid-cols-[1.35fr_1fr]")}>
@@ -2616,6 +2655,9 @@ function TeacherHome() {
                         <dd className="font-medium">{aiGradeFrq ? "截止后批改" : "只收答卷，不自动批大题"}</dd>
                       </dl>
                     </div>
+                    {examFormError ? (
+                      <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-sm text-amber-950">{examFormError}</p>
+                    ) : null}
                     <div className="flex flex-col gap-2 border-t border-white/70 pt-4 sm:flex-row sm:justify-between">
                       <Button variant="outline" onClick={() => setExamStep("edit")}>返回修改</Button>
                       <Button onClick={() => void createAssignment()} disabled={creating}>
@@ -2718,9 +2760,13 @@ function TeacherHome() {
                           onChange={(e) => {
                             const value = e.target.value;
                             setStartsAt(value);
-                            const start = Date.parse(value);
-                            if (!Number.isFinite(start)) return;
+                            const start = examInputMs(value);
+                            if (!Number.isFinite(start)) {
+                              setExamFormError("请设置有效的开考时间");
+                              return;
+                            }
                             setEndsAt(toBeijingInput(new Date(start + sectionTotalMinutes(mcqMinutes, frqMinutes, frqMinutes > 0 ? breakMinutes : 0) * 60 * 1000)));
+                            setExamFormError(start < Date.now() - 30_000 ? "开始时间已经过去了。点「检查并继续」后仍可以发布，学生打开考试码就能进入。" : "");
                           }}
                         />
                       </Field>
@@ -2823,9 +2869,12 @@ function TeacherHome() {
                         <Switch checked={aiGradeFrq} onCheckedChange={setAiGradeFrq} aria-label="大题用 AI 批改" />
                       </div>
                     </div>
+                    {examFormError ? (
+                      <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-sm text-amber-950">{examFormError}</p>
+                    ) : null}
                     <div className="flex flex-col gap-3 border-t border-white/70 pt-4 sm:flex-row sm:items-center sm:justify-between">
                       <span className="text-xs text-muted-foreground">预计考试人数：{roster.length} 人</span>
-                      <Button onClick={reviewExam}>检查并继续</Button>
+                      <Button type="button" onClick={reviewExam}>检查并继续</Button>
                     </div>
                   </div>
                 )}
@@ -2855,7 +2904,7 @@ function TeacherHome() {
                         </div>
                         <p className="text-xs leading-relaxed text-muted-foreground">
                           {a.class_name ? `${a.class_name}${a.teacher_name ? ` · ${a.teacher_name}` : ""} · ` : ""}
-                          {a.paper?.title ?? "试卷"} · {assignmentTiming(a)} · 满分 {a.score_max ?? "—"} · 平均 {formatScaledScore(a.ap?.averageCustom, a.score_max ?? a.ap?.scoreMax)} · AP {formatApAverage(a.ap)} · 正确率 {accuracyLabel(a)} · 北京时间 {beijingTime(a.starts_at).slice(0, 16)} – {beijingTime(a.ends_at).slice(0, 16)}
+                          {a.paper?.title ?? "试卷"} · {assignmentTiming(a)} · 满分 {a.score_max ?? "—"} · 平均 {formatClassScale(a.ap, a.score_max)} · AP {formatApAverage(a.ap)} · 正确率 {accuracyLabel(a)} · 北京时间 {beijingTime(a.starts_at).slice(0, 16)} – {beijingTime(a.ends_at).slice(0, 16)}
                         </p>
                         <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center">
                           <span className="font-mono text-lg tracking-[0.14em]">{a.exam_code}</span>
@@ -2949,7 +2998,7 @@ function TeacherHome() {
                     ) : null}
                   </div>
                   <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                    <StatCard label="平均 AP 分" value={scoresPending ? "—" : formatApAverage(classAp)} hint={scoresPending ? "正在读取成绩" : classAp.averageCustom != null ? `折算均分 ${formatScaledScore(classAp.averageCustom, classAp.scoreMax)}` : classAp.scored ? `已换算 ${classAp.scored} 人${classAp.pending ? `，${classAp.pending} 人待出分` : ""}` : classAp.pending ? "大题批完后换算" : "交卷后按 1–5 分换算"} />
+                    <StatCard label="平均 AP 分" value={scoresPending ? "—" : formatApAverage(classAp)} hint={scoresPending ? "正在读取成绩" : classAp.averageCustom != null ? `折算均分 ${formatClassScale(classAp)}${classAp.pending ? `，还有 ${classAp.pending} 人没出完` : ""}` : classAp.scored ? `已换算 ${classAp.scored} 人${classAp.pending ? `，${classAp.pending} 人待出分` : ""}` : classAp.pending ? "大题批完后换算" : "交卷后按 1–5 分换算"} />
                     <StatCard label="班级正确率" value={scoresPending || gradeRate == null ? "—" : `${gradeRate}%`} hint={scoresPending ? "正在读取成绩" : gradeRate == null ? "暂无成绩数据" : "已交卷选择题"} />
                     <StatCard
                       label="已提交"
@@ -2959,7 +3008,7 @@ function TeacherHome() {
                     <StatCard label="最高 AP 分" value={scoresPending || classAp.best == null ? "—" : classAp.best} hint={scoresPending ? "正在读取成绩" : classAp.bestCustom != null ? `最高折算 ${formatScaledScore(classAp.bestCustom, classAp.scoreMax)}` : bestScore < 0 ? "暂无成绩数据" : `最高选择题正确率 ${Math.round(bestScore * 100)}%`} />
                   </div>
                   {classAp.scored > 0 ? (
-                    <p className="text-xs text-muted-foreground">AP 分布：{apDistributionText(classAp)}。选择题占三分之二，大题占三分之一；综合分满分 90，70 分为 5，57 分为 4，45 分为 3，36 分为 2。{gradeMeta?.score_max ? `老师设定满分 ${gradeMeta.score_max}，班均 ${formatScaledScore(classAp.averageCustom, gradeMeta.score_max)}。` : ""}</p>
+                    <p className="text-xs text-muted-foreground">AP 分布：{apDistributionText(classAp)}。{classAp.pending ? `这是已出分的 ${classAp.scored} 人，还有 ${classAp.pending} 人没出完。` : ""}选择题占三分之二，大题占三分之一；综合分满分 90，70 分为 5，57 分为 4，45 分为 3，36 分为 2。{gradeMeta?.score_max ? `老师设定满分 ${gradeMeta.score_max}，班均 ${formatClassScale(classAp, gradeMeta.score_max)}。` : ""}</p>
                   ) : null}
                   {reviewRows.length > 0 ? (
                     <p className="rounded-xl bg-amber-100 px-3 py-2 text-sm text-amber-950">

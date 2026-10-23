@@ -1,4 +1,4 @@
-import { repairPrintedSpacing } from "@/lib/ap-exam-parse";
+import { repairPrintedSpacing, shapeOfficialFrq } from "@/lib/ap-exam-parse";
 
 /** Official 2022 FRQ 3. The live row was missing parts (a)–(e) and the wage, price, and fixed cost. */
 export const AP_2022_FRQ3_CONTENT = `The table represents the total quantity of textbooks that can be produced by a firm using different quantities of workers in a single day.
@@ -50,7 +50,7 @@ export function presentExamFrqs<T extends FrqFace>(frqs: T[], slug?: string | nu
     return {
       ...next,
       title: next.title ? repairPrintedSpacing(next.title) : next.title,
-      content: next.content ? repairPrintedSpacing(next.content) : next.content,
+      content: next.content ? shapeOfficialFrq(next.content) : next.content,
     };
   });
 }

@@ -1,4 +1,4 @@
-import { looksLikeProvidedFigure, officialFrqMax, printedQuestionNumber, readableFrqLabel, readPrintedScore, recoverOptionE, studentVisibleQuestion, withUniqueQuestionNumbers } from "@/lib/ap-exam-parse";
+import { looksLikeProvidedFigure, officialFrqMax, printedQuestionNumber, readableFrqLabel, readPrintedScore, recoverOptionE, shapeOfficialFrq, studentVisibleQuestion, withUniqueQuestionNumbers } from "@/lib/ap-exam-parse";
 
 export type VisionExamItem = {
   kind: "mcq" | "frq";
@@ -58,7 +58,7 @@ function sanitizeItems(raw: unknown, pages: VisionPage[]): VisionExamItem[] {
     const page = Number(rec.page_number);
     const page_number = allowedPages.has(page) ? page : pages[0]?.page_number ?? 1;
     const stem = clip(rec.stem, 2000);
-    const content = clip(rec.content, 6000);
+    const content = kind === "frq" ? String(rec.content ?? "") : clip(rec.content, 6000);
     const pageText = pages.find((p) => p.page_number === page_number)?.text ?? "";
     let visible = kind === "frq" ? studentVisibleQuestion(content || stem, pageText) : "";
     const fig = pageText.match(/fig(?:ure|\.)\s*\d+|图\s*\d+/i);
@@ -93,7 +93,7 @@ function sanitizeItems(raw: unknown, pages: VisionPage[]): VisionExamItem[] {
       option_d,
       option_e,
       correct_answer: kind === "mcq" && /^[A-E]$/.test(answer) ? answer : "",
-      content: kind === "frq" ? visible : "",
+      content: kind === "frq" ? shapeOfficialFrq(visible) : "",
       max_score: kind === "frq" ? officialFrqMax(`${stem}\n${content}`, fromModel > 0 && fromModel !== 9 ? fromModel : 0) : printed || fromModel || 1,
       needs_image: looksLikeProvidedFigure(`${blob}\n${visible}`),
     });
@@ -111,12 +111,15 @@ export async function visionParseExamPages(pages: VisionPage[]): Promise<{ items
       type: "text",
       text: [
         "下面是一份老师上传的试卷，按页给出图片和提取到的文字。",
+        "页脚、页码、小红书水印、红书号可以忽略，不要写进题目，也不要因为有水印就丢掉这一页或这道题的图。",
+        "先把图片里印出的题目文字原样抽进 stem 或 content。不要用 Markdown，不要加星号，不要加项目符号。",
+        "如果这一页上有图表（坐标轴、曲线、表格），needs_image 设为 true。题图只要图表本身，不要把整页试卷当成题图。文字进题目，图表另裁。页面上没有印好的图表、只是让学生自己画图时，needs_image 设为 false。",
         "只抽出页面上真正印出的题目，不要编造，不要把说明、封面、答题卡说明当成题。",
         "选择题 kind=mcq。卷面是 A 到 E 五选一。option_a 到 option_e 都要原样抄下，option_e 不能空，也不要把 E 并进 option_d。E 经常在 D 的下一行或右栏。大题、简答、free-response 用 kind=frq。",
         "max_score 用卷面印出的分值。大题如果每个小问写了 (N points)，把各小问分值相加作为这道大题的满分。选择题没写分值就用 1。看不清分值时不要填 9。",
         "question_number 用卷面印的题号。选择题和大题如果连着编成 Q1、Q2、Q3、Q4，大题就要写成 3 和 4，不要把大题从 1 重新编号。",
         "页码用我标出的 page_number。看不清就不要猜那一题。",
-        "大题的 content 和 stem 只抄卷面上印出来的句子。题干写 table above、diagram above、上表、上图时，把这道题上方的表或图里印出的文字一并放进 content，不要丢掉。不要描述图，不要写曲线怎么走，不要写交点、均衡价格或数量。卷面如果只写了 Refer to Figure 1，就只保留这句。",
+        "大题的 content 严格照 2022 年 AP 微观卷的长度和分段。那三道大题刚刚好：一道大约 1100 到 1600 个字符，先一段题干，再写卷面上的 (a)(b)(c)…，小问用 i. ii. iii. 另起一行。不要翻译，不要加粗，不要项目符号，不要「写出计算过程」，不要评分说明，也不要把下一题或整页文字接进来。印了表才放一个紧凑的 HTML 表格，和 2022 年第 3 题一样。题干写 table above、diagram above、上表、上图时，把这道题上方的表或图里印出的文字一并放进 content，不要丢掉。不要描述图，不要写曲线怎么走，不要写交点、均衡价格或数量。卷面如果只写了 Refer to Figure 1，就只保留这句。",
         ...pages.map((p) => `\n--- 第 ${p.page_number} 页文字 ---\n${p.text || "（这一页没有提取到文字）"}`),
       ].join("\n"),
     },
