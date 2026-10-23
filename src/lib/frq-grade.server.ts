@@ -279,8 +279,8 @@ async function completeGrade(input: {
     const latency = Date.now() - started;
     if (status === 401 || status === 403) {
       await upstream.body?.cancel();
-      logGrade({ request_id: input.requestId, model: input.model, latency_ms: latency, ok: false, status, error: "not_configured" });
-      return { ok: false, error: "ai_not_configured", status };
+      logGrade({ request_id: input.requestId, model: input.model, latency_ms: latency, ok: false, status, error: "unauthorized" });
+      return { ok: false, error: "ai_unauthorized", status };
     }
     if (status === 429 || status >= 500) {
       const retryAfterMs = parseRetryAfter(upstream.headers.get("retry-after"));

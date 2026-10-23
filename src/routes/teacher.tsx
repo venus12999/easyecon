@@ -265,8 +265,14 @@ function mcqProgressLabel(row: GradeRow) {
 
 const GRADE_TRY_LIMIT = 4;
 
+function frqNeedsGrade(frq: GradeFrq) {
+  if (frq.manual_score != null || frq.ai_score != null) return false;
+  if (!isBlankStudentAnswer(frq.answer_text, frq.file_url)) return true;
+  return frq.ai_failed === true || !!frq.ai_error;
+}
+
 function ungradedAnswerCount(row: GradeRow) {
-  return (row.frqs ?? []).filter((frq) => !isBlankStudentAnswer(frq.answer_text, frq.file_url) && frq.manual_score == null && frq.ai_score == null).length;
+  return (row.frqs ?? []).filter(frqNeedsGrade).length;
 }
 
 function frqStillRetrying(frq: GradeFrq) {
@@ -301,7 +307,7 @@ function rowStatusLabel(row: GradeRow, endsAt?: string | null) {
 function frqHeaderLabel(row: GradeRow) {
   const frqs = row.frqs ?? [];
   const scored = frqs.filter((frq) => frq.manual_score != null || frq.ai_score != null);
-  const left = frqs.filter((frq) => !isBlankStudentAnswer(frq.answer_text, frq.file_url) && frq.manual_score == null && frq.ai_score == null).length;
+  const left = frqs.filter(frqNeedsGrade).length;
   const earned = scored.reduce((sum, frq) => sum + (frq.manual_score ?? frq.ai_score ?? 0), 0);
   if (scored.length > 0 && left > 0) return ` · 大题已出 ${earned} 分，还有 ${left} 题没批完`;
   if (left > 0) return ` · 大题还有 ${left} 题没批完`;
@@ -512,13 +518,15 @@ function gradeAp(row: GradeRow) {
   if (row.status !== "submitted") {
     return apMicroScore({ mcqCorrect: null, mcqTotal: null, frqEarned: null, frqMax: null });
   }
-  const hasFrq = row.frq_max > 0;
+  const frqs = row.frqs ?? [];
+  const hasFrq = frqs.length > 0;
   const frqOpen = ungradedAnswerCount(row) > 0;
+  const frqMax = row.frq_max > 0 ? row.frq_max : hasFrq ? frqs.length : 0;
   return apMicroScore({
     mcqCorrect: row.mcq_correct,
     mcqTotal: row.mcq_total,
-    frqEarned: hasFrq && !frqOpen ? row.frq_score : null,
-    frqMax: hasFrq ? row.frq_max : null,
+    frqEarned: hasFrq && !frqOpen ? row.frq_score ?? 0 : null,
+    frqMax: hasFrq ? frqMax : null,
   });
 }
 
@@ -2133,12 +2141,12 @@ function TeacherHome() {
   const scoresPending = page === "scores" && !gradeMeta && gradeRows.length === 0;
   const reviewRows = gradeRows.filter((row) => (row.frqs ?? []).some((frq) => frq.needs_review));
   const questionNotes = frqClassNotes(gradeRows);
-  const pendingFrqCount = gradeRows.reduce((sum, row) => sum + (row.status === "submitted" ? (row.frqs ?? []).filter((frq) => frq.manual_score == null && frq.ai_score == null && (frq.answer_text.trim() || frq.file_url)).length : 0), 0);
+  const pendingFrqCount = gradeRows.reduce((sum, row) => sum + (row.status === "submitted" ? ungradedAnswerCount(row) : 0), 0);
   const pendingGradeError = gradeRows.flatMap((row) => row.status === "submitted" ? (row.frqs ?? []) : []).find((frq) => frq.ai_score == null && frq.manual_score == null && frq.ai_error)?.ai_error ?? "";
   const examStillOpen = !!gradeMeta && Date.parse(gradeMeta.ends_at) > Date.now();
   const mcqHeaders = columnNumbers(gradeRows, (row) => row.mcqs, (item) => item.n);
   const frqHeaders = columnNumbers(gradeRows, (row) => row.frqs, (frq) => frq.sort_order);
-  const frqWaiting = gradeRows.some((row) => row.status === "submitted" && (row.frqs ?? []).some((frq) => (frq.answer_text.trim() || frq.file_url) && frq.manual_score == null && frq.ai_score == null));
+  const frqWaiting = gradeRows.some((row) => row.status === "submitted" && ungradedAnswerCount(row) > 0);
   const publishBlock = !gradeMeta
     ? ""
     : examStillOpen

@@ -99,7 +99,7 @@ export const Route = createFileRoute("/api/frq/grade")({
         });
         if (!graded.ok) {
           if (!skipQuota) await releaseAiQuota(supabaseAdmin, u.userId, "frq_grade");
-          const status = graded.error === "rate_limited" ? 429 : graded.error === "credits_exhausted" ? 402 : graded.error === "ai_not_configured" ? 503 : 500;
+          const status = graded.error === "rate_limited" ? 429 : graded.error === "credits_exhausted" ? 402 : graded.error === "ai_not_configured" || graded.error === "ai_unauthorized" ? 503 : 500;
           return err(graded.error, status);
         }
         const clean = graded.grade;

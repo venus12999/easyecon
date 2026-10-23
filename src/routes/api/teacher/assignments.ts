@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { officialFrqMax } from "@/lib/ap-exam-parse";
 import { apMicroScore, scoreMaxError, summarizeApScores, type ApClassSummary } from "@/lib/ap-score";
 import { sectionMinutesError, sectionTotalMinutes } from "@/lib/exam-sections";
 import { withExamAiGrade } from "@/lib/exam-flags";
@@ -27,20 +28,23 @@ function frqWasAnswered(raw: unknown, id: string) {
 
 function apForAssignment(rows: AttemptScoreRow[], frqIds: string[], frqMax: number, scoreMax: number | null): { ap: ApClassSummary; pending_frq: number } {
   let pendingFrq = 0;
+  const hasFrq = frqIds.length > 0;
+  const sectionMax = frqMax > 0 ? frqMax : hasFrq ? frqIds.length : 0;
   const results = rows
     .filter((row) => row.submitted_at)
     .map((row) => {
       const grades = readStoredGrades(row.frq_answers);
       let earned = 0;
       let open = false;
-      if (frqMax > 0) {
+      if (hasFrq) {
         for (const id of frqIds) {
-          const score = grades[id]?.manual_score ?? grades[id]?.ai_score;
+          const grade = grades[id];
+          const score = grade?.manual_score ?? grade?.ai_score;
           if (typeof score === "number") {
             earned += score;
             continue;
           }
-          if (frqWasAnswered(row.frq_answers, id)) {
+          if (frqWasAnswered(row.frq_answers, id) || grade?.ai_failed || grade?.ai_error || grade?.retry_after) {
             open = true;
             pendingFrq += 1;
           }
@@ -49,8 +53,8 @@ function apForAssignment(rows: AttemptScoreRow[], frqIds: string[], frqMax: numb
       return apMicroScore({
         mcqCorrect: row.mcq_correct,
         mcqTotal: row.mcq_total,
-        frqEarned: frqMax > 0 && !open ? earned : null,
-        frqMax: frqMax > 0 ? frqMax : null,
+        frqEarned: hasFrq && !open ? earned : null,
+        frqMax: hasFrq ? sectionMax : null,
       });
     });
   return { ap: summarizeApScores(results, scoreMax), pending_frq: pendingFrq };
@@ -60,12 +64,13 @@ async function frqScales(db: { from: typeof supabaseAdmin.from }, paperIds: stri
   const ids = new Map<string, string[]>();
   const max = new Map<string, number>();
   if (!paperIds.length) return { ids, max };
-  const { data } = await db.from("paper_frqs").select("id,paper_id,max_score").in("paper_id", paperIds);
+  const { data } = await db.from("paper_frqs").select("id,paper_id,max_score,title,content").in("paper_id", paperIds);
   for (const frq of data ?? []) {
     const list = ids.get(frq.paper_id) ?? [];
     list.push(frq.id);
     ids.set(frq.paper_id, list);
-    max.set(frq.paper_id, (max.get(frq.paper_id) ?? 0) + (frq.max_score ?? 0));
+    const points = officialFrqMax(`${frq.title ?? ""}\n${frq.content ?? ""}`, frq.max_score);
+    max.set(frq.paper_id, (max.get(frq.paper_id) ?? 0) + (points > 0 ? points : 0));
   }
   return { ids, max };
 }

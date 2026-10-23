@@ -98,7 +98,7 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
           const mcqClosed = !!a && (!!a.submitted_at || mcqSectionClosed(a.frq_answers));
           const scoredMcq = mcqs.filter((item) => item.is_correct != null);
           const scored = views.filter((v) => v.manual_score != null || v.ai_score != null);
-          const frqStillOpen = views.some((v) => !isBlankStudentAnswer(v.answer_text, v.file_url) && v.manual_score == null && v.ai_score == null);
+          const frqStillOpen = views.some((v) => v.manual_score == null && v.ai_score == null && (!isBlankStudentAnswer(v.answer_text, v.file_url) || v.ai_failed || !!v.ai_error));
           const blankPaper = views.length > 0 && views.every((v) => isBlankStudentAnswer(v.answer_text, v.file_url));
           return {
             roster_id: r.id,

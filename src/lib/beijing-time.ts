@@ -1,27 +1,12 @@
-/** Exam clocks are Beijing time, even when the computer is set to another zone. */
+/** Beijing is UTC+8 all year. Do not use Intl: the worker clock ignores the timezone and prints UTC. */
 export function beijingTime(iso: string | number | Date | null | undefined) {
   if (iso == null || iso === "") return "";
   const date = iso instanceof Date ? iso : new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(date);
-  const pick = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
-  let hour = Number(pick("hour"));
-  if (!Number.isFinite(hour)) hour = 0;
-  const period = pick("dayPeriod").toLowerCase();
-  if ((period.startsWith("pm") || period.includes("下午")) && hour < 12) hour += 12;
-  if ((period.startsWith("am") || period.includes("上午")) && hour === 12) hour = 0;
-  if (hour === 24) hour = 0;
-  const pad = (value: number | string) => String(value).padStart(2, "0");
-  return `${pick("year")}-${pad(pick("month"))}-${pad(pick("day"))} ${pad(hour)}:${pad(pick("minute"))}:${pad(pick("second"))}`;
+  const ms = date.getTime();
+  if (Number.isNaN(ms)) return "";
+  const shifted = new Date(ms + 8 * 60 * 60 * 1000);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${shifted.getUTCFullYear()}-${pad(shifted.getUTCMonth() + 1)}-${pad(shifted.getUTCDate())} ${pad(shifted.getUTCHours())}:${pad(shifted.getUTCMinutes())}:${pad(shifted.getUTCSeconds())}`;
 }
 
 /** datetime-local values are the Beijing wall clock the teacher picked, not the computer zone. */

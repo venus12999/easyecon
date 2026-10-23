@@ -352,11 +352,11 @@ function formatRetryWhen(at: Date) {
   const clock = beijingTime(at).slice(11, 16);
   const seconds = Math.max(1, Math.round((at.getTime() - Date.now()) / 1000));
   const wait = seconds >= 60 ? `${Math.ceil(seconds / 60)} 分钟` : `${seconds} 秒`;
-  return `${clock}（约 ${wait}后）`;
+  return `北京时间 ${clock}（约 ${wait}后）`;
 }
 
 function finalGradeReason(error: string, sort?: number | null, student?: string | null) {
-  if (error === "ai_not_configured" || error === "missing_max_score" || error === "credits_exhausted") {
+  if (error === "ai_not_configured" || error === "ai_unauthorized" || error === "missing_max_score" || error === "credits_exhausted") {
     return explainGradeError(error, sort, student, null);
   }
   const which = sort ? `Q${sort}` : "这一题";
@@ -369,6 +369,7 @@ function explainGradeError(error: string, sort?: number | null, student?: string
   const who = student ? `${student} 的 ` : "";
   const later = when ? `下次可重试时间 ${when}。` : "稍后再试会继续。";
   if (error === "ai_not_configured") return student ? `${student}：AI 评分尚未配置，没能批改` : "AI 评分尚未配置，没能批改";
+  if (error === "ai_unauthorized") return student ? `${student}：AI 评分密钥无效，没能批改` : "AI 评分密钥无效，没能批改";
   if (error === "missing_max_score") return `${who}${which} 没有满分，请老师先填写再批改`;
   if (error === "rate_limited") return `${who}${which} 没批完：AI 评分请求过多。已经出分的会保留。${later}`;
   if (error === "timeout") return `${who}${which} 没批完：评分超时。已经出分的会保留。${later}`;
@@ -519,7 +520,7 @@ const GRADE_PAUSE_MS = 45_000;
 function markGradeRetry(prev: StoredFrqGrade | undefined, maxScore: number | null, error: string, reason: string, retryAtIso?: string | null) {
   const tries = gradeAttemptCount(prev) + 1;
   const maxTries = gradingMaxRetries();
-  const hardStop = error === "credits_exhausted" || error === "ai_not_configured" || error === "missing_max_score";
+  const hardStop = error === "credits_exhausted" || error === "ai_not_configured" || error === "ai_unauthorized" || error === "missing_max_score";
   const giveUp = hardStop || tries >= maxTries;
   const keepScore = prev?.ai_score != null;
   return {
@@ -752,7 +753,7 @@ async function gradeNextSchoolFrqInner(attemptId: string, paperId: string, opts?
     if (!graded.ok) {
       const prev = grades[frq.id];
       const sort = shownQuestionOrder(full);
-      const hardStop = graded.error === "credits_exhausted" || graded.error === "ai_not_configured" || graded.error === "missing_max_score";
+      const hardStop = graded.error === "credits_exhausted" || graded.error === "ai_not_configured" || graded.error === "ai_unauthorized" || graded.error === "missing_max_score";
       const waitMs = hardStop ? 0 : retryWaitMs(gradeAttemptCount(prev), graded.retryAfterMs ?? null);
       const retryAt = waitMs > 0 ? new Date(Date.now() + waitMs) : null;
       const marked = markGradeRetry(prev, full.max_score, graded.error, "", retryAt?.toISOString() ?? null);
