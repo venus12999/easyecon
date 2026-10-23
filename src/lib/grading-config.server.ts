@@ -1,15 +1,20 @@
-const DEFAULT_BASE_URL = "https://api2.laozhang.ai/v1";
-const DEFAULT_MODEL = "gemini-2.5-flash";
+type GradingProvider = "deepseek" | "qwen";
 
-/** Models a teacher deploy can select with GRADING_MODEL. The default stays flash. */
-export const GRADING_MODELS = [
-  "gemini-2.5-flash",
-  "gemini-2.5-flash-nothinking",
-  "gemini-2.5-flash-lite",
-  "gpt-4o-mini",
-] as const;
+const PROVIDERS: Record<GradingProvider, { baseUrl: string; model: string; keyEnv: "DEEPSEEK_API_KEY" | "QWEN_API_KEY" }> = {
+  deepseek: {
+    baseUrl: "https://api.deepseek.com",
+    model: "deepseek-flash",
+    keyEnv: "DEEPSEEK_API_KEY",
+  },
+  qwen: {
+    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    model: "qwen-vl-plus",
+    keyEnv: "QWEN_API_KEY",
+  },
+};
 
-export const GRADING_TIMEOUT_MS = 45_000;
+const DEEPSEEK_MODELS = ["deepseek-flash", "deepseek-v4-flash"];
+const RETRY_STEPS_MS = [5_000, 15_000, 45_000, 120_000];
 
 function boundedInt(raw: string | undefined, fallback: number, min: number, max: number) {
   const n = Number(raw ?? fallback);
@@ -17,26 +22,58 @@ function boundedInt(raw: string | undefined, fallback: number, min: number, max:
   return Math.max(min, Math.min(max, Math.floor(n)));
 }
 
+/** deepseek is live. qwen is the spare slot and is not selected unless GRADING_PROVIDER=qwen. */
+export function gradingProvider(): GradingProvider {
+  return (process.env.GRADING_PROVIDER ?? "deepseek").trim().toLowerCase() === "qwen" ? "qwen" : "deepseek";
+}
+
 export function gradingBaseUrl() {
-  const raw = (process.env.GRADING_BASE_URL ?? DEFAULT_BASE_URL).trim().replace(/\/+$/, "");
-  if (!/^https:\/\/\S+$/i.test(raw)) return DEFAULT_BASE_URL;
+  const fallback = PROVIDERS[gradingProvider()].baseUrl;
+  const raw = (process.env.GRADING_BASE_URL ?? "").trim().replace(/\/+$/, "");
+  if (!raw || /laozhang\.ai|gateway\.lovable\.dev|generativelanguage\.googleapis\.com/i.test(raw)) return fallback;
+  if (!/^https:\/\/\S+$/i.test(raw)) return fallback;
   return raw;
 }
 
+export function gradingHost() {
+  try {
+    return new URL(gradingBaseUrl()).host;
+  } catch {
+    return "api.deepseek.com";
+  }
+}
+
+/** deepseek-v4-pro cannot read images, so a Pro setting still grades with flash. */
 export function gradingModel() {
-  const requested = (process.env.GRADING_MODEL ?? DEFAULT_MODEL).trim();
-  return (GRADING_MODELS as readonly string[]).includes(requested) ? requested : DEFAULT_MODEL;
+  const provider = gradingProvider();
+  const fallback = PROVIDERS[provider].model;
+  const requested = (process.env.GRADING_MODEL ?? "").trim();
+  if (!requested) return fallback;
+  if (provider === "deepseek") {
+    if (/v4-pro/i.test(requested) || !DEEPSEEK_MODELS.includes(requested)) return "deepseek-flash";
+    return requested;
+  }
+  return requested;
 }
 
-/**
- * LaoZhang does not cap account RPM or concurrency. A 429 comes from the upstream model.
- * Grading stays at one request so a limit does not turn into a retry loop.
- */
+export function gradingApiKey() {
+  const value = process.env[PROVIDERS[gradingProvider()].keyEnv];
+  return typeof value === "string" ? value.trim() : "";
+}
+
+export function gradingTimeoutMs() {
+  return boundedInt(process.env.GRADING_TIMEOUT_MS, 90_000, 15_000, 180_000);
+}
+
 export function gradingConcurrency() {
-  return boundedInt(process.env.GRADING_CONCURRENCY, 1, 1, 4);
+  return boundedInt(process.env.GRADING_CONCURRENCY, 10, 1, 20);
 }
 
-/** Seconds or an HTTP date. Unusable values are ignored so the caller can fall back to exponential wait. */
+export function gradingMaxRetries() {
+  return boundedInt(process.env.GRADING_MAX_RETRIES, 4, 1, 8);
+}
+
+/** Seconds or an HTTP date. Unusable values are ignored so the caller can fall back. */
 export function parseRetryAfter(header: string | null) {
   const raw = header?.trim() ?? "";
   if (!raw) return null;
@@ -50,16 +87,15 @@ export function parseRetryAfter(header: string | null) {
   return ms >= 1000 && ms <= 15 * 60_000 ? ms : null;
 }
 
-/** Retry-After when the upstream sent one. Otherwise 20s, 40s, 80s, then 120s, plus a few seconds of jitter. */
-export function rateLimitWaitMs(previousTries: number, headerMs: number | null) {
-  const jitter = 1000 + Math.floor(Math.random() * 4000);
-  if (headerMs != null && headerMs >= 1000) return Math.min(180_000, headerMs + jitter);
-  const step = Math.min(3, Math.max(0, previousTries));
-  return Math.min(120_000, 20_000 * 2 ** step) + jitter;
+/** Retry-After when the upstream sent one. Otherwise 5s, 15s, 45s, then 2 minutes. */
+export function retryWaitMs(previousTries: number, headerMs: number | null) {
+  if (headerMs != null && headerMs >= 1000) return Math.min(10 * 60_000, headerMs);
+  const step = Math.min(RETRY_STEPS_MS.length - 1, Math.max(0, previousTries));
+  return RETRY_STEPS_MS[step] ?? 120_000;
 }
 
-export function gradingMaxRetries() {
-  return boundedInt(process.env.GRADING_MAX_RETRIES, 4, 1, 8);
+export function rateLimitWaitMs(previousTries: number, headerMs: number | null) {
+  return retryWaitMs(previousTries, headerMs);
 }
 
 let activeGrades = 0;

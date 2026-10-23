@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { beijingTime } from "@/lib/beijing-time";
 
 type ExamRow = {
   id: string;
@@ -113,7 +114,7 @@ export function ExamScoresPanel({ token }: { token: string }) {
               <div className="min-w-0">
                 <h3 className="font-medium">{exam.title}</h3>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {exam.class_name ?? "班级"}{exam.teacher_name ? ` · ${exam.teacher_name}` : ""} · 截止 {new Date(exam.ends_at).toLocaleString()}
+                  {exam.class_name ?? "班级"}{exam.teacher_name ? ` · ${exam.teacher_name}` : ""} · 截止 {beijingTime(exam.ends_at).slice(0, 16)}
                   {" · "}提交 {exam.submitted_count ?? 0} / {exam.roster_count ?? 0}
                   {" · "}选择题正确率 {accuracy(exam)}
                 </p>

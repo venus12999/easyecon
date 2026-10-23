@@ -22,7 +22,15 @@ export type ParsedExamItem = {
 };
 
 const IMAGE_HINT =
-  /graph provided|table provided|payoff matrix|shown in the graph|the graph shows|the graph provided|figure provided|figure\s*\d|combinations of donuts|based on the (table|graph|figure|payoff)|the table shows|refer to the (graph|table|figure)|the figure shows|diagram provided|diagram above|diagram below|the diagram|in the diagram|graph above|graph below|graph of|table above|table below|the table above|the table below|shown above|shown below|见(上|下)?(图|表)|如图|如表|下图|下表|上图|上表|图示|示意图|图\s*\d/i;
+  /graph provided|table provided|payoff matrix|shown in the graph|the graph shows|the graph provided|figure provided|figure\s*\d|combinations of donuts|based on the (table|graph|figure|payoff)|the table shows|the table represents|the following table|refer to the (graph|table|figure)|the figure shows|diagram provided|diagram above|diagram below|the diagram|in the diagram|graph above|graph below|graph of|table above|table below|the table above|the table below|shown above|shown below|见(上|下)?(图|表)|如图|如表|下图|下表|上图|上表|图示|示意图|图\s*\d/i;
+
+/** PDF extraction splits words and curve labels. Put them back before anyone reads the question. */
+export function repairPrintedSpacing(text: string) {
+  return text
+    .replace(/\b(short|long)\s*-\s*(run)\b/gi, "$1-$2")
+    .replace(/\bequil\s+ibrium\b/gi, "equilibrium")
+    .replace(/\b([PQ])\s+([FGMSfgms])\b/g, (_match, left: string, right: string) => `${left}${right.toUpperCase()}`);
+}
 
 /** Read a printed point value. Part marks like "(2 points)" are added up. */
 export function readPrintedScore(text: string, fallback: number) {
@@ -144,7 +152,7 @@ export function withUniqueQuestionNumbers<T extends { kind?: string; sort_order:
 
 /** True when the stem/content refers to a printed table/graph, not “draw a graph”. */
 export function looksLikeProvidedFigure(text: string) {
-  return IMAGE_HINT.test(text);
+  return IMAGE_HINT.test(repairPrintedSpacing(text));
 }
 
 const FIGURE_GIVEAWAY =
@@ -172,18 +180,19 @@ export function studentVisibleQuestion(text: string, pageText = "") {
     .filter(Boolean)
     .filter((s) => !caption.test(s))
     .filter((s) => !FIGURE_GIVEAWAY.test(s) || printedSentence(s, page));
-  return kept.join("\n").replace(/[ \t]+\n/g, "\n").trim();
+  return repairPrintedSpacing(kept.join("\n").replace(/[ \t]+\n/g, "\n").trim());
 }
 
 function clean(s: string) {
-  return s
+  return repairPrintedSpacing(s
     .replace(/\u00ad/g, "")
     .replace(/<<<P\d+>>>/g, " ")
+    .replace(/\b(short|long)\s*-\s*(run)\b/gi, "$1-$2")
     .replace(/(\w)-\s+(\w)/g, "$1$2")
     .replace(/\bSTOP END OF SECTION I\b/gi, "")
     .replace(/\s+(?:Capital Labor|Output AFC|Number of Workers)\b[\s\S]*$/i, "")
     .replace(/\s+/g, " ")
-    .trim();
+    .trim());
 }
 
 function pageOf(marked: string, index: number) {
@@ -228,7 +237,7 @@ function parseOptions(body: string) {
     .replace(/（\s*([A-E])\s*）/gi, "($1)")
     .replace(/\(\s*([A-E])\s*\)/gi, "($1)");
   const hits: { letter: string; index: number; end: number }[] = [];
-  for (const match of normalized.matchAll(/(?:^|\s)(?:\(([A-E])\)|([A-E])\s*[.)、．)])(?=\s|$)/gi)) {
+  for (const match of normalized.matchAll(/(?:^|\s)(?:\(([A-E])\)|([A-E])\s*[.)、．])/gi)) {
     const letter = (match[1] || match[2] || "").toUpperCase();
     if (!letter || match.index === undefined) continue;
     hits.push({ letter, index: match.index, end: match.index + match[0].length });
@@ -319,13 +328,13 @@ function parseMcqs(mcqText: string): ParsedExamItem[] {
 }
 
 function cleanFrq(s: string) {
-  return s
+  return repairPrintedSpacing(s
     .replace(/\u00ad/g, "")
     .replace(/<<<P\d+>>>/g, "\n")
     .replace(/\bSTOP END OF SECTION II\b/gi, "")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
-    .trim();
+    .trim());
 }
 
 /** The table or diagram printed above a question, kept with the question that refers to it. */

@@ -1,12 +1,14 @@
 import { createHmac } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { officialFrqMax, printedQuestionNumber, splitTrailingChoiceE } from "@/lib/ap-exam-parse";
+import { officialFrqMax, printedQuestionNumber, repairPrintedSpacing, splitTrailingChoiceE } from "@/lib/ap-exam-parse";
 import { readPageImage, readPointMarker, schoolExamAiOn, stripPageImage, stripPointMarker } from "@/lib/exam-flags";
+import { presentExamFrqs } from "@/lib/ap-2022-paper";
 import { fixAp2025Frqs, fixAp2025Questions } from "@/lib/ap-2025-paper";
+import { beijingTime } from "@/lib/beijing-time";
 import { isBlankStudentAnswer } from "@/lib/frq-answer";
 import { answerNeedsReview, gradeFrqAnswer, pointsFromRubric, type FrqBreakdown } from "@/lib/frq-grade.server";
-import { GRADING_TIMEOUT_MS, gradingConcurrency, gradingMaxRetries, gradingSlotsAvailable, rateLimitWaitMs, withGradingSlot } from "@/lib/grading-config.server";
+import { gradingConcurrency, gradingHost, gradingMaxRetries, gradingSlotsAvailable, gradingTimeoutMs, retryWaitMs, withGradingSlot } from "@/lib/grading-config.server";
 import { groupFrqParts, resolvePartOverride, scalePointsToMax } from "@/lib/frq-parts";
 import { splitImageTextRubric, splitTeacherFrq } from "@/lib/frq-teacher-fields";
 import { EXAM_LOCK_GRACE_MS, isUuid } from "@/lib/school-exam-session";
@@ -347,10 +349,19 @@ function readManualParts(value: unknown) {
 }
 
 function formatRetryWhen(at: Date) {
-  const clock = new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", hour: "2-digit", minute: "2-digit", hour12: false }).format(at);
+  const clock = beijingTime(at).slice(11, 16);
   const seconds = Math.max(1, Math.round((at.getTime() - Date.now()) / 1000));
   const wait = seconds >= 60 ? `${Math.ceil(seconds / 60)} 分钟` : `${seconds} 秒`;
   return `${clock}（约 ${wait}后）`;
+}
+
+function finalGradeReason(error: string, sort?: number | null, student?: string | null) {
+  if (error === "ai_not_configured" || error === "missing_max_score" || error === "credits_exhausted") {
+    return explainGradeError(error, sort, student, null);
+  }
+  const which = sort ? `Q${sort}` : "这一题";
+  const who = student ? `${student} 的 ` : "";
+  return `${who}${which} 批改失败。已经出分的会保留。可以单独重试这名学生或这道题。`;
 }
 
 function explainGradeError(error: string, sort?: number | null, student?: string | null, when?: string | null) {
@@ -473,16 +484,19 @@ function writeGradeState(raw: unknown, grades: Record<string, StoredFrqGrade>, l
   return { ...base, items: parsed.items, progress, grades } as unknown as Json;
 }
 
-async function saveGradeState(attemptId: string, raw: unknown, grades: Record<string, StoredFrqGrade>, lockUntil: string | null) {
+async function saveGradeState(attemptId: string, raw: unknown, grades: Record<string, StoredFrqGrade>, lockUntil: string | null, leaseToken?: string | null) {
   const { data: current } = await supabaseAdmin.from("school_attempts").select("frq_answers").eq("id", attemptId).maybeSingle();
   const live = parseFrqAnswers(current?.frq_answers);
   const pauseUntil = gradingPauseUntil(current?.frq_answers);
-  const lease = typeof live.progress?.grading_lease === "string" ? live.progress.grading_lease : "";
+  const liveLease = typeof live.progress?.grading_lease === "string" ? live.progress.grading_lease : "";
+  const lease = leaseToken === undefined ? liveLease : (leaseToken ?? "");
   const state = writeGradeState(raw, grades, lockUntil);
-  if (state && typeof state === "object" && !Array.isArray(state) && (pauseUntil > Date.now() || lease)) {
+  if (state && typeof state === "object" && !Array.isArray(state)) {
     const progress = { ...((state as { progress?: Record<string, unknown> }).progress ?? {}) };
     if (pauseUntil > Date.now()) progress.grading_pause_until = new Date(pauseUntil).toISOString();
+    else delete progress.grading_pause_until;
     if (lease) progress.grading_lease = lease;
+    else delete progress.grading_lease;
     (state as { progress: Record<string, unknown> }).progress = progress;
   }
   const { error } = await supabaseAdmin.from("school_attempts").update({ frq_answers: state }).eq("id", attemptId);
@@ -502,47 +516,24 @@ export type SchoolGradeStep = {
 
 const GRADE_PAUSE_MS = 45_000;
 
-function retryBackoffMs(tries: number, error: string) {
-  const base = error === "rate_limited" ? GRADE_PAUSE_MS : 2_000;
-  const cap = error === "rate_limited" ? GRADE_PAUSE_MS : 30_000;
-  return Math.min(cap, base * 2 ** Math.max(0, tries - 1));
-}
-
 function markGradeRetry(prev: StoredFrqGrade | undefined, maxScore: number | null, error: string, reason: string, retryAtIso?: string | null) {
-  if (error === "rate_limited") {
-    return {
-      giveUp: false,
-      grade: {
-        max_score: positiveScore(prev?.max_score, maxScore),
-        ai_score: null,
-        ai_comment: null,
-        ai_suggestions: null,
-        ai_failed: false,
-        ai_error: reason,
-        ai_tries: Math.min(8, gradeAttemptCount(prev) + 1),
-        retry_after: retryAtIso ?? new Date(Date.now() + rateLimitWaitMs(gradeAttemptCount(prev), null)).toISOString(),
-        manual_score: prev?.manual_score ?? null,
-        manual_comment: prev?.manual_comment ?? null,
-        manual_parts: prev?.manual_parts ?? null,
-        needs_review: prev?.needs_review === true,
-      } satisfies StoredFrqGrade,
-    };
-  }
   const tries = gradeAttemptCount(prev) + 1;
   const maxTries = gradingMaxRetries();
   const hardStop = error === "credits_exhausted" || error === "ai_not_configured" || error === "missing_max_score";
   const giveUp = hardStop || tries >= maxTries;
+  const keepScore = prev?.ai_score != null;
   return {
     giveUp,
     grade: {
       max_score: positiveScore(prev?.max_score, maxScore),
-      ai_score: null,
-      ai_comment: null,
-      ai_suggestions: null,
-      ai_failed: giveUp,
-      ai_error: reason,
+      ai_score: keepScore ? prev?.ai_score ?? null : null,
+      ai_comment: keepScore ? prev?.ai_comment ?? null : null,
+      ai_suggestions: keepScore ? prev?.ai_suggestions ?? null : null,
+      ai_breakdown: keepScore ? prev?.ai_breakdown : undefined,
+      ai_failed: giveUp && !keepScore,
+      ai_error: keepScore ? null : reason,
       ai_tries: hardStop ? maxTries : tries,
-      retry_after: giveUp ? null : (retryAtIso ?? new Date(Date.now() + retryBackoffMs(tries, error)).toISOString()),
+      retry_after: giveUp || keepScore ? null : (retryAtIso ?? new Date(Date.now() + retryWaitMs(gradeAttemptCount(prev), null)).toISOString()),
       manual_score: prev?.manual_score ?? null,
       manual_comment: prev?.manual_comment ?? null,
       manual_parts: prev?.manual_parts ?? null,
@@ -646,41 +637,13 @@ function coolingStatus(grades: Record<string, StoredFrqGrade>) {
   return best;
 }
 
-/** One in-flight grade per exam. The last writer keeps the lease; the other caller waits. */
-async function claimClassGrade(assignmentId: string) {
-  if (gradeNotBefore > Date.now()) return null;
+/** One in-flight request per student answer. A second retry while it is running does not call the model. */
+async function claimAnswerGrade(attemptId: string, raw: unknown, grades: Record<string, StoredFrqGrade>) {
   const token = crypto.randomUUID();
-  const until = new Date(Date.now() + GRADING_TIMEOUT_MS + 5_000).toISOString();
-  const { data: attempts } = await supabaseAdmin.from("school_attempts").select("id,frq_answers,submitted_at").eq("assignment_id", assignmentId);
-  const submitted = (attempts ?? []).filter((row) => row.submitted_at);
-  if (submitted.some((row) => gradingPauseUntil(row.frq_answers) > Date.now() + 500)) return null;
-  let firstId = "";
-  for (const row of submitted) {
-    if (!firstId) firstId = row.id;
-    const parsed = parseFrqAnswers(row.frq_answers);
-    const grades = readStoredGrades(row.frq_answers);
-    const base = row.frq_answers && typeof row.frq_answers === "object" && !Array.isArray(row.frq_answers) ? { ...(row.frq_answers as Record<string, unknown>) } : {};
-    const progress = { ...(parsed.progress ?? {}), grading_pause_until: until, grading_lease: token };
-    await supabaseAdmin.from("school_attempts").update({ frq_answers: { ...base, items: parsed.items, progress, grades } as Json }).eq("id", row.id);
-  }
-  if (!firstId) return token;
-  const { data: check } = await supabaseAdmin.from("school_attempts").select("frq_answers").eq("id", firstId).maybeSingle();
+  const lockUntil = new Date(Date.now() + gradingTimeoutMs() + 20_000).toISOString();
+  await saveGradeState(attemptId, raw, grades, lockUntil, token);
+  const { data: check } = await supabaseAdmin.from("school_attempts").select("frq_answers").eq("id", attemptId).maybeSingle();
   return parseFrqAnswers(check?.frq_answers).progress?.grading_lease === token ? token : null;
-}
-
-async function releaseGradeClaim(assignmentId: string, token: string) {
-  const { data: attempts } = await supabaseAdmin.from("school_attempts").select("id,frq_answers,submitted_at").eq("assignment_id", assignmentId);
-  for (const row of attempts ?? []) {
-    if (!row.submitted_at) continue;
-    const parsed = parseFrqAnswers(row.frq_answers);
-    if (parsed.progress?.grading_lease !== token) continue;
-    const grades = readStoredGrades(row.frq_answers);
-    const base = row.frq_answers && typeof row.frq_answers === "object" && !Array.isArray(row.frq_answers) ? { ...(row.frq_answers as Record<string, unknown>) } : {};
-    const progress = { ...(parsed.progress ?? {}) };
-    delete progress.grading_pause_until;
-    delete progress.grading_lease;
-    await supabaseAdmin.from("school_attempts").update({ frq_answers: { ...base, items: parsed.items, progress, grades } as Json }).eq("id", row.id);
-  }
 }
 
 async function pauseClassGrading(assignmentId: string, until = new Date(Date.now() + GRADE_PAUSE_MS).toISOString()) {
@@ -693,6 +656,7 @@ export async function stopClassGrading(assignmentId: string) {
 }
 
 export async function resumeClassGrading(assignmentId: string) {
+  gradeNotBefore = 0;
   await writeClassGradingPause(assignmentId, null);
 }
 
@@ -700,7 +664,9 @@ const gradingAttempts = new Set<string>();
 
 /** Grade at most one answered FRQ, and keep every finished score before the next model call. */
 export async function gradeNextSchoolFrq(attemptId: string, paperId: string, opts?: { force?: boolean; retryFailed?: boolean }): Promise<SchoolGradeStep> {
-  if (gradingAttempts.has(attemptId)) return { pending: 1, done: false, busy: true, gradedSort: null, error: null };
+  if (gradingAttempts.has(attemptId)) {
+    return { pending: 1, done: false, busy: true, gradedSort: null, error: null, notice: "这道题正在批，请等这次结束。" };
+  }
   gradingAttempts.add(attemptId);
   try {
     return await gradeNextSchoolFrqInner(attemptId, paperId, opts);
@@ -726,18 +692,16 @@ async function gradeNextSchoolFrqInner(attemptId: string, paperId: string, opts?
     const grades = readStoredGrades(attempt.frq_answers);
     const { data: frqs } = await supabaseAdmin.from("paper_frqs").select("id,max_score,sort_order").eq("paper_id", paperId).order("sort_order");
     const plan = planSchoolGrade(frqs ?? [], parsed.items, grades);
-    return { pending: plan.pending, done: false, busy: true, gradedSort: null, error: null };
+    return { pending: plan.pending, done: false, busy: true, gradedSort: null, error: null, notice: "这道题正在批，请等这次结束。" };
   }
-  if (!opts?.force) {
-    const { data: paper } = await supabaseAdmin.from("mock_papers").select("description").eq("id", paperId).maybeSingle();
-    if (!schoolExamAiOn(paper?.description)) return { pending: 0, done: true, busy: false, gradedSort: null, error: null };
-  }
+  const { data: paper } = await supabaseAdmin.from("mock_papers").select("slug,description").eq("id", paperId).maybeSingle();
+  if (!opts?.force && !schoolExamAiOn(paper?.description)) return { pending: 0, done: true, busy: false, gradedSort: null, error: null };
   const { data: frqs } = await supabaseAdmin
     .from("paper_frqs")
     .select("id,title,content,image_url,image_text,max_score,sort_order")
     .eq("paper_id", paperId)
     .order("sort_order");
-  const list = frqs ?? [];
+  const list = presentExamFrqs(frqs ?? [], paper?.slug);
   let grades = readStoredGrades(attempt.frq_answers);
   const plan = planSchoolGrade(list, parsed.items, grades, !!opts?.retryFailed);
   for (const id of plan.blanks) {
@@ -760,8 +724,6 @@ async function gradeNextSchoolFrqInner(attemptId: string, paperId: string, opts?
   const frq = plan.next;
   const answer = parsed.items[frq.id];
   const studentLabel = await rosterGradeLabel(attempt.roster_id);
-  const reasonFor = (error: string, sort?: number | null) => explainGradeError(error, sort, studentLabel);
-  let lease: string | null = null;
   try {
     const ids = list.map((item) => item.id);
     const { data: rubrics } = ids.length
@@ -770,25 +732,20 @@ async function gradeNextSchoolFrqInner(attemptId: string, paperId: string, opts?
     const rubricMap = new Map((rubrics ?? []).map((row) => [row.frq_id, row.rubric_note]));
     const full = list.find((item) => item.id === frq.id);
     if (!full) {
-      await saveGradeState(attemptId, attempt.frq_answers, grades, null);
-      return { pending: plan.pending, done: false, busy: false, gradedSort: null, error: reasonFor("ai_failed", shownQuestionOrder(frq)) };
+      await saveGradeState(attemptId, attempt.frq_answers, grades, null, null);
+      return { pending: plan.pending, done: false, busy: false, gradedSort: null, error: explainGradeError("ai_failed", shownQuestionOrder(frq), studentLabel) };
     }
-    lease = attempt.assignment_id ? await claimClassGrade(attempt.assignment_id) : "local";
+    const lease = await claimAnswerGrade(attemptId, attempt.frq_answers, grades);
     if (!lease) {
-      const until = Math.max(gradingPauseUntil(attempt.frq_answers), gradeNotBefore, Date.now() + 8_000);
-      return { pending: plan.pending, done: false, busy: true, gradedSort: null, error: null, notice: gradingPauseNotice(until), retryAt: new Date(until).toISOString() };
+      return { pending: plan.pending, done: false, busy: true, gradedSort: null, error: null, notice: "这道题正在批，请等这次结束。" };
     }
-    const graded = await withGradingSlot(async () => {
-      const lockUntil = new Date(Date.now() + GRADING_TIMEOUT_MS + 20_000).toISOString();
-      await saveGradeState(attemptId, attempt.frq_answers, grades, lockUntil);
-      return gradeFrqAnswer({
-        frq: full,
-        rubricNote: rubricMap.get(frq.id) ?? null,
-        answerText: answer?.text?.trim() || null,
-        answerFileUrl: answer?.fileUrl ?? null,
-        answerFileKind: answer?.fileKind ?? null,
-      });
-    });
+    const graded = await withGradingSlot(() => gradeFrqAnswer({
+      frq: full,
+      rubricNote: rubricMap.get(frq.id) ?? null,
+      answerText: answer?.text?.trim() || null,
+      answerFileUrl: answer?.fileUrl ?? null,
+      answerFileKind: answer?.fileKind ?? null,
+    }));
     const { data: fresh } = await supabaseAdmin.from("school_attempts").select("frq_answers").eq("id", attemptId).maybeSingle();
     const base = fresh?.frq_answers ?? attempt.frq_answers;
     grades = readStoredGrades(base);
@@ -796,19 +753,17 @@ async function gradeNextSchoolFrqInner(attemptId: string, paperId: string, opts?
       const prev = grades[frq.id];
       const sort = shownQuestionOrder(full);
       const hardStop = graded.error === "credits_exhausted" || graded.error === "ai_not_configured" || graded.error === "missing_max_score";
-      const waitMs = graded.error === "rate_limited"
-        ? rateLimitWaitMs(gradeAttemptCount(prev), graded.retryAfterMs ?? null)
-        : hardStop ? 0 : retryBackoffMs(gradeAttemptCount(prev) + 1, graded.error);
+      const waitMs = hardStop ? 0 : retryWaitMs(gradeAttemptCount(prev), graded.retryAfterMs ?? null);
       const retryAt = waitMs > 0 ? new Date(Date.now() + waitMs) : null;
-      if (retryAt) holdGrading(retryAt.getTime());
-      const reason = explainGradeError(graded.error, sort, studentLabel, retryAt ? formatRetryWhen(retryAt) : null);
-      const marked = markGradeRetry(prev, full.max_score, graded.error, reason, retryAt?.toISOString() ?? null);
-      grades[frq.id] = marked.grade;
-      await saveGradeState(attemptId, base, grades, null);
-      if (graded.error === "rate_limited" && attempt.assignment_id && retryAt) await pauseClassGrading(attempt.assignment_id, retryAt.toISOString());
-      else if (attempt.assignment_id && lease !== "local") await releaseGradeClaim(attempt.assignment_id, lease);
+      const marked = markGradeRetry(prev, full.max_score, graded.error, "", retryAt?.toISOString() ?? null);
+      const reason = marked.giveUp
+        ? finalGradeReason(graded.error, sort, studentLabel)
+        : explainGradeError(graded.error, sort, studentLabel, retryAt ? formatRetryWhen(retryAt) : null);
+      grades[frq.id] = markGradeRetry(prev, full.max_score, graded.error, reason, retryAt?.toISOString() ?? null).grade;
+      await saveGradeState(attemptId, base, grades, null, null);
+      if (graded.error === "rate_limited" && attempt.assignment_id && retryAt && !marked.giveUp) await pauseClassGrading(attempt.assignment_id, retryAt.toISOString());
       const coolingOff = !!retryAt && !marked.giveUp;
-      return { pending: plan.pending, done: false, busy: coolingOff, gradedSort: null, error: reason, notice: reason, retryAt: retryAt?.toISOString() ?? null, released: marked.giveUp };
+      return { pending: plan.pending, done: false, busy: coolingOff, gradedSort: null, error: reason, notice: reason, retryAt: coolingOff ? retryAt?.toISOString() ?? null : null, released: marked.giveUp };
     }
     const prev = grades[frq.id];
     grades[frq.id] = {
@@ -826,23 +781,22 @@ async function gradeNextSchoolFrqInner(attemptId: string, paperId: string, opts?
       manual_comment: prev?.manual_comment ?? null,
       manual_parts: prev?.manual_parts ?? null,
     };
-    await saveGradeState(attemptId, base, grades, null);
-    if (attempt.assignment_id && lease !== "local") await releaseGradeClaim(attempt.assignment_id, lease);
+    await saveGradeState(attemptId, base, grades, null, null);
     const left = plan.pending - 1;
     return { pending: left, done: left === 0, busy: false, gradedSort: frq.sort_order, error: null };
   } catch (error) {
     const detail = error instanceof Error ? error.name : "failed";
-    console.info(JSON.stringify({ event: "frq_grade", ok: false, error: detail }));
+    console.info(JSON.stringify({ event: "frq_grade", host: gradingHost(), ok: false, error: detail }));
     const { data: fresh } = await supabaseAdmin.from("school_attempts").select("frq_answers").eq("id", attemptId).maybeSingle();
     const base = fresh?.frq_answers ?? attempt.frq_answers;
     const saved = readStoredGrades(base);
     const prev = saved[frq.id];
-    const reason = reasonFor("ai_failed", shownQuestionOrder(frq));
-    const marked = markGradeRetry(prev, frq.max_score, "ai_failed", reason);
-    saved[frq.id] = marked.grade;
-    await saveGradeState(attemptId, base, saved, null).catch(() => undefined);
-    if (attempt.assignment_id && lease && lease !== "local") await releaseGradeClaim(attempt.assignment_id, lease).catch(() => undefined);
-    return { pending: plan.pending, done: false, busy: false, gradedSort: null, error: reason, released: marked.giveUp };
+    const sort = shownQuestionOrder(frq);
+    const marked = markGradeRetry(prev, frq.max_score, "ai_failed", "");
+    const reason = marked.giveUp ? finalGradeReason("ai_failed", sort, studentLabel) : explainGradeError("ai_failed", sort, studentLabel, null);
+    saved[frq.id] = markGradeRetry(prev, frq.max_score, "ai_failed", reason).grade;
+    await saveGradeState(attemptId, base, saved, null, null).catch(() => undefined);
+    return { pending: plan.pending, done: false, busy: false, gradedSort: null, error: reason, notice: reason, released: marked.giveUp };
   }
 }
 
@@ -868,6 +822,31 @@ export function continueGradeBatch(request: Request, assignmentId: string) {
         console.error("grade batch", error);
       }
       if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 800 * (attempt + 1)));
+    }
+  })();
+  if (typeof runtime.waitUntil === "function") runtime.waitUntil(work);
+  else void work;
+}
+
+/** Wake the queue when a short backoff ends, including after the page request itself has returned. */
+export function scheduleGradeRetry(request: Request, assignmentId: string, retryAt: string | null | undefined) {
+  const at = retryAt ? Date.parse(retryAt) : NaN;
+  const wait = at - Date.now();
+  if (!Number.isFinite(wait) || wait < 500 || wait > 130_000) return;
+  const url = new URL("/api/teacher/gradebook", request.url);
+  const runtime = globalThis as { waitUntil?: (promise: Promise<unknown>) => void };
+  const work = (async () => {
+    await new Promise((resolve) => setTimeout(resolve, wait + 250));
+    if (gradeNotBefore > Date.now() + 1000) return;
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-grade-token": gradeBatchToken(assignmentId) },
+        body: JSON.stringify({ assignment_id: assignmentId, action: "batch" }),
+      });
+      await response.body?.cancel();
+    } catch (error) {
+      console.error("grade retry", error);
     }
   })();
   if (typeof runtime.waitUntil === "function") runtime.waitUntil(work);
@@ -1185,16 +1164,20 @@ export async function releaseGradeLocks(assignmentId: string) {
   const { data: attempts } = await supabaseAdmin.from("school_attempts").select("id,frq_answers").eq("assignment_id", assignmentId);
   for (const row of attempts ?? []) {
     const parsed = parseFrqAnswers(row.frq_answers);
+    const untilRaw = parsed.progress?.grading_until;
+    const until = typeof untilRaw === "string" ? Date.parse(untilRaw) : NaN;
+    const lockLive = Number.isFinite(until) && until > Date.now();
     const grades = readStoredGrades(row.frq_answers);
-    let changed = typeof parsed.progress?.grading_until === "string";
+    let changed = typeof untilRaw === "string" && !lockLive;
     for (const [id, grade] of Object.entries(grades)) {
-      if (grade.ai_score == null && grade.manual_score == null && grade.ai_failed) {
-        grades[id] = { ...grade, ai_failed: false };
+      if (lockLive) continue;
+      if (grade.ai_score == null && grade.manual_score == null && (grade.ai_failed || grade.retry_after || (grade.ai_tries ?? 0) > 0)) {
+        grades[id] = { ...grade, ai_failed: false, ai_tries: 0, retry_after: null, ai_error: null };
         changed = true;
       }
     }
     if (!changed) continue;
-    await saveGradeState(row.id, row.frq_answers, grades, null);
+    await saveGradeState(row.id, row.frq_answers, grades, lockLive && typeof untilRaw === "string" ? untilRaw : null, lockLive ? undefined : null);
   }
 }
 
@@ -1444,8 +1427,17 @@ export async function loadSchoolPaperQuestions(paperId: string, published: boole
       page_image_url,
     };
   });
-  const cleanedQuestions = slug === "ap-micro-2025" ? fixAp2025Questions(questions) : questions;
-  const numberedFrqs = slug === "ap-micro-2025" ? fixAp2025Frqs(frqs ?? []) : (frqs ?? []);
+  const cleanedQuestions = (slug === "ap-micro-2025" ? fixAp2025Questions(questions) : questions).map((question) => ({
+    ...question,
+    stem: repairPrintedSpacing(question.stem),
+    option_a: repairPrintedSpacing(question.option_a),
+    option_b: repairPrintedSpacing(question.option_b),
+    option_c: repairPrintedSpacing(question.option_c),
+    option_d: repairPrintedSpacing(question.option_d),
+    option_e: question.option_e ? repairPrintedSpacing(question.option_e) : question.option_e,
+  }));
+  const baseFrqs = slug === "ap-micro-2025" ? fixAp2025Frqs(frqs ?? []) : (frqs ?? []);
+  const numberedFrqs = presentExamFrqs(baseFrqs, slug);
   const cleanedFrqs = numberedFrqs.map((frq) => ({
     ...frq,
     max_score: officialFrqMax(`${frq.title ?? ""}\n${frq.content ?? ""}`, frq.max_score),

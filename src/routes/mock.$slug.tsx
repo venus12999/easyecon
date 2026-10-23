@@ -47,7 +47,8 @@ import { ExamFigure } from "@/components/mock/ExamFigure";
 import { apBasisText, apMicroScore, apScoreText, pointsOnScale } from "@/lib/ap-score";
 import { schoolExamAiOn, readPageImage, readPointMarker, stripExamFlags, stripPointMarker, studentPaperNote } from "@/lib/exam-flags";
 import { ap2025Clock, fixAp2025Frqs, fixAp2025Questions } from "@/lib/ap-2025-paper";
-import { looksLikeProvidedFigure, officialFrqMax, splitTrailingChoiceE } from "@/lib/ap-exam-parse";
+import { looksLikeProvidedFigure, officialFrqMax, repairPrintedSpacing, splitTrailingChoiceE } from "@/lib/ap-exam-parse";
+import { presentExamFrqs } from "@/lib/ap-2022-paper";
 import { scalePointsToMax } from "@/lib/frq-parts";
 import { clearSchoolExamSession, hasExitedExam, isExamLocalEmail, isUuid, loadSchoolExamSession, markExamExited, markIntentionalSignOut, saveSchoolExamSession } from "@/lib/school-exam-session";
 
@@ -269,14 +270,18 @@ function PaperRunner() {
         const choices = splitTrailingChoiceE(row.questions.option_d ?? "", row.questions.option_e ?? "");
         return {
           ...row.questions,
-          option_d: choices.option_d,
-          option_e: choices.option_e || null,
+          stem: repairPrintedSpacing(row.questions.stem),
+          option_a: repairPrintedSpacing(row.questions.option_a),
+          option_b: repairPrintedSpacing(row.questions.option_b),
+          option_c: repairPrintedSpacing(row.questions.option_c),
+          option_d: repairPrintedSpacing(choices.option_d),
+          option_e: choices.option_e ? repairPrintedSpacing(choices.option_e) : null,
           points: readPointMarker(row.questions.explanation),
           explanation: stripPointMarker(row.questions.explanation),
         };
       });
       setQuestions(slug === "ap-micro-2025" ? fixAp2025Questions(qs) : qs);
-      const loadedFrqs = (slug === "ap-micro-2025" ? fixAp2025Frqs((fr ?? []) as Frq[]) : (fr ?? []) as Frq[])
+      const loadedFrqs = presentExamFrqs(slug === "ap-micro-2025" ? fixAp2025Frqs((fr ?? []) as Frq[]) : (fr ?? []) as Frq[], slug)
         .map((item) => ({ ...item, max_score: officialFrqMax(`${item.title ?? ""}\n${item.content ?? ""}`, item.max_score) }));
       setFrqs(slug === "frq-pdf-practice"
         ? loadedFrqs.filter((item) =>

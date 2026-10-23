@@ -1,6 +1,6 @@
 import { officialFrqMax } from "@/lib/ap-exam-parse";
 import { isBlankStudentAnswer } from "@/lib/frq-answer";
-import { GRADING_TIMEOUT_MS, gradingBaseUrl, gradingModel, parseRetryAfter } from "@/lib/grading-config.server";
+import { gradingApiKey, gradingBaseUrl, gradingHost, gradingModel, gradingProvider, gradingTimeoutMs, parseRetryAfter } from "@/lib/grading-config.server";
 import { scalePointsToMax } from "@/lib/frq-parts";
 import { splitImageTextRubric } from "@/lib/frq-teacher-fields";
 
@@ -227,7 +227,7 @@ function logGrade(fields: {
   completion_tokens?: number | null;
   error?: string;
 }) {
-  console.info(JSON.stringify({ event: "frq_grade", ...fields }));
+  console.info(JSON.stringify({ event: "frq_grade", host: gradingHost(), provider: gradingProvider(), ...fields }));
 }
 
 function blankGrade(maxScore: number): FrqGradeResult {
@@ -248,7 +248,7 @@ async function completeGrade(input: {
   userContent: GradeUserContent;
   jsonObject?: boolean;
 }): Promise<{ ok: true; content: string } | { ok: false; error: string; status: number; retryAfterMs?: number | null }> {
-  const apiKey = process.env.LAOZHANG_API_KEY?.trim();
+  const apiKey = gradingApiKey();
   if (!apiKey) {
     logGrade({ request_id: input.requestId, model: input.model, latency_ms: 0, ok: false, error: "not_configured" });
     return { ok: false, error: "ai_not_configured", status: 0 };
@@ -262,11 +262,12 @@ async function completeGrade(input: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
-      signal: AbortSignal.timeout(GRADING_TIMEOUT_MS),
+      signal: AbortSignal.timeout(gradingTimeoutMs()),
       body: JSON.stringify({
         model: input.model,
         temperature: 0,
         max_tokens: 3072,
+        ...(gradingProvider() === "deepseek" ? { thinking: { type: "disabled" } } : {}),
         ...(input.jsonObject === false ? {} : { response_format: { type: "json_object" } }),
         messages: [
           { role: "system", content: input.system },
@@ -281,13 +282,16 @@ async function completeGrade(input: {
       logGrade({ request_id: input.requestId, model: input.model, latency_ms: latency, ok: false, status, error: "not_configured" });
       return { ok: false, error: "ai_not_configured", status };
     }
-    if (status === 429 || status === 502 || status === 503 || status === 529) {
+    if (status === 429 || status >= 500) {
       const retryAfterMs = parseRetryAfter(upstream.headers.get("retry-after"));
       const text = await upstream.text().catch(() => "");
-      const quota = /insufficient_user_quota|insufficient_quota/i.test(text.slice(0, 400));
-      logGrade({ request_id: input.requestId, model: input.model, latency_ms: latency, ok: false, status, error: quota ? "credits_exhausted" : "rate_limited" });
+      const snippet = text.slice(0, 180);
+      const quota = /insufficient_user_quota|insufficient_quota/i.test(snippet);
+      const limited = status === 429 || /rate|quota|limit|overload|too many|resource_exhausted/i.test(snippet);
+      const error = quota ? "credits_exhausted" : limited ? "rate_limited" : "upstream";
+      logGrade({ request_id: input.requestId, model: input.model, latency_ms: latency, ok: false, status, error });
       if (quota) return { ok: false, error: "credits_exhausted", status };
-      return { ok: false, error: "rate_limited", status, retryAfterMs };
+      return { ok: false, error, status, retryAfterMs };
     }
     if (!upstream.ok) {
       const overloaded = await upstreamLooksLimited(upstream);
@@ -390,40 +394,22 @@ export async function gradeFrqAnswer(input: {
   userTextParts.push(answerLines.join("\n"));
   const userText = userTextParts.join("\n\n");
   const images: GradeImagePart[] = [];
-  if (!answerText && hasFile && input.answerFileKind === "image") images.push({ type: "image_url", image_url: { url: fileUrl } });
-  if (!answerText && !images.length && figureUrl) images.push({ type: "image_url", image_url: { url: figureUrl } });
-  const passes: GradeUserContent[] = [answerText ? userText : images.length ? [{ type: "text", text: userText }, ...images] : userText];
-  if (answerText.trim().length > 0 && answerText.trim().length < 40 && hasFile && input.answerFileKind === "image") {
-    passes.push([{ type: "text", text: userText }, { type: "image_url", image_url: { url: fileUrl } }]);
+  if (figureUrl) images.push({ type: "image_url", image_url: { url: figureUrl } });
+  if (hasFile && input.answerFileKind === "image") images.push({ type: "image_url", image_url: { url: fileUrl } });
+  const userContent: GradeUserContent = images.length ? [{ type: "text", text: userText }, ...images] : userText;
+  const requestId = crypto.randomUUID();
+  const completed = await completeGrade({ requestId, model, system: FRQ_GRADER_PROMPT, userContent });
+  if (!completed.ok) return { ok: false, error: completed.error, retryAfterMs: completed.retryAfterMs ?? null };
+  const parsed = tryParseJson(completed.content);
+  if (parsed) return gradeFromParsed(parsed, gradingNote, maxScore, answerText);
+  logGrade({ request_id: requestId, model, latency_ms: 0, ok: false, error: "bad_json" });
+  const plainId = crypto.randomUUID();
+  const plain = await completeGrade({ requestId: plainId, model, system: FRQ_GRADER_PROMPT, userContent, jsonObject: false });
+  if (!plain.ok) return { ok: false, error: plain.error, retryAfterMs: plain.retryAfterMs ?? null };
+  const plainParsed = tryParseJson(plain.content);
+  if (!plainParsed) {
+    logGrade({ request_id: plainId, model, latency_ms: 0, ok: false, error: "bad_json" });
+    return { ok: false, error: "bad_json" };
   }
-  let lastError = "ai_failed";
-  let retryAfterMs: number | null = null;
-  for (let index = 0; index < passes.length; index += 1) {
-    const requestId = crypto.randomUUID();
-    const completed = await completeGrade({ requestId, model, system: FRQ_GRADER_PROMPT, userContent: passes[index] });
-    if (!completed.ok) {
-      lastError = completed.error;
-      retryAfterMs = completed.retryAfterMs ?? retryAfterMs;
-      const retryWithoutImage = index === 0 && passes.length > 1 && completed.error !== "ai_not_configured" && completed.error !== "rate_limited";
-      if (!retryWithoutImage) break;
-      continue;
-    }
-    const parsed = tryParseJson(completed.content);
-    if (!parsed) {
-      lastError = "bad_json";
-      logGrade({ request_id: requestId, model, latency_ms: 0, ok: false, error: "bad_json" });
-      if (index < passes.length - 1) continue;
-      const plainId = crypto.randomUUID();
-      const plain = await completeGrade({ requestId: plainId, model, system: FRQ_GRADER_PROMPT, userContent: passes[index], jsonObject: false });
-      if (!plain.ok) {
-        lastError = plain.error;
-        break;
-      }
-      const plainParsed = tryParseJson(plain.content);
-      if (!plainParsed) break;
-      return gradeFromParsed(plainParsed, gradingNote, maxScore, answerText);
-    }
-    return gradeFromParsed(parsed, gradingNote, maxScore, answerText);
-  }
-  return { ok: false, error: lastError, retryAfterMs };
+  return gradeFromParsed(plainParsed, gradingNote, maxScore, answerText);
 }

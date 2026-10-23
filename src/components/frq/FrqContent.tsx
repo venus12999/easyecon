@@ -1,4 +1,5 @@
 import { Fragment } from "react";
+import { repairPrintedSpacing } from "@/lib/ap-exam-parse";
 
 // Renders FRQ content, converting embedded <table>...</table> HTML markup
 // into real tables. All other tags are stripped so raw HTML never leaks to
@@ -120,7 +121,7 @@ function parseTable(html: string): Row[] {
 }
 
 export function FrqContent({ content, className }: { content: string; className?: string }) {
-  const visible = stripFigureCaptions(content);
+  const visible = repairPrintedSpacing(stripFigureCaptions(content));
   const parts: { type: "text" | "table"; value: string; rows?: Row[] }[] = [];
   const tableRe = /<table[^>]*>[\s\S]*?<\/table>/gi;
   let last = 0;

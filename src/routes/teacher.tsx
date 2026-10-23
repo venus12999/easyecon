@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { isAdminEmail } from "@/lib/admin-emails";
 import { isBlankStudentAnswer } from "@/lib/frq-answer";
+import { beijingInputLabel, beijingInputToIso, beijingTime, toBeijingInput } from "@/lib/beijing-time";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -298,16 +299,23 @@ function rowStatusLabel(row: GradeRow, endsAt?: string | null) {
 }
 
 function frqHeaderLabel(row: GradeRow) {
-  const answered = (row.frqs ?? []).filter((frq) => !isBlankStudentAnswer(frq.answer_text, frq.file_url));
-  const scored = answered.filter((frq) => frq.manual_score != null || frq.ai_score != null);
-  const left = answered.length - scored.length;
-  if (left > 0 && scored.length > 0) {
-    const earned = scored.reduce((sum, frq) => sum + (frq.manual_score ?? frq.ai_score ?? 0), 0);
-    return ` · 大题已出 ${earned} 分，还有 ${left} 题没批完`;
-  }
+  const frqs = row.frqs ?? [];
+  const scored = frqs.filter((frq) => frq.manual_score != null || frq.ai_score != null);
+  const left = frqs.filter((frq) => !isBlankStudentAnswer(frq.answer_text, frq.file_url) && frq.manual_score == null && frq.ai_score == null).length;
+  const earned = scored.reduce((sum, frq) => sum + (frq.manual_score ?? frq.ai_score ?? 0), 0);
+  if (scored.length > 0 && left > 0) return ` · 大题已出 ${earned} 分，还有 ${left} 题没批完`;
   if (left > 0) return ` · 大题还有 ${left} 题没批完`;
-  if (row.frq_score == null) return " · 大题还没有分数";
-  return ` · 大题 ${row.frq_score}/${row.frq_max}`;
+  if (scored.length === 0) return " · 大题还没有分数";
+  return ` · 大题 ${row.frq_score ?? earned}/${row.frq_max}`;
+}
+
+function liveRetryNote(note: string, retryAt: number, now: number) {
+  if (!retryAt || retryAt <= now) return note;
+  const left = Math.max(1, Math.ceil((retryAt - now) / 1000));
+  const label = left >= 60 ? `${Math.floor(left / 60)} 分 ${String(left % 60).padStart(2, "0")} 秒` : `${left} 秒`;
+  const live = `（${label}后自动再试）`;
+  if (/（约 .+后）/.test(note)) return note.replace(/（约 .+后）/, live);
+  return note ? `${note}${live}` : `${label}后自动再试`;
 }
 
 type GradeCache = {
@@ -368,27 +376,8 @@ function writeAssignmentCache(rows: Assignment[]) {
   }
 }
 
-function beijingTime(iso: string | null) {
-  if (!iso) return "";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(date);
-  const pick = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
-  return `${pick("year")}-${pick("month")}-${pick("day")} ${pick("hour")}:${pick("minute")}:${pick("second")}`;
-}
-
-function toLocalInput(d: Date) {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+function examInputMs(value: string) {
+  return Date.parse(beijingInputToIso(value));
 }
 
 function parseRosterCsv(text: string): { student_id: string; student_name: string }[] {
@@ -694,7 +683,7 @@ function TeacherHome() {
   const [title, setTitle] = useState("");
   const [source, setSource] = useState<"existing" | "random">("existing");
   const [paperId, setPaperId] = useState("");
-  const [startsAt, setStartsAt] = useState(() => toLocalInput(new Date()));
+  const [startsAt, setStartsAt] = useState(() => toBeijingInput(new Date()));
   const [mcqMinutes, setMcqMinutes] = useState(MCQ_MINUTES_DEFAULT);
   const [frqMinutes, setFrqMinutes] = useState(FRQ_MINUTES_DEFAULT);
   const [breakMinutes, setBreakMinutes] = useState(BREAK_MINUTES_DEFAULT);
@@ -702,7 +691,7 @@ function TeacherHome() {
   const [publishAnswers, setPublishAnswers] = useState(false);
   const [aiGradeFrq, setAiGradeFrq] = useState(true);
   const [cropPick, setCropPick] = useState<{ index: number; pageUrl: string } | null>(null);
-  const [endsAt, setEndsAt] = useState(() => toLocalInput(new Date(Date.now() + sectionTotalMinutes(MCQ_MINUTES_DEFAULT, FRQ_MINUTES_DEFAULT, BREAK_MINUTES_DEFAULT) * 60 * 1000)));
+  const [endsAt, setEndsAt] = useState(() => toBeijingInput(new Date(Date.now() + sectionTotalMinutes(MCQ_MINUTES_DEFAULT, FRQ_MINUTES_DEFAULT, BREAK_MINUTES_DEFAULT) * 60 * 1000)));
   const [creating, setCreating] = useState(false);
   const [gradeId, setGradeId] = useState(() => search.exam || lastGradeId());
   const [gradeRows, setGradeRows] = useState<GradeRow[]>(() => readGradeCache(search.exam || lastGradeId())?.rows ?? []);
@@ -720,6 +709,8 @@ function TeacherHome() {
   const gradeNotice = useRef("");
   const gradePause = useRef(false);
   const gradeHold = useRef(0);
+  const [gradeRetryAt, setGradeRetryAt] = useState(0);
+  const [gradeClock, setGradeClock] = useState(0);
   const [gradePaused, setGradePaused] = useState(false);
   const [imports, setImports] = useState<PdfImport[]>([]);
   const [activeImport, setActiveImport] = useState<string>("");
@@ -984,8 +975,8 @@ function TeacherHome() {
           title,
           source,
           paper_id: source === "existing" ? paperId : undefined,
-          starts_at: new Date(startsAt).toISOString(),
-          ends_at: new Date(endsAt).toISOString(),
+          starts_at: beijingInputToIso(startsAt),
+          ends_at: beijingInputToIso(endsAt),
           mcq_minutes: mcqMinutes,
           frq_minutes: frqMinutes,
           break_minutes: frqMinutes > 0 ? breakMinutes : 0,
@@ -1226,7 +1217,10 @@ function TeacherHome() {
           }
           if (body.retry_at) {
             const at = Date.parse(body.retry_at);
-            if (Number.isFinite(at)) gradeHold.current = Math.max(gradeHold.current, at);
+            if (Number.isFinite(at)) {
+              gradeHold.current = Math.max(gradeHold.current, at);
+              setGradeRetryAt(gradeHold.current);
+            }
           }
           if (body.busy || (body.error && /请求过多|没批完/.test(body.error))) {
             const waiting = body.notice || body.error || "";
@@ -1279,6 +1273,8 @@ function TeacherHome() {
     setGradePaused(true);
     gradingLock.current = false;
     setGradeBusy(null);
+    gradeHold.current = 0;
+    setGradeRetryAt(0);
     setGradeNote("");
     if (!gradeId) return;
     sessionStorage.setItem(gradePauseKey(gradeId), "1");
@@ -1295,6 +1291,7 @@ function TeacherHome() {
     sessionStorage.removeItem(gradePauseKey(gradeId));
     gradeNotice.current = "";
     gradeHold.current = 0;
+    setGradeRetryAt(0);
     setGradeNote("正在重新批改还没出分的大题");
     const response = await authFetch("/api/teacher/gradebook", {
       method: "POST",
@@ -1307,7 +1304,10 @@ function TeacherHome() {
     }
     if (body.retry_at) {
       const at = Date.parse(body.retry_at);
-      if (Number.isFinite(at)) gradeHold.current = Math.max(gradeHold.current, at);
+      if (Number.isFinite(at)) {
+        gradeHold.current = Math.max(gradeHold.current, at);
+        setGradeRetryAt(gradeHold.current);
+      }
     }
     await loadGradebook(gradeId, { keepPage: true });
     if (body.busy && (body.notice || body.retry_at)) {
@@ -1338,10 +1338,26 @@ function TeacherHome() {
   }, [gradeId]);
 
   useEffect(() => {
+    if (!gradeRetryAt || gradePaused) return;
+    setGradeClock(Date.now());
+    const timer = window.setInterval(() => setGradeClock(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [gradeRetryAt, gradePaused]);
+
+  useEffect(() => {
     if (!classGradeDue || gradePaused || (gradeId && sessionStorage.getItem(gradePauseKey(gradeId)) === "1")) return;
-    setGradeNote("考试已结束，正在逐题批改。已经出分的会保留。");
-    const kickClassGrade = () => {
-      if (gradePause.current || gradeHold.current > Date.now()) return;
+    let cancelled = false;
+    let timer = 0;
+    const arm = (delay: number) => {
+      timer = window.setTimeout(run, delay);
+    };
+    const run = () => {
+      if (cancelled || gradePause.current) return;
+      const wait = gradeHold.current - Date.now();
+      if (wait > 250) {
+        arm(wait);
+        return;
+      }
       void authFetch("/api/teacher/gradebook", {
         method: "POST",
         body: JSON.stringify({ assignment_id: gradeId, action: "batch" }),
@@ -1349,7 +1365,10 @@ function TeacherHome() {
         const body = await response.json().catch(() => ({} as { notice?: string; error?: string; retry_at?: string | null }));
         if (body.retry_at) {
           const at = Date.parse(body.retry_at);
-          if (Number.isFinite(at)) gradeHold.current = Math.max(gradeHold.current, at);
+          if (Number.isFinite(at)) {
+            gradeHold.current = Math.max(gradeHold.current, at);
+            setGradeRetryAt(gradeHold.current);
+          }
         }
         const message = body.notice || (!response.ok ? body.error : "");
         if (!message || message === gradeNotice.current) return;
@@ -1358,25 +1377,26 @@ function TeacherHome() {
           gradePause.current = true;
           setGradePaused(true);
           if (gradeId) sessionStorage.setItem(gradePauseKey(gradeId), "1");
+          gradeHold.current = 0;
+          setGradeRetryAt(0);
           setGradeNote("");
           return;
         }
-        if (/请求过多/.test(message)) {
-          setGradeNote(message);
-          return;
-        }
-        toast.error(message);
-      }).catch(() => undefined);
+        setGradeNote(message);
+      }).catch(() => undefined).finally(() => {
+        if (cancelled || gradePause.current) return;
+        const next = gradeHold.current - Date.now();
+        arm(next > 250 ? next : 8000);
+        void loadGradebook(gradeId, { keepPage: true });
+      });
     };
-    kickClassGrade();
-    const timer = window.setInterval(() => {
-      kickClassGrade();
-      void loadGradebook(gradeId, { keepPage: true });
-    }, 8000);
+    if (gradeHold.current <= Date.now()) setGradeNote((note) => note || "考试已结束，正在逐题批改。已经出分的会保留。");
+    run();
     return () => {
-      window.clearInterval(timer);
+      cancelled = true;
+      window.clearTimeout(timer);
     };
-    // Refresh the roster while the server finishes the class. Opening this page is only a backup if nobody was online at the deadline.
+    // The hold is read from a ref so the timer can wait out a rate limit without polling.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [classGradeDue, gradeId, gradePaused]);
 
@@ -1992,9 +2012,9 @@ function TeacherHome() {
     setMcqMinutes(timing.mcq);
     setFrqMinutes(timing.frq);
     setBreakMinutes(timing.breakMinutes);
-    const start = Date.parse(startsAt);
+    const start = examInputMs(startsAt);
     if (Number.isFinite(start)) {
-      setEndsAt(toLocalInput(new Date(start + sectionTotalMinutes(timing.mcq, timing.frq, timing.breakMinutes) * 60 * 1000)));
+      setEndsAt(toBeijingInput(new Date(start + sectionTotalMinutes(timing.mcq, timing.frq, timing.breakMinutes) * 60 * 1000)));
     }
   }, [libraryPapers, paperId, startsAt]);
 
@@ -2151,11 +2171,11 @@ function TeacherHome() {
     if (next === "exam" && examStep === "edit" && !title.trim()) {
       const start = new Date();
       const timing = source === "existing" && selectedPaper ? paperSectionMinutes(selectedPaper) : { mcq: MCQ_MINUTES_DEFAULT, frq: FRQ_MINUTES_DEFAULT, breakMinutes: BREAK_MINUTES_DEFAULT };
-      setStartsAt(toLocalInput(start));
+      setStartsAt(toBeijingInput(start));
       setMcqMinutes(timing.mcq);
       setFrqMinutes(timing.frq);
       setBreakMinutes(timing.breakMinutes);
-      setEndsAt(toLocalInput(new Date(start.getTime() + sectionTotalMinutes(timing.mcq, timing.frq, timing.breakMinutes) * 60 * 1000)));
+      setEndsAt(toBeijingInput(new Date(start.getTime() + sectionTotalMinutes(timing.mcq, timing.frq, timing.breakMinutes) * 60 * 1000)));
     }
   }
 
@@ -2172,8 +2192,8 @@ function TeacherHome() {
       toast.error("请选择一份试卷");
       return;
     }
-    const starts = Date.parse(startsAt);
-    const ends = Date.parse(endsAt);
+    const starts = examInputMs(startsAt);
+    const ends = examInputMs(endsAt);
     if (!Number.isFinite(starts) || !Number.isFinite(ends) || ends <= starts) {
       toast.error("请设置有效的开考和截止时间");
       return;
@@ -2386,7 +2406,7 @@ function TeacherHome() {
                                 {a.title}
                                 {a.class_name ? <div className="text-[11px] font-normal text-muted-foreground">{a.class_name}{a.teacher_name ? ` · ${a.teacher_name}` : ""}</div> : null}
                               </TableCell>
-                              <TableCell className="whitespace-nowrap text-muted-foreground">{new Date(a.ends_at).toLocaleString()}</TableCell>
+                              <TableCell className="whitespace-nowrap text-muted-foreground">{beijingTime(a.ends_at).slice(0, 16)}</TableCell>
                               <TableCell>
                                 <button
                                   type="button"
@@ -2579,7 +2599,7 @@ function TeacherHome() {
                         <dt className="text-muted-foreground">满分</dt>
                         <dd className="font-medium">{scoreMax} 分，AP 1–5 仍按 90 分综合分</dd>
                         <dt className="text-muted-foreground">考试时间</dt>
-                        <dd className="font-medium">{new Date(startsAt).toLocaleString()} 至 {new Date(endsAt).toLocaleString()}</dd>
+                        <dd className="font-medium">北京时间 {beijingInputLabel(startsAt)} 至 {beijingInputLabel(endsAt)}</dd>
                         <dt className="text-muted-foreground">防作弊</dt>
                         <dd className="font-medium">离开页面会提醒，关闭页面前会再确认一次</dd>
                         <dt className="text-muted-foreground">公布答案</dt>
@@ -2629,12 +2649,12 @@ function TeacherHome() {
                           )}
                           onClick={() => {
                             setSource("random");
-                            const start = Date.parse(startsAt);
+                            const start = examInputMs(startsAt);
                             setMcqMinutes(MCQ_MINUTES_DEFAULT);
                             setFrqMinutes(FRQ_MINUTES_DEFAULT);
                             setBreakMinutes(BREAK_MINUTES_DEFAULT);
                             if (Number.isFinite(start)) {
-                              setEndsAt(toLocalInput(new Date(start + sectionTotalMinutes(MCQ_MINUTES_DEFAULT, FRQ_MINUTES_DEFAULT, BREAK_MINUTES_DEFAULT) * 60 * 1000)));
+                              setEndsAt(toBeijingInput(new Date(start + sectionTotalMinutes(MCQ_MINUTES_DEFAULT, FRQ_MINUTES_DEFAULT, BREAK_MINUTES_DEFAULT) * 60 * 1000)));
                             }
                           }}
                         >
@@ -2653,9 +2673,9 @@ function TeacherHome() {
                             setMcqMinutes(timing.mcq);
                             setFrqMinutes(timing.frq);
                             setBreakMinutes(timing.breakMinutes);
-                            const start = Date.parse(startsAt);
+                            const start = examInputMs(startsAt);
                             if (Number.isFinite(start)) {
-                              setEndsAt(toLocalInput(new Date(start + sectionTotalMinutes(timing.mcq, timing.frq, timing.breakMinutes) * 60 * 1000)));
+                              setEndsAt(toBeijingInput(new Date(start + sectionTotalMinutes(timing.mcq, timing.frq, timing.breakMinutes) * 60 * 1000)));
                             }
                           }}>
                             <SelectTrigger className="min-w-0 flex-1"><SelectValue placeholder="选择试卷" /></SelectTrigger>
@@ -2692,7 +2712,7 @@ function TeacherHome() {
                             setStartsAt(value);
                             const start = Date.parse(value);
                             if (!Number.isFinite(start)) return;
-                            setEndsAt(toLocalInput(new Date(start + sectionTotalMinutes(mcqMinutes, frqMinutes, frqMinutes > 0 ? breakMinutes : 0) * 60 * 1000)));
+                            setEndsAt(toBeijingInput(new Date(start + sectionTotalMinutes(mcqMinutes, frqMinutes, frqMinutes > 0 ? breakMinutes : 0) * 60 * 1000)));
                           }}
                         />
                       </Field>
@@ -2716,9 +2736,9 @@ function TeacherHome() {
                             const mins = Math.round(Number(e.target.value));
                             if (!Number.isFinite(mins)) return;
                             setMcqMinutes(mins);
-                            const start = Date.parse(startsAt);
+                            const start = examInputMs(startsAt);
                             if (!Number.isFinite(start)) return;
-                            setEndsAt(toLocalInput(new Date(start + sectionTotalMinutes(mins, frqMinutes, frqMinutes > 0 ? breakMinutes : 0) * 60 * 1000)));
+                            setEndsAt(toBeijingInput(new Date(start + sectionTotalMinutes(mins, frqMinutes, frqMinutes > 0 ? breakMinutes : 0) * 60 * 1000)));
                           }}
                         />
                       </Field>
@@ -2734,9 +2754,9 @@ function TeacherHome() {
                             const nextBreak = mins > 0 ? breakMinutes : 0;
                             setFrqMinutes(mins);
                             setBreakMinutes(nextBreak);
-                            const start = Date.parse(startsAt);
+                            const start = examInputMs(startsAt);
                             if (!Number.isFinite(start)) return;
-                            setEndsAt(toLocalInput(new Date(start + sectionTotalMinutes(mcqMinutes, mins, nextBreak) * 60 * 1000)));
+                            setEndsAt(toBeijingInput(new Date(start + sectionTotalMinutes(mcqMinutes, mins, nextBreak) * 60 * 1000)));
                           }}
                         />
                       </Field>
@@ -2751,9 +2771,9 @@ function TeacherHome() {
                             const mins = Math.round(Number(e.target.value));
                             if (!Number.isFinite(mins)) return;
                             setBreakMinutes(mins);
-                            const start = Date.parse(startsAt);
+                            const start = examInputMs(startsAt);
                             if (!Number.isFinite(start)) return;
-                            setEndsAt(toLocalInput(new Date(start + sectionTotalMinutes(mcqMinutes, frqMinutes, mins) * 60 * 1000)));
+                            setEndsAt(toBeijingInput(new Date(start + sectionTotalMinutes(mcqMinutes, frqMinutes, mins) * 60 * 1000)));
                           }}
                         />
                       </Field>
@@ -2827,7 +2847,7 @@ function TeacherHome() {
                         </div>
                         <p className="text-xs leading-relaxed text-muted-foreground">
                           {a.class_name ? `${a.class_name}${a.teacher_name ? ` · ${a.teacher_name}` : ""} · ` : ""}
-                          {a.paper?.title ?? "试卷"} · {assignmentTiming(a)} · 满分 {a.score_max ?? "—"} · 平均 {formatScaledScore(a.ap?.averageCustom, a.score_max ?? a.ap?.scoreMax)} · AP {formatApAverage(a.ap)} · 正确率 {accuracyLabel(a)} · {new Date(a.starts_at).toLocaleString()} – {new Date(a.ends_at).toLocaleString()}
+                          {a.paper?.title ?? "试卷"} · {assignmentTiming(a)} · 满分 {a.score_max ?? "—"} · 平均 {formatScaledScore(a.ap?.averageCustom, a.score_max ?? a.ap?.scoreMax)} · AP {formatApAverage(a.ap)} · 正确率 {accuracyLabel(a)} · 北京时间 {beijingTime(a.starts_at).slice(0, 16)} – {beijingTime(a.ends_at).slice(0, 16)}
                         </p>
                         <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center">
                           <span className="font-mono text-lg tracking-[0.14em]">{a.exam_code}</span>
@@ -2862,8 +2882,8 @@ function TeacherHome() {
                     <div className="mt-1 flex flex-wrap items-center gap-2">
                       {classGradeDue || gradeBusy === "ai" ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
                       <p className="text-sm text-muted-foreground">
-                        {gradeNote
-                          ? `${gradeNote}${pendingFrqCount > 0 && !/还剩|请求过多|没批完|可重试/.test(gradeNote) ? `，还有 ${pendingFrqCount} 题没批完` : ""}`
+                        {liveRetryNote(gradeNote, gradeRetryAt, gradeClock || Date.now())
+                          ? `${liveRetryNote(gradeNote, gradeRetryAt, gradeClock || Date.now())}${pendingFrqCount > 0 && !/还剩|请求过多|没批完|可重试|批改失败/.test(gradeNote) ? `，还有 ${pendingFrqCount} 题没批完` : ""}`
                           : pendingGradeError
                             ? pendingGradeError
                             : `还有 ${pendingFrqCount} 题没批完。已经出分的会保留。`}

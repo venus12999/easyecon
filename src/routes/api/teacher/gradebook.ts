@@ -6,7 +6,7 @@ import { accountNames, ensureTeacherClass, getTeacherDb, isSchoolAdmin, verifyTe
 import { isUuid } from "@/lib/school-exam-session";
 import { schoolExamAiOn } from "@/lib/exam-flags";
 import { isBlankStudentAnswer } from "@/lib/frq-answer";
-import { alignFrqNumbers, closeSchoolAttempt, collectFinishedExam, continueGradeBatch, drainSchoolGrades, fatalGradeError, gradeBatchToken, gradeNextSchoolFrq, mcqSectionClosed, persistBlankFrqZeros, readCollectedReason, readSubmittedAt, releaseGradeLocks, resumeClassGrading, saveManualFrqScores, stopClassGrading, teacherFrqViews, teacherMcqViews } from "@/lib/school-exam.server";
+import { alignFrqNumbers, closeSchoolAttempt, collectFinishedExam, continueGradeBatch, drainSchoolGrades, fatalGradeError, gradeBatchToken, gradeNextSchoolFrq, mcqSectionClosed, persistBlankFrqZeros, readCollectedReason, readSubmittedAt, releaseGradeLocks, resumeClassGrading, saveManualFrqScores, scheduleGradeRetry, stopClassGrading, teacherFrqViews, teacherMcqViews } from "@/lib/school-exam.server";
 import { splitImageTextRubric, splitTeacherFrq } from "@/lib/frq-teacher-fields";
 
 async function teacherAssignment(userId: string, jwt: string, assignmentId: string, email: string | null) {
@@ -139,6 +139,7 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
           const step = await drainSchoolGrades(body.assignment_id);
           const fatal = fatalGradeError(step.error);
           if (!step.waiting && !step.busy && !step.done && !fatal) continueGradeBatch(request, body.assignment_id);
+          else if (step.busy && step.retryAt) scheduleGradeRetry(request, body.assignment_id, step.retryAt);
           if (fatal && step.error) return jsonErr(step.error, 502);
           return Response.json({ ok: true, waiting: step.waiting, done: step.done, busy: step.busy, pending: step.pending, graded_sort: step.gradedSort, notice: step.notice ?? null, retry_at: step.retryAt ?? null });
         }
@@ -162,6 +163,7 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
           const step = await drainSchoolGrades(assignmentId);
           const fatal = fatalGradeError(step.error);
           if (!step.waiting && !step.busy && !step.done && !fatal) continueGradeBatch(request, assignmentId);
+          else if (step.busy && step.retryAt) scheduleGradeRetry(request, assignmentId, step.retryAt);
           if (fatal && step.error) return jsonErr(step.error, 502);
           return Response.json({ ok: true, waiting: step.waiting, done: step.done, busy: step.busy, pending: step.pending, graded_sort: step.gradedSort, notice: step.notice ?? null, retry_at: step.retryAt ?? null });
         }
@@ -169,6 +171,7 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
           const step = await drainSchoolGrades(assignmentId);
           const fatal = fatalGradeError(step.error);
           if (!step.waiting && !step.busy && !step.done && !fatal) continueGradeBatch(request, assignmentId);
+          else if (step.busy && step.retryAt) scheduleGradeRetry(request, assignmentId, step.retryAt);
           if (fatal && step.error) return jsonErr(step.error, 502);
           return Response.json({ ok: true, waiting: step.waiting, done: step.done, busy: step.busy, pending: step.pending, graded_sort: step.gradedSort, notice: step.notice ?? null, retry_at: step.retryAt ?? null });
         }
@@ -202,6 +205,7 @@ export const Route = createFileRoute("/api/teacher/gradebook")({
         if (body.action === "ai") {
           if (Date.now() < Date.parse(owned.assignment.ends_at)) return jsonErr("考试还没结束，截止后批改");
           const step = await gradeNextSchoolFrq(attempt.id, owned.assignment.paper_id, { force: true, retryFailed: true });
+          if (step.busy && step.retryAt) scheduleGradeRetry(request, assignmentId, step.retryAt);
           if (step.error && fatalGradeError(step.error)) return jsonErr(step.error, 502);
           if (step.busy && !step.error) return Response.json({ ok: true, done: false, pending: step.pending, busy: true, graded_sort: null, notice: step.notice ?? null, retry_at: step.retryAt ?? null });
           if (step.error) return Response.json({ ok: false, error: step.error, done: false, pending: step.pending, busy: step.busy, graded_sort: null, notice: step.notice ?? step.error, retry_at: step.retryAt ?? null });
