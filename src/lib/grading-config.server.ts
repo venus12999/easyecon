@@ -9,7 +9,7 @@ export const GRADING_MODELS = [
   "gpt-4o-mini",
 ] as const;
 
-export const GRADING_TIMEOUT_MS = 75_000;
+export const GRADING_TIMEOUT_MS = 45_000;
 
 function boundedInt(raw: string | undefined, fallback: number, min: number, max: number) {
   const n = Number(raw ?? fallback);
@@ -29,7 +29,7 @@ export function gradingModel() {
 }
 
 export function gradingConcurrency() {
-  return boundedInt(process.env.GRADING_CONCURRENCY, 6, 1, 20);
+  return boundedInt(process.env.GRADING_CONCURRENCY, 3, 1, 8);
 }
 
 export function gradingMaxRetries() {

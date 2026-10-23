@@ -17,6 +17,35 @@ export type FrqPart = {
 
 const PART_KEYS = ["a", "b", "c", "d", "e"] as const;
 
+/** Fit rubric point values onto the question's real full score. Earned points move with them. */
+export function scalePointsToMax<T extends { points?: number; earned?: number }>(items: T[], maxScore: number): T[] {
+  if (maxScore < 1) return items;
+  const weights = items.map((item) => (typeof item.points === "number" && item.points > 0 ? item.points : 0));
+  const sum = weights.reduce((total, points) => total + points, 0);
+  if (sum < 1 || sum === maxScore) return items;
+  const exact = weights.map((points) => (points / sum) * maxScore);
+  const next = exact.map((value) => Math.floor(value));
+  let left = maxScore - next.reduce((total, points) => total + points, 0);
+  const order = exact
+    .map((value, index) => ({ index, frac: value - Math.floor(value), weight: weights[index] }))
+    .sort((a, b) => b.frac - a.frac || b.weight - a.weight);
+  for (const row of order) {
+    if (left <= 0) break;
+    if (row.weight <= 0) continue;
+    next[row.index] += 1;
+    left -= 1;
+  }
+  return items.map((item, index) => {
+    const points = weights[index];
+    if (points <= 0) return item;
+    const scaled = next[index];
+    const earned = typeof item.earned === "number"
+      ? Math.max(0, Math.min(scaled, Math.round((item.earned / points) * scaled)))
+      : item.earned;
+    return { ...item, points: scaled, earned };
+  });
+}
+
 export function partLabel(key: string) {
   return `${key.toUpperCase()} 问`;
 }

@@ -1,5 +1,7 @@
+import { officialFrqMax } from "@/lib/ap-exam-parse";
 import { isBlankStudentAnswer } from "@/lib/frq-answer";
 import { GRADING_TIMEOUT_MS, gradingBaseUrl, gradingModel } from "@/lib/grading-config.server";
+import { scalePointsToMax } from "@/lib/frq-parts";
 import { splitImageTextRubric } from "@/lib/frq-teacher-fields";
 
 export const FRQ_GRADER_PROMPT = `你是 AP Microeconomics（AP 微观经济）资深阅卷官（Reader），按 AP 官方阅卷的方式为中国学生批改大题（FRQ）。题目可能是 College Board 原题，也可能是任课老师自编的题目。
@@ -244,6 +246,7 @@ async function completeGrade(input: {
   model: string;
   system: string;
   userContent: GradeUserContent;
+  jsonObject?: boolean;
 }): Promise<{ ok: true; content: string } | { ok: false; error: string; status: number }> {
   const apiKey = process.env.LAOZHANG_API_KEY?.trim();
   if (!apiKey) {
@@ -264,7 +267,7 @@ async function completeGrade(input: {
         model: input.model,
         temperature: 0,
         max_tokens: 3072,
-        response_format: { type: "json_object" },
+        ...(input.jsonObject === false ? {} : { response_format: { type: "json_object" } }),
         messages: [
           { role: "system", content: input.system },
           { role: "user", content: input.userContent },
@@ -278,15 +281,15 @@ async function completeGrade(input: {
       logGrade({ request_id: input.requestId, model: input.model, latency_ms: latency, ok: false, status, error: "not_configured" });
       return { ok: false, error: "ai_not_configured", status };
     }
-    if (status === 429) {
+    if (status === 429 || status === 502 || status === 503 || status === 529) {
       await upstream.body?.cancel();
       logGrade({ request_id: input.requestId, model: input.model, latency_ms: latency, ok: false, status, error: "rate_limited" });
       return { ok: false, error: "rate_limited", status };
     }
     if (!upstream.ok) {
-      await upstream.body?.cancel();
-      logGrade({ request_id: input.requestId, model: input.model, latency_ms: latency, ok: false, status, error: "upstream" });
-      return { ok: false, error: "ai_failed", status };
+      const overloaded = await upstreamLooksLimited(upstream);
+      logGrade({ request_id: input.requestId, model: input.model, latency_ms: latency, ok: false, status, error: overloaded ? "rate_limited" : "upstream" });
+      return { ok: false, error: overloaded ? "rate_limited" : "upstream", status };
     }
     const data = await upstream.json() as { choices?: Array<{ message?: { content?: unknown } }>; usage?: { prompt_tokens?: number; completion_tokens?: number; input_tokens?: number; output_tokens?: number } };
     const usage = data.usage;
@@ -310,8 +313,43 @@ async function completeGrade(input: {
       status,
       error: timedOut ? "timeout" : "network",
     });
-    return { ok: false, error: "ai_failed", status };
+    return { ok: false, error: timedOut ? "timeout" : "network", status };
   }
+}
+
+async function upstreamLooksLimited(upstream: Response) {
+  const text = await upstream.text().catch(() => "");
+  let code = "";
+  try {
+    const body = JSON.parse(text) as { error?: { code?: string; type?: string; message?: string } | string };
+    const err = body?.error;
+    code = typeof err === "string" ? err : `${err?.code ?? ""} ${err?.type ?? ""} ${err?.message ?? ""}`;
+  } catch {
+    code = "";
+  }
+  return /rate|quota|limit|overload|too many|resource_exhausted/i.test(code.slice(0, 180));
+}
+
+function gradeFromParsed(parsed: FrqGradeResult, gradingNote: string, maxScore: number, answerText: string | null) {
+  const clean = sanitizeGrade(parsed);
+  const filled = clean.breakdown.length > 0 ? clean.breakdown : pointsFromRubric(gradingNote);
+  const breakdown = scalePointsToMax(enforcePointCredit(filled, allowPartialCredit(gradingNote)), maxScore);
+  const earnedSum = breakdown.reduce((sum, item) => sum + (typeof item.earned === "number" ? item.earned : 0), 0);
+  const hasEarned = breakdown.some((item) => typeof item.earned === "number");
+  const injection = answerNeedsReview(answerText);
+  let overall = clean.overall_comment;
+  if (injection && !overall.startsWith("建议复核")) overall = overall ? `建议复核。${overall}` : "建议复核。";
+  return {
+    ok: true as const,
+    grade: {
+      ...clean,
+      breakdown,
+      overall_comment: overall,
+      needs_review: clean.needs_review === true || injection,
+      total_score: Math.max(0, Math.min(maxScore, hasEarned ? earnedSum : Math.round(clean.total_score))),
+      max_score: maxScore,
+    },
+  };
 }
 
 export async function gradeFrqAnswer(input: {
@@ -322,7 +360,7 @@ export async function gradeFrqAnswer(input: {
   answerFileKind: string | null;
 }): Promise<{ ok: true; grade: FrqGradeResult } | { ok: false; error: string }> {
   const frq = input.frq;
-  const maxScore = frq.max_score ?? 0;
+  const maxScore = officialFrqMax(`${frq.title ?? ""}\n${frq.content ?? ""}`, frq.max_score);
   if (maxScore < 1) return { ok: false, error: "missing_max_score" };
   if (isBlankStudentAnswer(input.answerText, input.answerFileUrl)) return { ok: true, grade: blankGrade(maxScore) };
   const model = gradingModel();
@@ -359,34 +397,26 @@ export async function gradeFrqAnswer(input: {
     const completed = await completeGrade({ requestId, model, system: FRQ_GRADER_PROMPT, userContent: passes[index] });
     if (!completed.ok) {
       lastError = completed.error;
-      if (completed.error === "ai_not_configured" || completed.status !== 400) break;
+      const retryWithoutImage = index === 0 && images.length > 0 && completed.error !== "ai_not_configured" && completed.error !== "rate_limited";
+      if (!retryWithoutImage) break;
       continue;
     }
     const parsed = tryParseJson(completed.content);
     if (!parsed) {
-      lastError = "ai_failed";
+      lastError = "bad_json";
       logGrade({ request_id: requestId, model, latency_ms: 0, ok: false, error: "bad_json" });
-      continue;
+      if (index < passes.length - 1) continue;
+      const plainId = crypto.randomUUID();
+      const plain = await completeGrade({ requestId: plainId, model, system: FRQ_GRADER_PROMPT, userContent: passes[index], jsonObject: false });
+      if (!plain.ok) {
+        lastError = plain.error;
+        break;
+      }
+      const plainParsed = tryParseJson(plain.content);
+      if (!plainParsed) break;
+      return gradeFromParsed(plainParsed, gradingNote, maxScore, answerText);
     }
-    const clean = sanitizeGrade(parsed);
-    const filled = clean.breakdown.length > 0 ? clean.breakdown : pointsFromRubric(gradingNote);
-    const breakdown = enforcePointCredit(filled, allowPartialCredit(gradingNote));
-    const earnedSum = breakdown.reduce((sum, item) => sum + (typeof item.earned === "number" ? item.earned : 0), 0);
-    const hasEarned = breakdown.some((item) => typeof item.earned === "number");
-    const injection = answerNeedsReview(answerText);
-    let overall = clean.overall_comment;
-    if (injection && !overall.startsWith("建议复核")) overall = overall ? `建议复核。${overall}` : "建议复核。";
-    return {
-      ok: true,
-      grade: {
-        ...clean,
-        breakdown,
-        overall_comment: overall,
-        needs_review: clean.needs_review === true || injection,
-        total_score: Math.max(0, Math.min(maxScore, hasEarned ? earnedSum : Math.round(clean.total_score))),
-        max_score: maxScore,
-      },
-    };
+    return gradeFromParsed(parsed, gradingNote, maxScore, answerText);
   }
   return { ok: false, error: lastError };
 }

@@ -22,7 +22,7 @@ export type ParsedExamItem = {
 };
 
 const IMAGE_HINT =
-  /graph provided|table provided|payoff matrix|shown in the graph|the graph shows|the graph provided|figure provided|figure\s*\d|combinations of donuts|based on the (table|graph|figure|payoff)|the table shows|refer to the (graph|table|figure)|the figure shows|diagram provided|见(上|下)?(图|表)|如图|如表|下图|下表|上图|上表|图示|示意图|图\s*\d/i;
+  /graph provided|table provided|payoff matrix|shown in the graph|the graph shows|the graph provided|figure provided|figure\s*\d|combinations of donuts|based on the (table|graph|figure|payoff)|the table shows|refer to the (graph|table|figure)|the figure shows|diagram provided|diagram above|diagram below|the diagram|in the diagram|graph above|graph below|graph of|见(上|下)?(图|表)|如图|如表|下图|下表|上图|上表|图示|示意图|图\s*\d/i;
 
 /** Read a printed point value. Part marks like "(2 points)" are added up. */
 export function readPrintedScore(text: string, fallback: number) {
@@ -39,6 +39,38 @@ export function readPrintedScore(text: string, fallback: number) {
     if (n >= 1 && n <= 20) return n;
   }
   return fallback;
+}
+
+/** Use the points printed on the question. A stored 9 is the column default, not a printed score. */
+export function officialFrqMax(text: string, stored: number | null | undefined) {
+  const printed = readPrintedScore(text, 0);
+  const column = typeof stored === "number" && stored >= 1 && stored <= 20 ? Math.round(stored) : 0;
+  if (printed >= 1 && printed <= 20 && (column === 0 || (column === 9 && printed !== 9))) return printed;
+  return column || printed;
+}
+
+/** Pull a trailing "(E) ..." out of option D when the cutter glued the last choice on. */
+export function splitTrailingChoiceE(optionD: string, optionE: string) {
+  const e = optionE.trim();
+  if (e) return { option_d: optionD.trim(), option_e: e };
+  const match = optionD.match(/^(.*\S)\s+(?:\(E\)|E[.)])\s+(\S[\s\S]*)$/i);
+  if (!match?.[1]?.trim() || !match[2]?.trim()) return { option_d: optionD.trim(), option_e: "" };
+  return { option_d: match[1].trim(), option_e: match[2].trim() };
+}
+
+/** Fill a missing E from the page text after the stem, or from a choice glued onto D. */
+export function recoverOptionE(pageText: string, stem: string, optionD: string, optionE: string) {
+  const split = splitTrailingChoiceE(optionD, optionE);
+  if (split.option_e) return split;
+  const head = stem.replace(/\s+/g, " ").trim().slice(0, 48);
+  if (head.length < 12 || !pageText.trim()) return split;
+  const at = pageText.toLowerCase().indexOf(head.toLowerCase());
+  const window = at >= 0 ? pageText.slice(at, at + 4000) : pageText;
+  const match = window.match(/\(E\)\s*([\s\S]*?)(?=\(\s*[A-D]\s*\)|\n\s*\d{1,2}\s*[.)]|$)/i)
+    ?? window.match(/(?:^|\n)\s*E[.)]\s+([\s\S]*?)(?=\n\s*[A-D][.)]|\n\s*\d{1,2}\s*[.)]|$)/i);
+  const text = match?.[1]?.replace(/\s+/g, " ").trim() ?? "";
+  if (!text || text.length > 500) return split;
+  return { option_d: split.option_d, option_e: text };
 }
 
 /** Printed question number at the start of a stem, such as "Question 3" or "3." */
@@ -94,10 +126,12 @@ function printedSentence(sentence: string, page: string) {
 /** Drop a model-written graph description. Printed question sentences stay. */
 export function studentVisibleQuestion(text: string, pageText = "") {
   const page = compact(pageText);
+  const caption = /^(?:[•·●▪‣*\-]\s*)?(?:graph|figure|diagram|table)\s+of\b/i;
   const kept = text
     .split(/\n+|(?<=[.!?。])\s+/)
     .map((s) => s.trim())
     .filter(Boolean)
+    .filter((s) => !caption.test(s))
     .filter((s) => !FIGURE_GIVEAWAY.test(s) || printedSentence(s, page));
   return kept.join("\n").replace(/[ \t]+\n/g, "\n").trim();
 }

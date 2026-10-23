@@ -151,7 +151,7 @@ export function ExamScoresPanel({ token }: { token: string }) {
                             </div>
                             <div className="font-mono text-[11px] text-muted-foreground">{row.student_id}</div>
                           </td>
-                          <td className="py-2 pr-3">{row.status === "submitted" ? "已交卷" : row.status === "in_progress" ? "作答中" : "未交"}</td>
+                          <td className="py-2 pr-3">{row.status === "submitted" ? "已交卷" : row.status === "in_progress" ? "作答中" : Date.parse(exam.ends_at) <= Date.now() ? "未参加" : "未入场"}</td>
                           <td className="py-2 pr-3 tabular-nums">{row.mcq_total ? `${row.mcq_correct ?? 0}/${row.mcq_total}` : "—"}</td>
                           {frqNumbers.map((n) => {
                             const frq = row.frqs?.find((item) => item.sort_order === n);

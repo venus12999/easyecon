@@ -1,13 +1,13 @@
 import { createHmac } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { printedQuestionNumber } from "@/lib/ap-exam-parse";
+import { officialFrqMax, printedQuestionNumber, splitTrailingChoiceE } from "@/lib/ap-exam-parse";
 import { readPageImage, readPointMarker, schoolExamAiOn, stripPageImage, stripPointMarker } from "@/lib/exam-flags";
 import { fixAp2025Frqs, fixAp2025Questions } from "@/lib/ap-2025-paper";
 import { isBlankStudentAnswer } from "@/lib/frq-answer";
 import { answerNeedsReview, gradeFrqAnswer, pointsFromRubric, type FrqBreakdown } from "@/lib/frq-grade.server";
-import { gradingConcurrency, gradingMaxRetries, gradingSlotsAvailable, withGradingSlot } from "@/lib/grading-config.server";
-import { groupFrqParts, resolvePartOverride } from "@/lib/frq-parts";
+import { GRADING_TIMEOUT_MS, gradingConcurrency, gradingMaxRetries, gradingSlotsAvailable, withGradingSlot } from "@/lib/grading-config.server";
+import { groupFrqParts, resolvePartOverride, scalePointsToMax } from "@/lib/frq-parts";
 import { splitImageTextRubric, splitTeacherFrq } from "@/lib/frq-teacher-fields";
 import { EXAM_LOCK_GRACE_MS, isUuid } from "@/lib/school-exam-session";
 import type { Json } from "@/integrations/supabase/types";
@@ -346,13 +346,34 @@ function readManualParts(value: unknown) {
   return Object.keys(out).length ? out : null;
 }
 
-function explainGradeError(error: string, sort?: number | null) {
+function explainGradeError(error: string, sort?: number | null, student?: string | null) {
   const which = sort ? `Q${sort}` : "这一题";
-  if (error === "ai_not_configured") return "AI 评分尚未配置，没能批改";
-  if (error === "missing_max_score") return `${which} 没有满分，请老师先填写再批改`;
-  if (error === "rate_limited") return `${which} 没批完：AI 评分请求过多。已经批完的题目已保存，稍后再试会继续`;
-  if (error === "credits_exhausted") return `${which} 没批完：AI 评分额度不足。已经批完的题目已保存`;
-  return `${which} 没批完。已经批完的题目已保存，其余题目会继续批`;
+  const who = student ? `${student} 的 ` : "";
+  if (error === "ai_not_configured") return student ? `${student}：AI 评分尚未配置，没能批改` : "AI 评分尚未配置，没能批改";
+  if (error === "missing_max_score") return `${who}${which} 没有满分，请老师先填写再批改`;
+  if (error === "rate_limited") return `${who}${which} 没批完：AI 评分请求过多。已经批完的题目已保存，稍后再试会继续`;
+  if (error === "timeout") return `${who}${which} 没批完：评分超时。已经批完的题目已保存，稍后再试会继续`;
+  if (error === "bad_json") return `${who}${which} 没批完：评分结果无法读取。已经批完的题目已保存，稍后再试会继续`;
+  if (error === "network") return `${who}${which} 没批完：连接评分服务失败。已经批完的题目已保存，稍后再试会继续`;
+  if (error === "upstream") return `${who}${which} 没批完：评分服务暂时没有返回结果。已经批完的题目已保存，稍后再试会继续`;
+  if (error === "credits_exhausted") return `${who}${which} 没批完：AI 评分额度不足。已经批完的题目已保存`;
+  return `${who}${which} 没批完：评分没有完成。已经批完的题目已保存，其余题目会继续批`;
+}
+
+async function rosterGradeLabel(rosterId: string | null | undefined) {
+  if (!rosterId) return null;
+  const { data } = await supabaseAdmin.from("school_roster").select("student_name,student_id").eq("id", rosterId).maybeSingle();
+  if (!data) return null;
+  const name = data.student_name?.trim() ?? "";
+  const id = data.student_id?.trim() ?? "";
+  if (name && id && name !== id) return `${name}（${id}）`;
+  return name || id || null;
+}
+
+function scaleStoredScore(score: number | null, fromMax: number, toMax: number) {
+  if (score == null) return null;
+  if (fromMax < 1 || toMax < 1 || fromMax === toMax) return score;
+  return Math.max(0, Math.min(toMax, Math.round((score / fromMax) * toMax)));
 }
 
 function positiveScore(...values: Array<number | null | undefined>) {
@@ -460,13 +481,14 @@ export type SchoolGradeStep = {
 };
 
 function retryBackoffMs(tries: number, error: string) {
-  const base = error === "rate_limited" ? 4_000 : 2_000;
-  return Math.min(60_000, base * 2 ** Math.max(0, tries - 1));
+  const base = error === "rate_limited" ? 20_000 : 2_000;
+  const cap = error === "rate_limited" ? 120_000 : 30_000;
+  return Math.min(cap, base * 2 ** Math.max(0, tries - 1));
 }
 
 function markGradeRetry(prev: StoredFrqGrade | undefined, maxScore: number | null, error: string, reason: string) {
   const tries = gradeAttemptCount(prev) + 1;
-  const maxTries = gradingMaxRetries();
+  const maxTries = error === "rate_limited" ? Math.max(gradingMaxRetries(), 8) : gradingMaxRetries();
   const hardStop = error === "credits_exhausted" || error === "ai_not_configured" || error === "missing_max_score";
   const giveUp = hardStop || tries >= maxTries;
   return {
@@ -552,7 +574,7 @@ export async function gradeNextSchoolFrq(attemptId: string, paperId: string, opt
 async function gradeNextSchoolFrqInner(attemptId: string, paperId: string, opts?: { force?: boolean; retryFailed?: boolean }): Promise<SchoolGradeStep> {
   const { data: attempt } = await supabaseAdmin
     .from("school_attempts")
-    .select("id,frq_answers,submitted_at")
+    .select("id,frq_answers,submitted_at,roster_id")
     .eq("id", attemptId)
     .maybeSingle();
   if (!attempt?.submitted_at) return { pending: 0, done: false, busy: false, gradedSort: null, error: "学生还没交卷" };
@@ -584,10 +606,10 @@ async function gradeNextSchoolFrqInner(attemptId: string, paperId: string, opts?
     const waiting = plan.cooling > 0;
     return { pending: plan.pending, done: !waiting, busy: waiting, gradedSort: null, error: null };
   }
-  const lockUntil = new Date(Date.now() + 180_000).toISOString();
-  await saveGradeState(attemptId, attempt.frq_answers, grades, lockUntil);
   const frq = plan.next;
   const answer = parsed.items[frq.id];
+  const studentLabel = await rosterGradeLabel(attempt.roster_id);
+  const reasonFor = (error: string, sort?: number | null) => explainGradeError(error, sort, studentLabel);
   try {
     const ids = list.map((item) => item.id);
     const { data: rubrics } = ids.length
@@ -597,25 +619,30 @@ async function gradeNextSchoolFrqInner(attemptId: string, paperId: string, opts?
     const full = list.find((item) => item.id === frq.id);
     if (!full) {
       await saveGradeState(attemptId, attempt.frq_answers, grades, null);
-      return { pending: plan.pending, done: false, busy: false, gradedSort: null, error: explainGradeError("ai_failed", shownQuestionOrder(frq)) };
+      return { pending: plan.pending, done: false, busy: false, gradedSort: null, error: reasonFor("ai_failed", shownQuestionOrder(frq)) };
     }
-    const graded = await withGradingSlot(() => gradeFrqAnswer({
-      frq: full,
-      rubricNote: rubricMap.get(frq.id) ?? null,
-      answerText: answer?.text?.trim() || null,
-      answerFileUrl: answer?.fileUrl ?? null,
-      answerFileKind: answer?.fileKind ?? null,
-    }));
+    const graded = await withGradingSlot(async () => {
+      const lockUntil = new Date(Date.now() + GRADING_TIMEOUT_MS + 20_000).toISOString();
+      await saveGradeState(attemptId, attempt.frq_answers, grades, lockUntil);
+      return gradeFrqAnswer({
+        frq: full,
+        rubricNote: rubricMap.get(frq.id) ?? null,
+        answerText: answer?.text?.trim() || null,
+        answerFileUrl: answer?.fileUrl ?? null,
+        answerFileKind: answer?.fileKind ?? null,
+      });
+    });
     const { data: fresh } = await supabaseAdmin.from("school_attempts").select("frq_answers").eq("id", attemptId).maybeSingle();
     const base = fresh?.frq_answers ?? attempt.frq_answers;
     grades = readStoredGrades(base);
     if (!graded.ok) {
       const prev = grades[frq.id];
-      const reason = explainGradeError(graded.error, shownQuestionOrder(full));
+      const reason = reasonFor(graded.error, shownQuestionOrder(full));
       const marked = markGradeRetry(prev, full.max_score, graded.error, reason);
       grades[frq.id] = marked.grade;
       await saveGradeState(attemptId, base, grades, null);
-      return { pending: plan.pending, done: false, busy: false, gradedSort: null, error: reason, released: marked.giveUp };
+      const coolingOff = graded.error === "rate_limited" && !marked.giveUp;
+      return { pending: plan.pending, done: false, busy: coolingOff, gradedSort: null, error: reason, released: marked.giveUp };
     }
     const prev = grades[frq.id];
     grades[frq.id] = {
@@ -643,7 +670,7 @@ async function gradeNextSchoolFrqInner(attemptId: string, paperId: string, opts?
     const base = fresh?.frq_answers ?? attempt.frq_answers;
     const saved = readStoredGrades(base);
     const prev = saved[frq.id];
-    const reason = explainGradeError("ai_failed", shownQuestionOrder(frq));
+    const reason = reasonFor("ai_failed", shownQuestionOrder(frq));
     const marked = markGradeRetry(prev, frq.max_score, "ai_failed", reason);
     saved[frq.id] = marked.grade;
     await saveGradeState(attemptId, base, saved, null).catch(() => undefined);
@@ -726,7 +753,8 @@ async function gradeFinishedExamWave(assignmentId: string, limit: number): Promi
   const consumed = steps.filter((step) => step.gradedSort != null || step.released === true).length;
   const left = Math.max(0, pending - consumed);
   if (fatal?.error) return { ...fatal, pending: left, done: false, waiting: false };
-  const notice = steps.map((step) => step.error).find((message) => !!message) ?? null;
+  const notices = steps.map((step) => step.error).filter((message): message is string => !!message);
+  const notice = notices.length === 0 ? null : notices.length <= 4 ? notices.join("；") : `${notices.slice(0, 4).join("；")}；另有 ${notices.length - 4} 名学生没批完`;
   const blocked = anyLocked || cooling > 0 || steps.some((step) => step.busy);
   return {
     pending: left,
@@ -854,7 +882,10 @@ export function teacherFrqViews(
               }];
             })
           : [];
-      const maxScore = positiveScore(stored?.max_score, prior?.ai_max_score, frq.max_score);
+      const paperMax = officialFrqMax(`${frq.title ?? ""}\n${frq.content ?? ""}`, frq.max_score);
+      const recordedMax = positiveScore(stored?.max_score, prior?.ai_max_score);
+      const maxScore = paperMax || recordedMax;
+      if (breakdown.length) breakdown = scalePointsToMax(breakdown, maxScore);
       const needsReview = stored?.needs_review === true || answerNeedsReview(answer?.text) || /建议复核|需老师复核/.test(stored?.ai_comment ?? prior?.ai_overall ?? "");
       if (needsReview && breakdown.length === 0) {
         const rubric = frq.rubric_note?.trim() || splitImageTextRubric(frq.image_text).rubric || splitTeacherFrq(frq.content).rubric_note;
@@ -881,9 +912,9 @@ export function teacherFrqViews(
         max_score: maxScore,
         answer_text: answer?.text ?? "",
         file_url: answer?.fileUrl ?? null,
-        ai_score: stored?.ai_score ?? prior?.ai_score ?? null,
+        ai_score: scaleStoredScore(stored?.ai_score ?? prior?.ai_score ?? null, recordedMax, maxScore),
         ai_failed: stored?.ai_failed === true && stored?.ai_score == null,
-        ai_error: stored?.ai_failed && stored?.ai_score == null ? stored?.ai_error ?? null : null,
+        ai_error: stored?.ai_score == null ? stored?.ai_error ?? null : null,
         ai_tries: stored?.ai_score == null ? gradeAttemptCount(stored) : 0,
         needs_review: needsReview,
         ai_comment: stored?.ai_comment ?? prior?.ai_overall ?? null,
@@ -1024,7 +1055,7 @@ function ensureExamSweeper() {
   if (typeof timer === "object" && timer && "unref" in timer && typeof timer.unref === "function") timer.unref();
 }
 
-/** Once the clock has stopped, close every started paper. Students who never opened the exam stay 未交. */
+/** Once the clock has stopped, close every started paper. Students who never opened the exam stay missing and show as 未参加. */
 export async function collectFinishedExam(assignmentId: string, known?: { endsAt?: string; paperId?: string }) {
   ensureExamSweeper();
   let endsAt = known?.endsAt;
@@ -1221,6 +1252,9 @@ export async function loadSchoolPaperQuestions(paperId: string, published: boole
   };
   const questions = ((pqs ?? []) as unknown as Array<{ questions: QRow }>).map((row) => {
     const q = row.questions;
+    const choices = splitTrailingChoiceE(q.option_d ?? "", q.option_e ?? "");
+    q.option_d = choices.option_d;
+    q.option_e = choices.option_e || null;
     const points = readPointMarker(q.explanation);
     const page_image_url = readPageImage(q.explanation);
     const explanation = stripPageImage(stripPointMarker(q.explanation));
@@ -1234,6 +1268,10 @@ export async function loadSchoolPaperQuestions(paperId: string, published: boole
     };
   });
   const cleanedQuestions = slug === "ap-micro-2025" ? fixAp2025Questions(questions) : questions;
-  const cleanedFrqs = slug === "ap-micro-2025" ? fixAp2025Frqs(frqs ?? []) : (frqs ?? []);
+  const numberedFrqs = slug === "ap-micro-2025" ? fixAp2025Frqs(frqs ?? []) : (frqs ?? []);
+  const cleanedFrqs = numberedFrqs.map((frq) => ({
+    ...frq,
+    max_score: officialFrqMax(`${frq.title ?? ""}\n${frq.content ?? ""}`, frq.max_score),
+  }));
   return { questions: cleanedQuestions, frqs: cleanedFrqs };
 }

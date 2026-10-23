@@ -45,9 +45,31 @@ import { consumeMockAccess } from "@/lib/mock-access-client";
 import { authFetch } from "@/lib/auth-fetch";
 import { ExamFigure } from "@/components/mock/ExamFigure";
 import { apBasisText, apMicroScore, apScoreText, pointsOnScale } from "@/lib/ap-score";
-import { readExamAiGrade, readPageImage, readPointMarker, stripExamFlags, stripPointMarker, studentPaperNote } from "@/lib/exam-flags";
+import { schoolExamAiOn, readPageImage, readPointMarker, stripExamFlags, stripPointMarker, studentPaperNote } from "@/lib/exam-flags";
 import { ap2025Clock, fixAp2025Frqs, fixAp2025Questions } from "@/lib/ap-2025-paper";
+import { looksLikeProvidedFigure, officialFrqMax, splitTrailingChoiceE } from "@/lib/ap-exam-parse";
+import { scalePointsToMax } from "@/lib/frq-parts";
 import { clearSchoolExamSession, hasExitedExam, isExamLocalEmail, isUuid, loadSchoolExamSession, markExamExited, markIntentionalSignOut, saveSchoolExamSession } from "@/lib/school-exam-session";
+
+function frqFigureSrc(item: { image_url: string | null; image_text: string | null; content: string | null }) {
+  if (item.image_url) return item.image_url;
+  const page = readPageImage(item.image_text);
+  if (page && looksLikeProvidedFigure(item.content ?? "")) return page;
+  return null;
+}
+
+function shownFrqGrade(grade: GradeResult | undefined, maxScore: number) {
+  if (!grade || !maxScore || grade.max_score === maxScore) return grade;
+  const breakdown = scalePointsToMax(grade.breakdown, maxScore);
+  const earned = breakdown.reduce((sum, item) => sum + (typeof item.earned === "number" ? item.earned : 0), 0);
+  const hasEarned = breakdown.some((item) => typeof item.earned === "number");
+  return {
+    ...grade,
+    max_score: maxScore,
+    breakdown,
+    total_score: Math.min(maxScore, hasEarned ? earned : grade.total_score),
+  };
+}
 
 export const Route = createFileRoute("/mock/$slug")({
   head: () => ({ meta: [{ title: "真题卷 · AP 微观经济" }] }),
@@ -243,13 +265,19 @@ function PaperRunner() {
           .eq("paper_id", p.id)
           .order("sort_order", { ascending: true }),
       ]);
-      const qs = ((pqs ?? []) as unknown as Array<{ questions: Q }>).map((row) => ({
-        ...row.questions,
-        points: readPointMarker(row.questions.explanation),
-        explanation: stripPointMarker(row.questions.explanation),
-      }));
+      const qs = ((pqs ?? []) as unknown as Array<{ questions: Q }>).map((row) => {
+        const choices = splitTrailingChoiceE(row.questions.option_d ?? "", row.questions.option_e ?? "");
+        return {
+          ...row.questions,
+          option_d: choices.option_d,
+          option_e: choices.option_e || null,
+          points: readPointMarker(row.questions.explanation),
+          explanation: stripPointMarker(row.questions.explanation),
+        };
+      });
       setQuestions(slug === "ap-micro-2025" ? fixAp2025Questions(qs) : qs);
-      const loadedFrqs = (slug === "ap-micro-2025" ? fixAp2025Frqs((fr ?? []) as Frq[]) : (fr ?? []) as Frq[]);
+      const loadedFrqs = (slug === "ap-micro-2025" ? fixAp2025Frqs((fr ?? []) as Frq[]) : (fr ?? []) as Frq[])
+        .map((item) => ({ ...item, max_score: officialFrqMax(`${item.title ?? ""}\n${item.content ?? ""}`, item.max_score) }));
       setFrqs(slug === "frq-pdf-practice"
         ? loadedFrqs.filter((item) =>
             selectedFrqId ? item.id === selectedFrqId : !selectedFrqUnit || getFrqUnit(item.title) === selectedFrqUnit,
@@ -317,7 +345,7 @@ function PaperRunner() {
         setLoading(false);
         return;
       }
-      setSchoolAiGrade(readExamAiGrade(j.paper.description));
+      setSchoolAiGrade(schoolExamAiOn(j.paper.description));
       setPaper({
         id: j.paper.id,
         slug: j.paper.slug ?? slug,
@@ -1584,8 +1612,8 @@ function PaperRunner() {
                   className={cn("select-text space-y-2", highlightActive && "cursor-text")}
                 >
                   <FrqContent content={f.content} />
-                  {f.image_url && (
-                    <ExamFigure src={f.image_url} pageUrl={readPageImage(f.image_text)} alt="本题图表，点击可放大" />
+                  {frqFigureSrc(f) && (
+                    <ExamFigure src={frqFigureSrc(f)!} pageUrl={readPageImage(f.image_text)} alt="本题图表，点击可放大" />
                   )}
                 </div>
                 <FrqAnswerBox
@@ -1623,7 +1651,7 @@ function PaperRunner() {
           );
         })}
 
-        <div className="flex flex-col items-end gap-2 pb-16">
+        <div className="flex flex-col items-end gap-2 pb-20 pr-36 sm:pr-56">
           <p className="text-xs text-muted-foreground">
             {isSchoolExam
               ? "没写完的大题也可以交卷，交卷后不能再改。"
@@ -1950,7 +1978,7 @@ function PaperRunner() {
         </div>
 
         {/* Bottom bar */}
-        <footer className="relative z-[70] shrink-0 border-t border-slate-300 bg-white px-3 py-2 pb-16 sm:h-auto sm:px-6 sm:py-3">
+        <footer className="relative z-[70] shrink-0 border-t border-slate-300 bg-white px-3 pt-2 pb-20 pr-36 sm:px-6 sm:pt-3 sm:pb-20 sm:pr-56">
           <div className="flex h-full items-center gap-2">
             <div className="hidden min-w-0 flex-1 font-bold text-base sm:block">{userName}</div>
             <Button
@@ -2058,8 +2086,8 @@ function PaperRunner() {
                     {frqs.map((item) => (
                       <div key={item.id} className="rounded-lg border border-slate-200 p-3 text-left">
                         <p className="text-sm font-semibold">{item.title || `Q${item.sort_order}`}</p>
-                        <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{item.content}</p>
-                        {item.image_url ? <div className="mt-2"><ExamFigure src={item.image_url} pageUrl={readPageImage(item.image_text)} alt="大题图表" /></div> : null}
+                        <FrqContent content={item.content} />
+                        {frqFigureSrc(item) ? <div className="mt-2"><ExamFigure src={frqFigureSrc(item)!} pageUrl={readPageImage(item.image_text)} alt="大题图表" /></div> : null}
                       </div>
                     ))}
                   </div>
@@ -2127,10 +2155,13 @@ function PaperRunner() {
   }
 
   if (isSchoolExam && phase === "done") {
+    const grading = schoolAiGrade && frqs.length > 0 && !schoolPublished;
     return (
       <main className="mx-auto flex min-h-[70vh] max-w-lg flex-col items-center justify-center px-4 py-16 text-center">
-        <h1 className="text-3xl font-bold">已交卷</h1>
-        <p className="mt-3 text-sm text-muted-foreground">你已经交卷，可以离开了。</p>
+        <h1 className="text-3xl font-bold">{grading ? "批改中" : "已交卷"}</h1>
+        <p className="mt-3 text-sm text-muted-foreground">
+          {grading ? "答卷已交上，大题正在批改。老师公布成绩后可以回来看分数。" : "你已经交卷，可以离开了。"}
+        </p>
         <Button className="mt-8" onClick={() => void leaveSchoolExam()}>
           离开考场
         </Button>
@@ -2140,10 +2171,10 @@ function PaperRunner() {
 
   if (!stats) return null;
   const pct = stats.total === 0 ? 0 : Math.round((stats.correct / stats.total) * 100);
-  const frqMax = frqs.reduce((sum, item) => sum + (frqGrades[item.id]?.max_score || item.max_score || 0), 0);
+  const frqMax = frqs.reduce((sum, item) => sum + (item.max_score || 0), 0);
   const frqGraded = frqs.filter((item) => frqGrades[item.id]).length;
   const frqReady = frqs.length === 0 || (frqSubmitted && frqGraded === frqs.length);
-  const frqEarned = frqs.reduce((sum, item) => sum + (frqGrades[item.id]?.total_score ?? 0), 0);
+  const frqEarned = frqs.reduce((sum, item) => sum + (shownFrqGrade(frqGrades[item.id], item.max_score)?.total_score ?? 0), 0);
   const ap = apMicroScore({
     mcqCorrect: stats.correct,
     mcqTotal: stats.total,
@@ -2157,8 +2188,12 @@ function PaperRunner() {
       {!showSchoolResults ? (
         <Card className="mb-6">
           <CardContent className="p-6 space-y-3 text-center">
-            <p className="text-lg font-semibold">已提交，等待老师公布成绩</p>
-            <p className="text-sm text-muted-foreground">本场计分考交卷后不显示正确答案和解析。老师公布后可再进入查看。</p>
+            <p className="text-lg font-semibold">{schoolAiGrade && frqs.length > 0 ? "批改中" : "已提交，等待老师公布成绩"}</p>
+            <p className="text-sm text-muted-foreground">
+              {schoolAiGrade && frqs.length > 0
+                ? "答卷已交上，大题正在批改。老师公布成绩后可以回来看分数。"
+                : "本场计分考交卷后不显示正确答案和解析。老师公布后可再进入查看。"}
+            </p>
           </CardContent>
         </Card>
       ) : (
@@ -2212,8 +2247,8 @@ function PaperRunner() {
                           <span className="ml-2 text-xs text-muted-foreground">满分 {f.max_score} 分</span>
                         </div>
                         <FrqContent content={f.content} />
-                        {f.image_url && (
-                          <ExamFigure src={f.image_url} pageUrl={readPageImage(f.image_text)} alt="本题图表" />
+                        {frqFigureSrc(f) && (
+                          <ExamFigure src={frqFigureSrc(f)!} pageUrl={readPageImage(f.image_text)} alt="本题图表" />
                         )}
                         {ans.text && (
                           <details className="text-xs">
@@ -2232,7 +2267,7 @@ function PaperRunner() {
                           </a>
                         )}
                         {grade ? (
-                          <FrqGradeCard grade={grade} />
+                          <FrqGradeCard grade={shownFrqGrade(grade, f.max_score) ?? grade} />
                         ) : isSchoolExam && !schoolAiGrade ? (
                           <p className="text-xs text-muted-foreground">本场没有开启 AI 批改。</p>
                         ) : isSchoolExam ? (

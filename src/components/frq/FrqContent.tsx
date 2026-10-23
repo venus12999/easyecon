@@ -34,6 +34,15 @@ export function shortFrqTitle(title: string | null | undefined, content: string)
 type FrqSub = { label: string; body: string };
 type FrqPart = { label: string; body: string; subs: FrqSub[] };
 
+function stripFigureCaptions(text: string) {
+  return text
+    .replace(/(?:^|[\s])[•·●▪‣]\s*(?:graph|figure|diagram|table)\s+of\b[^•\n]*/gi, " ")
+    .replace(/(?:^|\n)\s*(?:graph|figure|diagram|table)\s+of\b[^\n]*/gi, "\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/ *\n+ */g, "\n")
+    .trim();
+}
+
 function tidyChunk(s: string) {
   return s
     .replace(/\*\*([^*]+)\*\*/g, "$1")
@@ -111,16 +120,17 @@ function parseTable(html: string): Row[] {
 }
 
 export function FrqContent({ content, className }: { content: string; className?: string }) {
+  const visible = stripFigureCaptions(content);
   const parts: { type: "text" | "table"; value: string; rows?: Row[] }[] = [];
   const tableRe = /<table[^>]*>[\s\S]*?<\/table>/gi;
   let last = 0;
   let m: RegExpExecArray | null;
-  while ((m = tableRe.exec(content))) {
-    if (m.index > last) parts.push({ type: "text", value: content.slice(last, m.index) });
+  while ((m = tableRe.exec(visible))) {
+    if (m.index > last) parts.push({ type: "text", value: visible.slice(last, m.index) });
     parts.push({ type: "table", value: m[0], rows: parseTable(m[0]) });
     last = m.index + m[0].length;
   }
-  if (last < content.length) parts.push({ type: "text", value: content.slice(last) });
+  if (last < visible.length) parts.push({ type: "text", value: visible.slice(last) });
 
   return (
     <div className={className}>

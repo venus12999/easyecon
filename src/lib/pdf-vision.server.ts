@@ -1,4 +1,4 @@
-import { printedQuestionNumber, readPrintedScore, studentVisibleQuestion, withUniqueQuestionNumbers } from "@/lib/ap-exam-parse";
+import { looksLikeProvidedFigure, officialFrqMax, printedQuestionNumber, readPrintedScore, recoverOptionE, studentVisibleQuestion, withUniqueQuestionNumbers } from "@/lib/ap-exam-parse";
 
 export type VisionExamItem = {
   kind: "mcq" | "frq";
@@ -69,7 +69,9 @@ function sanitizeItems(raw: unknown, pages: VisionPage[]): VisionExamItem[] {
     const option_a = clip(rec.option_a, 500);
     const option_b = clip(rec.option_b, 500);
     const option_c = clip(rec.option_c, 500);
-    const option_d = clip(rec.option_d, 500);
+    const recovered = recoverOptionE(pageText, stem, clip(rec.option_d, 800), clip(rec.option_e, 500));
+    const option_d = clip(recovered.option_d, 500);
+    const option_e = clip(recovered.option_e, 500);
     if (kind === "mcq" && (!stem || !option_a || !option_b || !option_c || !option_d)) continue;
     if (kind === "frq" && visible.length < 8) continue;
     const answer = clip(rec.correct_answer, 8).toUpperCase();
@@ -88,11 +90,11 @@ function sanitizeItems(raw: unknown, pages: VisionPage[]): VisionExamItem[] {
       option_b,
       option_c,
       option_d,
-      option_e: clip(rec.option_e, 500),
+      option_e,
       correct_answer: kind === "mcq" && /^[A-E]$/.test(answer) ? answer : "",
       content: kind === "frq" ? visible : "",
-      max_score: kind === "frq" ? printed || (fromModel > 0 && fromModel !== 9 ? fromModel : 0) : printed || fromModel || 1,
-      needs_image: /graph|table|figure|图|表/i.test(blob),
+      max_score: kind === "frq" ? officialFrqMax(`${stem}\n${content}`, fromModel > 0 && fromModel !== 9 ? fromModel : 0) : printed || fromModel || 1,
+      needs_image: looksLikeProvidedFigure(blob),
     });
   }
   return withUniqueQuestionNumbers(items);
@@ -109,7 +111,7 @@ export async function visionParseExamPages(pages: VisionPage[]): Promise<{ items
       text: [
         "下面是一份老师上传的试卷，按页给出图片和提取到的文字。",
         "只抽出页面上真正印出的题目，不要编造，不要把说明、封面、答题卡说明当成题。",
-        "选择题 kind=mcq，必须有题干和 A–D。大题、简答、free-response 用 kind=frq。",
+        "选择题 kind=mcq，必须有题干，并且 A、B、C、D、E 都要原样抄下。卷面印了 E 时 option_e 不能空，也不要把 E 的文字并进 option_d。大题、简答、free-response 用 kind=frq。",
         "max_score 用卷面印出的分值。大题如果每个小问写了 (N points)，把各小问分值相加作为这道大题的满分。选择题没写分值就用 1。看不清分值时不要填 9。",
         "question_number 用卷面印的题号。选择题和大题如果连着编成 Q1、Q2、Q3、Q4，大题就要写成 3 和 4，不要把大题从 1 重新编号。",
         "页码用我标出的 page_number。看不清就不要猜那一题。",

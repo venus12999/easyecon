@@ -62,8 +62,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         hadSession = false;
       }
     });
+    const onTeacherConsole = () => {
+      const path = typeof window !== "undefined" ? window.location.pathname : "/";
+      return path === "/teacher" || path.startsWith("/teacher/") || path === "/admin" || path.startsWith("/admin/");
+    };
+    const restoreTeacherSession = () => {
+      clearExamTab();
+      void supabase.auth.getSession().then(({ data }) => {
+        if (!isExamTab()) setSession(data.session);
+      });
+    };
     const { data: examSub } = examSupabase().auth.onAuthStateChange((event, s) => {
       if (!isExamTab()) return;
+      if (onTeacherConsole()) {
+        restoreTeacherSession();
+        setLoading(false);
+        return;
+      }
       setSession(s);
       setLoading(false);
       if (s?.user) return;
@@ -85,7 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         supabase.auth.getSession(),
         examOn ? examSupabase().auth.getSession() : Promise.resolve({ data: { session: null as Session | null } }),
       ]);
-      if (examOn && exam.data.session) {
+      if (examOn && exam.data.session && !onTeacherConsole()) {
         setSession(exam.data.session);
       } else {
         if (examOn) clearExamTab();
