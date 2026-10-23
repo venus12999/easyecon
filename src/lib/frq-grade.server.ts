@@ -226,8 +226,33 @@ function logGrade(fields: {
   prompt_tokens?: number | null;
   completion_tokens?: number | null;
   error?: string;
+  upstream_message?: string;
 }) {
   console.info(JSON.stringify({ event: "frq_grade", host: gradingHost(), provider: gradingProvider(), ...fields }));
+}
+
+/** DeepSeek puts the reason on error.message. Keep that, and never the key. */
+function upstreamErrorMessage(text: string, secret: string) {
+  let message = "";
+  try {
+    const body = JSON.parse(text) as { error?: { message?: string } | string; message?: string };
+    const err = body?.error;
+    if (typeof err === "string") message = err;
+    else if (err && typeof err.message === "string") message = err.message;
+    else if (typeof body?.message === "string") message = body.message;
+  } catch {
+    message = "";
+  }
+  let cleaned = message.replace(/\s+/g, " ").trim();
+  if (secret) cleaned = cleaned.split(secret).join("[redacted]");
+  cleaned = cleaned
+    .replace(/Bearer\s+\S+/gi, "Bearer [redacted]")
+    .replace(/\bsk-[A-Za-z0-9_-]+\b/g, "[redacted]");
+  return cleaned.slice(0, 300);
+}
+
+function keyRejected(message: string) {
+  return /api[_ ]?key|authentication|unauthorized|invalid credential/i.test(message);
 }
 
 function blankGrade(maxScore: number): FrqGradeResult {
@@ -277,26 +302,26 @@ async function completeGrade(input: {
     });
     status = upstream.status;
     const latency = Date.now() - started;
-    if (status === 401 || status === 403) {
-      await upstream.body?.cancel();
-      logGrade({ request_id: input.requestId, model: input.model, latency_ms: latency, ok: false, status, error: "unauthorized" });
-      return { ok: false, error: "ai_unauthorized", status };
-    }
-    if (status === 429 || status >= 500) {
+    if (!upstream.ok) {
       const retryAfterMs = parseRetryAfter(upstream.headers.get("retry-after"));
       const text = await upstream.text().catch(() => "");
-      const snippet = text.slice(0, 180);
-      const quota = /insufficient_user_quota|insufficient_quota/i.test(snippet);
-      const limited = status === 429 || /rate|quota|limit|overload|too many|resource_exhausted/i.test(snippet);
-      const error = quota ? "credits_exhausted" : limited ? "rate_limited" : "upstream";
-      logGrade({ request_id: input.requestId, model: input.model, latency_ms: latency, ok: false, status, error });
+      const upstreamMessage = upstreamErrorMessage(text, apiKey);
+      const quota = /insufficient_user_quota|insufficient_quota/i.test(upstreamMessage);
+      const limited = status === 429 || /rate|quota|limit|overload|too many|resource_exhausted/i.test(upstreamMessage);
+      const authFailed = (status === 401 || status === 403) && (keyRejected(upstreamMessage) || !upstreamMessage);
+      const error = quota ? "credits_exhausted" : authFailed ? "unauthorized" : limited ? "rate_limited" : "upstream";
+      logGrade({
+        request_id: input.requestId,
+        model: input.model,
+        latency_ms: latency,
+        ok: false,
+        status,
+        error,
+        ...(upstreamMessage ? { upstream_message: upstreamMessage } : {}),
+      });
       if (quota) return { ok: false, error: "credits_exhausted", status };
+      if (authFailed) return { ok: false, error: "ai_unauthorized", status };
       return { ok: false, error, status, retryAfterMs };
-    }
-    if (!upstream.ok) {
-      const overloaded = await upstreamLooksLimited(upstream);
-      logGrade({ request_id: input.requestId, model: input.model, latency_ms: latency, ok: false, status, error: overloaded ? "rate_limited" : "upstream" });
-      return { ok: false, error: overloaded ? "rate_limited" : "upstream", status };
     }
     const data = await upstream.json() as { choices?: Array<{ message?: { content?: unknown } }>; usage?: { prompt_tokens?: number; completion_tokens?: number; input_tokens?: number; output_tokens?: number } };
     const usage = data.usage;
@@ -322,19 +347,6 @@ async function completeGrade(input: {
     });
     return { ok: false, error: timedOut ? "timeout" : "network", status };
   }
-}
-
-async function upstreamLooksLimited(upstream: Response) {
-  const text = await upstream.text().catch(() => "");
-  let code = "";
-  try {
-    const body = JSON.parse(text) as { error?: { code?: string; type?: string; message?: string } | string };
-    const err = body?.error;
-    code = typeof err === "string" ? err : `${err?.code ?? ""} ${err?.type ?? ""} ${err?.message ?? ""}`;
-  } catch {
-    code = "";
-  }
-  return /rate|quota|limit|overload|too many|resource_exhausted/i.test(code.slice(0, 180));
 }
 
 function gradeFromParsed(parsed: FrqGradeResult, gradingNote: string, maxScore: number, answerText: string | null) {
