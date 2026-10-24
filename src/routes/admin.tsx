@@ -77,6 +77,7 @@ type Q = {
   term_tags: string[] | null;
   status: "draft" | "published";
   image_url: string | null;
+  exclude_from_pool?: boolean;
 };
 
 function Admin() {
@@ -165,30 +166,31 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<Q | null>(null);
   const [creating, setCreating] = useState(false);
-  const [papers, setPapers] = useState<{ id: string; slug: string; title: string }[]>([]);
+  const [papers, setPapers] = useState<{ id: string; slug: string; title: string; created_at?: string }[]>([]);
+  const [deletingPaperId, setDeletingPaperId] = useState("");
   const [paperMap, setPaperMap] = useState<Record<string, Map<string, number>>>({}); // paperId -> map(questionId, sort_order)
   const [frqs, setFrqs] = useState<FrqRow[]>([]);
   const [tab, setTab] = useState<string>("list");
 
-  useEffect(() => {
-    (async () => {
-      const [{ data: p }, { data: pq }, { data: fq }] = await Promise.all([
-        supabase.from("mock_papers").select("id,slug,title").order("sort_order"),
-        supabase.from("paper_questions").select("paper_id,question_id,sort_order"),
-        supabase
-          .from("paper_frqs")
-          .select("id,paper_id,sort_order,title,content,image_url,image_text,max_score")
-          .order("sort_order", { ascending: true }),
-      ]);
-      setPapers(p ?? []);
-      setFrqs(((fq ?? []) as Omit<FrqRow, "rubric_note">[]).map((frq) => ({ ...frq, rubric_note: null })));
-      const m: Record<string, Map<string, number>> = {};
-      (pq ?? []).forEach((r: { paper_id: string; question_id: string; sort_order: number }) => {
-        (m[r.paper_id] ??= new Map()).set(r.question_id, r.sort_order);
-      });
-      setPaperMap(m);
-    })();
+  const loadPapers = useCallback(async () => {
+    const [{ data: p }, { data: pq }, { data: fq }] = await Promise.all([
+      supabase.from("mock_papers").select("id,slug,title,created_at").order("sort_order"),
+      supabase.from("paper_questions").select("paper_id,question_id,sort_order"),
+      supabase
+        .from("paper_frqs")
+        .select("id,paper_id,sort_order,title,content,image_url,image_text,max_score")
+        .order("sort_order", { ascending: true }),
+    ]);
+    setPapers(p ?? []);
+    setFrqs(((fq ?? []) as Omit<FrqRow, "rubric_note">[]).map((frq) => ({ ...frq, rubric_note: null })));
+    const m: Record<string, Map<string, number>> = {};
+    (pq ?? []).forEach((r: { paper_id: string; question_id: string; sort_order: number }) => {
+      (m[r.paper_id] ??= new Map()).set(r.question_id, r.sort_order);
+    });
+    setPaperMap(m);
   }, []);
+
+  useEffect(() => { void loadPapers(); }, [loadPapers]);
 
   const reload = useCallback(async () => {
     try {
@@ -209,6 +211,43 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
 
   useEffect(() => { reload(); }, [reload]);
 
+  const schoolPaperIds = new Set(papers.filter((p) => p.slug.startsWith("school-")).map((p) => p.id));
+  const libraryPapers = papers.filter((p) => !p.slug.startsWith("school-") && !p.slug.startsWith("frq-"));
+  const pendingPapers = papers.filter((p) => p.slug.startsWith("school-") && !p.slug.startsWith("school-retired"));
+
+  function onlyOnSchoolPaper(questionId: string) {
+    let linked = false;
+    for (const [paperId, linkedQuestions] of Object.entries(paperMap)) {
+      if (!linkedQuestions.has(questionId)) continue;
+      linked = true;
+      if (!schoolPaperIds.has(paperId)) return false;
+    }
+    return linked;
+  }
+
+  async function deletePendingPaper(paper: { id: string; title: string }) {
+    if (!confirm(`删除「${paper.title}」？还没用来考试的题目会一起删掉。已经结束的考试成绩会留下。`)) return;
+    setDeletingPaperId(paper.id);
+    try {
+      const r = await fetch("/api/admin/teacher-uploads", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "delete-paper", paper_id: paper.id }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        toast.error(j.error ?? "删除失败");
+        return;
+      }
+      if (filterUnit === `paper:${paper.id}`) setFilterUnit("all");
+      toast.success(j.kept_scores ? "已从题库删除。已结束考试的成绩还在。" : "已从题库删除");
+      await loadPapers();
+      await reload();
+    } finally {
+      setDeletingPaperId("");
+    }
+  }
+
   const activePaperId = filterUnit.startsWith("paper:") ? filterUnit.slice(6) : null;
   const activePaperMap = activePaperId ? paperMap[activePaperId] : null;
   let filtered = questions.filter((q) => {
@@ -223,6 +262,7 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
     if (filterImage === "image" && !hasImageMarker(q.stem)) return false;
     if (filterImage === "noimage" && hasImageMarker(q.stem)) return false;
     if (search && !q.stem.toLowerCase().includes(search.toLowerCase())) return false;
+    if (!activePaperId && q.exclude_from_pool && onlyOnSchoolPaper(q.id)) return false;
     return true;
   });
   if (activePaperMap) {
@@ -242,6 +282,7 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
     ? frqs.filter((f) => {
         // FRQ 没有 knowledge_point / type / image marker，受 unit/kp/type/image 过滤时只在 "all" 下显示
         if (filterUnit !== "all" && !filterUnit.startsWith("paper:")) return false;
+        if (!filterUnit.startsWith("paper:") && schoolPaperIds.has(f.paper_id)) return false;
         if (filterUnit.startsWith("paper:") && f.paper_id !== filterUnit.slice(6)) return false;
         if (filterKp !== "all") return false;
         if (filterType !== "all") return false;
@@ -291,7 +332,7 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
                 <SelectContent>
                   <SelectItem value="all">全部单元</SelectItem>
                   {units.map((u) => <SelectItem key={u} value={String(u)}>Unit {u}</SelectItem>)}
-                  {papers.map((p) => (
+                  {libraryPapers.map((p) => (
                     <SelectItem key={p.id} value={`paper:${p.id}`}>真题·{p.title}</SelectItem>
                   ))}
                 </SelectContent>
@@ -329,6 +370,30 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
                 )}
               </span>
             </div>
+
+            {pendingPapers.length > 0 && (
+              <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
+                <p className="text-sm text-amber-950">这些卷还没审核，不会进题库。学生在模考和刷题里都看不到。可以在这里删除。</p>
+                {pendingPapers.map((paper) => (
+                  <div key={paper.id} className="flex items-center justify-between gap-3 rounded-md bg-white px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="text-sm truncate">{paper.title}</p>
+                      {paper.created_at && (
+                        <p className="text-[11px] text-muted-foreground">{new Date(paper.created_at).toLocaleString()}</p>
+                      )}
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      disabled={!!deletingPaperId}
+                      onClick={() => void deletePendingPaper(paper)}
+                    >
+                      {deletingPaperId === paper.id ? "删除中…" : "删除"}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div className="space-y-2">
               {mcqList.map((q) => (
@@ -1294,7 +1359,7 @@ function FrqPanel({ token }: { token: string }) {
       setLoading(false);
       return;
     }
-    setPapers(j.papers);
+    setPapers((j.papers as FrqPaper[]).filter((paper) => !paper.slug.startsWith("school-")));
     setFrqs(j.frqs);
     setPrompt(j.grader_prompt);
     setDefaultPrompt(j.default_prompt);

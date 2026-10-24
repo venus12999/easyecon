@@ -116,7 +116,7 @@ export function shapeOfficialFrq(text: string) {
     .replace(/(^|[.?!。\n])\s*(\([a-e]\))\s+/gi, "$1\n\n$2 ")
     .replace(/([.?!。])\s+((?:iv|iii|ii|i)\.)\s+/g, "$1\n$2 ")
     .split("\n")
-    .filter((line) => !/^\s*(scoring guideline|参考答案|评分标准)/i.test(line))
+    .filter((line) => !isScoringGuidelineLine(line))
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
@@ -182,6 +182,73 @@ export function sumGuidelinePoints(text: string) {
     if (sum >= 1 && sum <= 20) return sum;
   }
   return 0;
+}
+
+/** A line that belongs on the scoring-guideline page, not in the question students read. */
+export function isScoringGuidelineLine(line: string) {
+  const text = line.trim();
+  if (!text) return false;
+  if (/^(?:scoring guidelines?|参考答案|评分标准)\b/i.test(text)) return true;
+  if (/\bpoints?\s+(?:is|are)\s+earned\b/i.test(text)) return true;
+  if (/^[（(]\s*[a-e]\s*[)）]\s*\d{1,2}\s*(?:points?|分)\s*$/i.test(text)) return true;
+  return false;
+}
+
+/** Empty, or only “(a) 3 points” headers, so the point-by-point rules still need to be copied in. */
+export function rubricNeedsDetail(text: string | null | undefined) {
+  const lines = (text ?? "").split("\n").map((line) => line.trim()).filter(Boolean);
+  if (lines.length === 0) return true;
+  return lines.every((line) => isScoringGuidelineLine(line) && !/\bpoints?\s+(?:is|are)\s+earned\b/i.test(line));
+}
+
+export type GuidelinePart = { part?: string; points?: number; criteria?: unknown };
+
+/** Turn extracted part headers and “One point is earned” lines into the teacher-only rubric. */
+export function formatGuidelineRubric(parts: GuidelinePart[]) {
+  const byPart = new Map<string, { points: number; criteria: string[] }>();
+  for (const row of parts) {
+    const part = String(row.part ?? "").trim().toLowerCase().replace(/[()（）.\s]/g, "");
+    if (!/^[a-e]$/.test(part)) continue;
+    const criteria = criterionLines(row.criteria);
+    let points = Number(row.points);
+    if (!(points >= 1 && points <= 15)) points = sumGuidelinePoints(criteria.join("\n"));
+    const prev = byPart.get(part);
+    if (!prev) {
+      byPart.set(part, { points: points >= 1 ? points : 0, criteria });
+      continue;
+    }
+    if (criteria.length > prev.criteria.length) prev.criteria = criteria;
+    if (prev.points < 1 && points >= 1) prev.points = points;
+  }
+  const blocks: string[] = [];
+  let sum = 0;
+  for (const part of ["a", "b", "c", "d", "e"]) {
+    const row = byPart.get(part);
+    if (!row || (row.points < 1 && row.criteria.length === 0)) continue;
+    if (row.points >= 1) sum += row.points;
+    const header = row.points >= 1 ? `(${part}) ${row.points} ${row.points === 1 ? "point" : "points"}` : `(${part})`;
+    blocks.push([header, ...row.criteria].join("\n"));
+  }
+  const rubric = blocks.join("\n").slice(0, 2400).trim();
+  const max = sum >= 1 && sum <= 20 ? sum : sumGuidelinePoints(rubric);
+  return { rubric, max_score: max >= 1 && max <= 20 ? max : 0 };
+}
+
+function criterionLines(raw: unknown) {
+  const list = Array.isArray(raw) ? raw : [raw];
+  const seen = new Set<string>();
+  const lines: string[] = [];
+  for (const item of list) {
+    for (const piece of String(item ?? "").split(/\n+/)) {
+      const text = piece.replace(/^[\s•·●▪‣*\-]+/, "").trim();
+      if (text.length < 8 || seen.has(text.toLowerCase())) continue;
+      if (/©|college board|^-\d+-$/i.test(text)) continue;
+      if (/^[（(]\s*[a-e]\s*[)）]\s*\d{1,2}\s*(?:points?|分)\s*$/i.test(text)) continue;
+      seen.add(text.toLowerCase());
+      lines.push(text);
+    }
+  }
+  return lines;
 }
 
 /** Use the points printed on the question. A stored 9 is the column default, not a printed score. */
@@ -314,6 +381,7 @@ export function studentVisibleQuestion(text: string, pageText = "") {
     .map((s) => s.trim())
     .filter(Boolean)
     .filter((s) => !caption.test(s))
+    .filter((s) => !isScoringGuidelineLine(s))
     .filter((s) => !FIGURE_GIVEAWAY.test(s) || printedSentence(s, page));
   return repairPrintedSpacing(kept.join("\n").replace(/[ \t]+\n/g, "\n").trim());
 }

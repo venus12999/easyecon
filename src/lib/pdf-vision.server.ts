@@ -1,4 +1,4 @@
-import { acceptFrqRewrite, looksLikeProvidedFigure, officialFrqMax, printedQuestionNumber, readableFrqLabel, readPrintedScore, recoverOptionE, shapeOfficialFrq, studentVisibleQuestion, sumGuidelinePoints, withUniqueQuestionNumbers } from "@/lib/ap-exam-parse";
+import { acceptFrqRewrite, formatGuidelineRubric, looksLikeProvidedFigure, officialFrqMax, printedQuestionNumber, readableFrqLabel, readPrintedScore, recoverOptionE, shapeOfficialFrq, studentVisibleQuestion, sumGuidelinePoints, withUniqueQuestionNumbers, type GuidelinePart } from "@/lib/ap-exam-parse";
 
 export type VisionExamItem = {
   kind: "mcq" | "frq";
@@ -294,24 +294,7 @@ export async function rewriteFrqFromPage(input: {
   return acceptFrqRewrite(input.content, kept);
 }
 
-function tidyGuideline(text: string) {
-  const lines = text.replace(/\r/g, "").split("\n").map((line) => line.trim()).filter((line) => {
-    if (!line) return false;
-    if (/©|college board|visit the college board|^-\d+-$/i.test(line)) return false;
-    return true;
-  });
-  const seen = new Set<string>();
-  const kept: string[] = [];
-  for (const line of lines) {
-    const key = line.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    kept.push(line);
-  }
-  return kept.join("\n").slice(0, 2400).trim();
-}
-
-/** Read Scoring Guidelines pages and sum each question's part totals. */
+/** Read Scoring Guidelines pages: part totals plus each “One point is earned” line. */
 export async function readGuidelineScores(pages: { page_number: number; imageUrl: string }[]): Promise<Array<{ question_number: number; max_score: number; rubric: string }>> {
   const apiKey = process.env.LOVABLE_API_KEY;
   const usable = pages.filter((page) => page.imageUrl.startsWith("https://")).sort((a, b) => a.page_number - b.page_number);
@@ -322,11 +305,12 @@ export async function readGuidelineScores(pages: { page_number: number; imageUrl
     const content: Array<Record<string, unknown>> = [{
       type: "text",
       text: [
-        "这些是同一份 AP 微观试卷的页图，可能包含 Scoring Guidelines。",
-        "只抽出印出的评分标准。每道题按题号分开。",
-        "小问标题是「(a) 3 points」「(b) 1 point」这种。rubric 里要保留这些标题，再把下面的 One point is earned 各写一行。",
-        "不要把评分标准写成新的题目，不要翻译，不要把 One point is earned 的条数当成额外的分。",
-        "某一页如果是上一题的续页，仍然归到那一题。没有评分标准的页不要输出。",
+        "这些是同一份 AP 微观试卷的页图。只抽 Scoring Guidelines，不要抽题目正文。",
+        "题号用页上的 Question 1、Question 2。某一页如果从半道小问开始，仍归到上一题，不要新开一题。",
+        "每个小问一块。part 是 a 到 e。points 只用标题上的数字，例如「(a) 3 points」的 3。不要把下面 One point is earned 的条数再加进 points。",
+        "criteria 逐条抄印出来的得分说明，一行一条，保持英文原文。不要翻译，不要概括，不要写题目。",
+        "例如 criteria 里要有：One point is earned for correctly labeling the axes.",
+        "标题「(a) 3 points」不要写进 criteria。没有评分标准的页不要输出。",
       ].join("\n"),
     }];
     for (const page of batch) {
@@ -340,14 +324,14 @@ export async function readGuidelineScores(pages: { page_number: number; imageUrl
         model: "google/gemini-2.5-flash",
         temperature: 0,
         messages: [
-          { role: "system", content: "你从评分标准页里摘出每道大题的得分点。只输出工具要求的 JSON。" },
+          { role: "system", content: "你从评分标准页里按小问抄出每一个得分点。只输出工具要求的 JSON。" },
           { role: "user", content },
         ],
         tools: [{
           type: "function",
           function: {
             name: "report_guideline_scores",
-            description: "按题号返回评分标准原文",
+            description: "按题号和小问返回评分标准原文",
             parameters: {
               type: "object",
               properties: {
@@ -357,9 +341,21 @@ export async function readGuidelineScores(pages: { page_number: number; imageUrl
                     type: "object",
                     properties: {
                       question_number: { type: "number" },
-                      rubric: { type: "string" },
+                      parts: {
+                        type: "array",
+                        items: {
+                          type: "object",
+                          properties: {
+                            part: { type: "string" },
+                            points: { type: "number" },
+                            criteria: { type: "array", items: { type: "string" } },
+                          },
+                          required: ["part", "points", "criteria"],
+                          additionalProperties: false,
+                        },
+                      },
                     },
-                    required: ["question_number", "rubric"],
+                    required: ["question_number", "parts"],
                     additionalProperties: false,
                   },
                 },
@@ -372,33 +368,33 @@ export async function readGuidelineScores(pages: { page_number: number; imageUrl
         tool_choice: { type: "function", function: { name: "report_guideline_scores" } },
       }),
     });
-    if (!r.ok) return [] as Array<{ question_number: number; rubric: string }>;
+    if (!r.ok) return [] as Array<{ question_number: number; parts: GuidelinePart[] }>;
     const body = await r.json().catch(() => null);
     const argStr = body?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
     try {
       const parsed = argStr ? JSON.parse(argStr) : {};
       const rows = Array.isArray(parsed.scores) ? parsed.scores : [];
-      return rows.flatMap((row: { question_number?: number; rubric?: string }) => {
+      return rows.flatMap((row: { question_number?: number; parts?: GuidelinePart[] }) => {
         const question = Number(row.question_number);
-        const rubric = String(row.rubric ?? "").trim();
-        if (!Number.isInteger(question) || question < 1 || question > 20 || rubric.length < 8) return [];
-        return [{ question_number: question, rubric }];
+        const parts = Array.isArray(row.parts) ? row.parts : [];
+        if (!Number.isInteger(question) || question < 1 || question > 20 || parts.length === 0) return [];
+        return [{ question_number: question, parts }];
       });
     } catch {
       return [];
     }
   }));
-  const byQuestion = new Map<number, string[]>();
+  const byQuestion = new Map<number, GuidelinePart[]>();
   for (const row of found.flat()) {
     const list = byQuestion.get(row.question_number) ?? [];
-    list.push(row.rubric);
+    list.push(...row.parts);
     byQuestion.set(row.question_number, list);
   }
   const scores: Array<{ question_number: number; max_score: number; rubric: string }> = [];
   for (const [question, parts] of byQuestion) {
-    const rubric = tidyGuideline(parts.join("\n"));
-    const max = sumGuidelinePoints(rubric);
-    if (max >= 1) scores.push({ question_number: question, max_score: max, rubric });
+    const formatted = formatGuidelineRubric(parts);
+    if (!formatted.rubric) continue;
+    scores.push({ question_number: question, max_score: formatted.max_score, rubric: formatted.rubric });
   }
   return scores;
 }

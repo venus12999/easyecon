@@ -22,17 +22,37 @@ async function adminDb(request: Request): Promise<SupabaseClient> {
 }
 
 async function dropPaperItems(db: SupabaseClient, paperId: string) {
-  const { data: oldQs } = await db.from("paper_questions").select("question_id").eq("paper_id", paperId);
-  await db.from("paper_frqs").delete().eq("paper_id", paperId);
-  await db.from("paper_questions").delete().eq("paper_id", paperId);
-  const ids = (oldQs ?? []).map((q) => q.question_id);
-  if (ids.length === 0) return;
-  await db.from("questions").update({ exclude_from_pool: true }).in("id", ids);
-  await db.from("questions").delete().in("id", ids);
+  const { data: frqRows, error: frqListErr } = await db.from("paper_frqs").select("id").eq("paper_id", paperId);
+  if (frqListErr) return frqListErr.message;
+  const frqIds = (frqRows ?? []).map((row) => row.id);
+  if (frqIds.length > 0) {
+    const rubricErr = await db.from("paper_frq_rubrics").delete().in("frq_id", frqIds);
+    if (rubricErr.error) return rubricErr.error.message;
+    const draftErr = await db.from("frq_drafts").delete().eq("paper_id", paperId);
+    if (draftErr.error) return draftErr.error.message;
+    const subErr = await db.from("frq_submissions").delete().in("frq_id", frqIds);
+    if (subErr.error) return subErr.error.message;
+    const frqErr = await db.from("paper_frqs").delete().eq("paper_id", paperId);
+    if (frqErr.error) return frqErr.error.message;
+  }
+  const { data: oldQs, error: linkErr } = await db.from("paper_questions").select("question_id").eq("paper_id", paperId);
+  if (linkErr) return linkErr.message;
+  const unlink = await db.from("paper_questions").delete().eq("paper_id", paperId);
+  if (unlink.error) return unlink.error.message;
+  const ids = (oldQs ?? []).map((row) => row.question_id);
+  if (ids.length === 0) return null;
+  const { data: still, error: stillErr } = await db.from("paper_questions").select("question_id").in("question_id", ids);
+  if (stillErr) return stillErr.message;
+  const shared = new Set((still ?? []).map((row) => row.question_id));
+  const owned = ids.filter((id) => !shared.has(id));
+  if (owned.length === 0) return null;
+  const { error } = await db.from("questions").delete().in("id", owned);
+  return error?.message ?? null;
 }
 
 async function retirePaper(db: SupabaseClient, paperId: string) {
-  await dropPaperItems(db, paperId);
+  const dropped = await dropPaperItems(db, paperId);
+  if (dropped) return { message: dropped };
   const retired = `school-retired-${crypto.randomUUID().slice(0, 8)}`;
   const { error } = await db
     .from("mock_papers")
@@ -109,8 +129,18 @@ async function shelveEndedPaper(db: SupabaseClient, paperId: string) {
   if (linkErr) return linkErr.message;
   const ids = (links ?? []).map((row) => row.question_id);
   if (ids.length > 0) {
-    const { error } = await db.from("questions").update({ exclude_from_pool: true }).in("id", ids);
-    if (error) return error.message;
+    const { data: others, error: otherErr } = await db
+      .from("paper_questions")
+      .select("question_id")
+      .in("question_id", ids)
+      .neq("paper_id", paperId);
+    if (otherErr) return otherErr.message;
+    const shared = new Set((others ?? []).map((row) => row.question_id));
+    const owned = ids.filter((id) => !shared.has(id));
+    if (owned.length > 0) {
+      const { error } = await db.from("questions").update({ exclude_from_pool: true }).in("id", owned);
+      if (error) return error.message;
+    }
   }
   const { error: frqErr } = await db.from("paper_frqs").update({ exclude_from_pool: true }).eq("paper_id", paperId);
   if (frqErr) return frqErr.message;
@@ -123,12 +153,46 @@ async function shelveEndedPaper(db: SupabaseClient, paperId: string) {
   return error?.message ?? null;
 }
 
-async function destroyUnusedPaper(db: SupabaseClient, paperId: string, importId: string) {
-  await dropPaperItems(db, paperId);
+async function deleteImportsForPaper(db: SupabaseClient, paperId: string) {
+  const { data: imports, error } = await db.from("school_pdf_imports").select("id").eq("paper_id", paperId);
+  if (error) return error.message;
+  const ids = (imports ?? []).map((row) => row.id);
+  if (ids.length === 0) return null;
+  const items = await db.from("school_pdf_items").delete().in("import_id", ids);
+  if (items.error) return items.error.message;
+  const pages = await db.from("school_pdf_pages").delete().in("import_id", ids);
+  if (pages.error) return pages.error.message;
+  const removed = await db.from("school_pdf_imports").delete().in("id", ids);
+  return removed.error?.message ?? null;
+}
+
+async function destroyUnusedPaper(db: SupabaseClient, paperId: string) {
+  const dropped = await dropPaperItems(db, paperId);
+  if (dropped) return dropped;
+  const imports = await deleteImportsForPaper(db, paperId);
+  if (imports) return imports;
   const { error: paperErr } = await db.from("mock_papers").delete().eq("id", paperId);
-  if (paperErr) return paperErr.message;
-  const { error: importErr } = await db.from("school_pdf_imports").delete().eq("id", importId);
-  return importErr?.message ?? null;
+  return paperErr?.message ?? null;
+}
+
+/** School exam papers stay out of the question bank until an admin promotes them. */
+async function removeUnapprovedPaper(db: SupabaseClient, paperId: string) {
+  const { data: paper } = await db.from("mock_papers").select("id,slug").eq("id", paperId).maybeSingle();
+  if (!paper) return { error: "试卷不存在", status: 404 as const };
+  if (!paper.slug.startsWith("school-") || paper.slug.startsWith("school-retired")) {
+    return { error: "已经列入题库的卷不能从这里删除", status: 400 as const };
+  }
+  const exams = await paperExams(db, paper.id);
+  if (exams.error) return { error: exams.error, status: 500 as const };
+  if (exams.open.length) return { error: openExamMessage(exams.open, "删除"), status: 400 as const };
+  if (exams.count > 0) {
+    const shelved = await shelveEndedPaper(db, paper.id);
+    if (shelved) return { error: shelved, status: 500 as const };
+    return { kept_scores: true as const };
+  }
+  const removed = await destroyUnusedPaper(db, paper.id);
+  if (removed) return { error: removed, status: 500 as const };
+  return { kept_scores: false as const };
 }
 
 export const Route = createFileRoute("/api/admin/teacher-uploads")({
@@ -203,12 +267,19 @@ export const Route = createFileRoute("/api/admin/teacher-uploads")({
         if (!(await verifyAdminRequest(request))) return unauth();
         const db = await adminDb(request);
         const body = (await request.json()) as {
-          action?: "promote" | "keep-school" | "into-practice" | "delete-bank";
+          action?: "promote" | "keep-school" | "into-practice" | "delete-bank" | "delete-paper";
           import_id?: string;
+          paper_id?: string;
           title?: string;
           slug?: string;
           into_practice?: boolean;
         };
+        if (body.action === "delete-paper") {
+          if (!body.paper_id || !isUuid(body.paper_id)) return jsonErr("missing paper_id");
+          const result = await removeUnapprovedPaper(db, body.paper_id);
+          if ("error" in result) return jsonErr(result.error ?? "删除失败", result.status);
+          return Response.json({ ok: true, kept_scores: result.kept_scores });
+        }
         if (!body.import_id || !isUuid(body.import_id)) return jsonErr("missing import_id");
         const { data: imp } = await db.from("school_pdf_imports").select("*").eq("id", body.import_id).maybeSingle();
         if (!imp?.paper_id) return jsonErr("还没有发布成试卷");
@@ -230,18 +301,9 @@ export const Route = createFileRoute("/api/admin/teacher-uploads")({
             if (included) return jsonErr(included, 500);
             return Response.json({ ok: true });
           }
-          if (!paper.slug.startsWith("school-") || paper.slug.startsWith("school-retired")) {
-            return jsonErr("已列入模拟考试真题库的卷不能从这里删除");
-          }
-          if (exams.open.length) return jsonErr(openExamMessage(exams.open, "删除"));
-          if (exams.count > 0) {
-            const shelved = await shelveEndedPaper(db, paper.id);
-            if (shelved) return jsonErr(shelved, 500);
-            return Response.json({ ok: true, kept_scores: true });
-          }
-          const removed = await destroyUnusedPaper(db, paper.id, imp.id);
-          if (removed) return jsonErr(removed, 500);
-          return Response.json({ ok: true });
+          const result = await removeUnapprovedPaper(db, paper.id);
+          if ("error" in result) return jsonErr(result.error ?? "删除失败", result.status);
+          return Response.json({ ok: true, kept_scores: result.kept_scores });
         }
 
         if (body.action !== "promote") return jsonErr("unknown action");

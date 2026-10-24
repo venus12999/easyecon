@@ -311,8 +311,14 @@ function PdfQuestionCard({
                     ) : (
                       <div className="grid gap-2">
                         <Textarea placeholder="大题文字（学生看得到）" value={it.content} onChange={(e) => onChange(idx, { content: e.target.value })} />
-                        <Textarea placeholder="参考答案（学生看不到，AI 批改会用）" value={it.correct_answer} onChange={(e) => onChange(idx, { correct_answer: e.target.value })} />
-                        <Textarea placeholder="评分标准，一行一个得分点（学生看不到）" value={it.rubric_note ?? ""} onChange={(e) => onChange(idx, { rubric_note: e.target.value })} />
+                        <div className="grid gap-1">
+                          <span className="text-xs text-muted-foreground">参考答案（学生看不到，AI 批改会用）</span>
+                          <Textarea placeholder="可留空" value={it.correct_answer} onChange={(e) => onChange(idx, { correct_answer: e.target.value })} />
+                        </div>
+                        <div className="grid gap-1">
+                          <span className="text-xs text-muted-foreground">评分标准（学生看不到，AI 按这些得分点批改）</span>
+                          <Textarea rows={6} placeholder="AI 会从评分标准页抄入，一行一个得分点" value={it.rubric_note ?? ""} onChange={(e) => onChange(idx, { rubric_note: e.target.value })} />
+                        </div>
                         <Input type="number" min={1} max={20} placeholder="满分，卷面没认出时请填写" aria-label="大题满分" value={it.max_score > 0 ? it.max_score : ""} onChange={(e) => onChange(idx, { max_score: Math.min(20, Math.max(0, Number(e.target.value) || 0)) })} />
                       </div>
                     )}

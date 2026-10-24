@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { jsonErr } from "@/lib/json-api";
-import { frqExtractGap, readableFrqLabel, shapeOfficialFrq, studentVisibleQuestion, withUniqueQuestionNumbers } from "@/lib/ap-exam-parse";
+import { frqExtractGap, readableFrqLabel, rubricNeedsDetail, shapeOfficialFrq, studentVisibleQuestion, withUniqueQuestionNumbers } from "@/lib/ap-exam-parse";
 import { withPageImage, withPointMarker } from "@/lib/exam-flags";
 import { packTeacherFrq, splitTeacherFrq, teacherGradingNote, withTeacherRubric } from "@/lib/frq-teacher-fields";
 import { fileToVisionPage, readGuidelineScores, rewriteFrqFromPage, visionParseExamPages } from "@/lib/pdf-vision.server";
@@ -197,19 +197,23 @@ async function applyGuidelineScores(
 ) {
   const scores: Array<{ key: string; max_score: number; rubric_note: string }> = [];
   const next = items.map((item) => ({ ...item }));
-  const missing = next.some((item) => item.kind === "frq" && !(Number(item.max_score) >= 1));
+  const needsWork = next.some((item) => item.kind === "frq" && (!(Number(item.max_score) >= 1) || rubricNeedsDetail(item.rubric_note)));
   const urls = pages.filter((page) => (page.image_url ?? "").startsWith("https://"));
-  if (!missing || urls.length === 0) return { items: next, scores };
+  if (!needsWork || urls.length === 0) return { items: next, scores };
   const found = await readGuidelineScores(urls.map((page) => ({
     page_number: page.page_number,
     imageUrl: page.image_url ?? "",
   })));
   for (const row of found) {
     const item = next.find((candidate) => candidate.kind === "frq" && candidate.sort_order === row.question_number);
-    if (!item || Number(item.max_score) >= 1) continue;
-    item.max_score = row.max_score;
-    if (!(item.rubric_note ?? "").trim()) item.rubric_note = row.rubric;
-    scores.push({ key: `frq-${item.sort_order}`, max_score: row.max_score, rubric_note: item.rubric_note ?? "" });
+    if (!item) continue;
+    const scoreMissing = !(Number(item.max_score) >= 1);
+    const rubricMissing = rubricNeedsDetail(item.rubric_note);
+    if (scoreMissing && row.max_score >= 1) item.max_score = row.max_score;
+    if (rubricMissing && row.rubric.trim()) item.rubric_note = row.rubric;
+    if ((scoreMissing && row.max_score >= 1) || (rubricMissing && row.rubric.trim())) {
+      scores.push({ key: `frq-${item.sort_order}`, max_score: Number(item.max_score) || 0, rubric_note: item.rubric_note ?? "" });
+    }
   }
   return { items: next, scores };
 }

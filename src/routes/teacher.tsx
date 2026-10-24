@@ -48,7 +48,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/hooks/use-auth";
 import { authFetch } from "@/lib/auth-fetch";
-import { applyKnownApAnswerKey, fillOptionEFrom, looksLikeProvidedFigure, parseApExamPages, readableFrqLabel, readPrintedScore, studentVisibleQuestion, sumGuidelinePoints, withUniqueQuestionNumbers, type ParsedExamItem } from "@/lib/ap-exam-parse";
+import { applyKnownApAnswerKey, fillOptionEFrom, looksLikeProvidedFigure, parseApExamPages, readableFrqLabel, readPrintedScore, rubricNeedsDetail, studentVisibleQuestion, sumGuidelinePoints, withUniqueQuestionNumbers, type ParsedExamItem } from "@/lib/ap-exam-parse";
 import { CUSTOM_SCORE_MAX_DEFAULT, apBasisText, apDistributionText, apMicroScore, apScoreText, formatScaledScore, pointsOnScale, scoreMaxError, summarizeApScores, type ApClassSummary, type ApScore } from "@/lib/ap-score";
 import { ap2025Clock } from "@/lib/ap-2025-paper";
 import { BREAK_MINUTES_DEFAULT, FRQ_MINUTES_DEFAULT, MCQ_MINUTES_DEFAULT, sectionMinutesError, sectionTimingLabel, sectionTotalMinutes } from "@/lib/exam-sections";
@@ -1569,10 +1569,8 @@ function TeacherHome() {
             next.content = fix.content;
             next.stem = fix.stem || readableFrqLabel(it.stem, fix.content, it.sort_order);
           }
-          if (score && !(it.max_score >= 1)) {
-            next.max_score = score.max_score;
-            if (!(it.rubric_note ?? "").trim() && score.rubric_note) next.rubric_note = score.rubric_note;
-          }
+          if (score && !(it.max_score >= 1) && score.max_score >= 1) next.max_score = score.max_score;
+          if (score?.rubric_note && rubricNeedsDetail(it.rubric_note)) next.rubric_note = score.rubric_note;
           return next;
         });
         setItems(reviewedItems);
@@ -1609,7 +1607,12 @@ function TeacherHome() {
       setPdfAiDone(true);
       const unfinished = repairs.filter((fix) => fix.complete === false).length;
       if (scores.length) {
-        toast.success(`AI 已按评分标准填上满分：${scores.map((score) => `${score.key.replace("frq-", "Q")} ${score.max_score} 分`).join("、")}。`);
+        const totals = scores.filter((score) => score.max_score >= 1).map((score) => `${score.key.replace("frq-", "Q")} ${score.max_score} 分`);
+        const wroteRubric = scores.some((score) => (score.rubric_note ?? "").trim());
+        const totalText = totals.length ? `满分：${totals.join("、")}。` : "";
+        toast.success(wroteRubric
+          ? `AI 已把每个小问的得分点写进评分标准，学生看不到。${totalText}`
+          : `AI 已按评分标准填上满分：${totals.join("、")}。`);
       }
       if (repairs.length && unfinished === 0 && findings.length === 0) {
         toast.success(repairs.length === 1 ? "AI 已按页图补全这道大题，可以直接提交。" : `AI 已按页图补全 ${repairs.length} 道大题，可以直接提交。`);
