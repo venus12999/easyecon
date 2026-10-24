@@ -26,14 +26,23 @@ const FIGURES: Array<[RegExp, string]> = [
 
 type QuestionLike = {
   stem: string;
+  sort_order?: number;
   option_e?: string | null;
   image_url?: string | null;
   page_image_url?: string | null;
 };
 
+function figureFor(question: QuestionLike) {
+  const byStem = FIGURES.find(([pattern]) => pattern.test(question.stem))?.[1];
+  if (byStem) return byStem;
+  // Question 3's stored file is still the whole exam page when the stem no longer matches.
+  if (question.sort_order === 3 && /\/page-\d+\.(png|jpe?g|webp)(?:$|\?)/i.test(question.image_url ?? "")) return `${FIG}/mcq-03.png`;
+  return undefined;
+}
+
 export function fixAp2025Questions<T extends QuestionLike>(questions: T[]): T[] {
   return questions.map((question) => {
-    const figure = FIGURES.find(([pattern]) => pattern.test(question.stem))?.[1];
+    const figure = figureFor(question);
     const priceDiscrimination = /perfect price discrimination/i.test(question.stem);
     if (!figure && !priceDiscrimination) return question;
     return {
@@ -66,16 +75,6 @@ iii. The area representing Tronic's economic profit, shaded completely.
 (e) Consumers can choose whether to use power cords or smart cables. A 10 percent decrease in the price of smart cables caused the quantity demanded of smart cables to increase by 12 percent and the quantity demanded of power cords to decrease by 8 percent. Calculate the cross-price elasticity of demand for power cords with respect to the price of smart cables. Show your work.`;
 
 const FRQ_2 = `The table shows the marginal utility Yuni receives from tennis rackets and shirts.
-
-<table>
-<tr><th>Quantity of Tennis Rackets</th><th>Marginal Utility of Tennis Rackets (utils)</th><th>Quantity of Shirts</th><th>Marginal Utility of Shirts (utils)</th></tr>
-<tr><td>1</td><td>600</td><td>1</td><td>400</td></tr>
-<tr><td>2</td><td>400</td><td>2</td><td>300</td></tr>
-<tr><td>3</td><td>200</td><td>3</td><td>200</td></tr>
-<tr><td>4</td><td>100</td><td>4</td><td>100</td></tr>
-<tr><td>5</td><td>50</td><td>5</td><td>50</td></tr>
-<tr><td>6</td><td>0</td><td>6</td><td>25</td></tr>
-</table>
 
 Yuni is a utility-maximizing consumer.
 
@@ -112,7 +111,7 @@ export function fixAp2025Frqs<T extends FrqLike>(frqs: T[]): T[] {
   return frqs.map((frq) => {
     const text = `${frq.title ?? ""}\n${frq.content}`;
     if (/Tronic|电源线/.test(text)) return { ...frq, title: "FRQ 1", content: FRQ_1, image_url: null };
-    if (/Yuni|网球拍/.test(text)) return { ...frq, title: "FRQ 2", content: FRQ_2, image_url: null };
+    if (/Yuni|网球拍/.test(text)) return { ...frq, title: "FRQ 2", content: FRQ_2, image_url: `${FIG}/frq-02.png` };
     if (/Haye|保湿/.test(text)) return { ...frq, title: "FRQ 3", content: FRQ_3, image_url: `${FIG}/frq-03.png` };
     return frq;
   });

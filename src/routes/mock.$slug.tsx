@@ -109,6 +109,7 @@ type Q = {
   points?: number;
   page_image_url?: string | null;
   image_url: string | null;
+  sort_order?: number;
   term_tags: string[] | null;
   knowledge_points: { name_zh: string; unit: number } | null;
 };
@@ -266,10 +267,11 @@ function PaperRunner() {
           .eq("paper_id", p.id)
           .order("sort_order", { ascending: true }),
       ]);
-      const qs = ((pqs ?? []) as unknown as Array<{ questions: Q }>).map((row) => {
+      const qs = ((pqs ?? []) as unknown as Array<{ sort_order: number; questions: Q }>).map((row) => {
         const choices = splitTrailingChoiceE(row.questions.option_d ?? "", row.questions.option_e ?? "");
         return {
           ...row.questions,
+          sort_order: row.sort_order,
           stem: repairPrintedSpacing(row.questions.stem),
           option_a: repairPrintedSpacing(row.questions.option_a),
           option_b: repairPrintedSpacing(row.questions.option_b),

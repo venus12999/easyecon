@@ -1411,7 +1411,7 @@ export async function loadSchoolPaperQuestions(paperId: string, published: boole
     term_tags: string[] | null;
     knowledge_points: { name_zh: string; unit: number } | null;
   };
-  const questions = ((pqs ?? []) as unknown as Array<{ questions: QRow }>).map((row) => {
+  const questions = ((pqs ?? []) as unknown as Array<{ sort_order: number; questions: QRow }>).map((row) => {
     const q = row.questions;
     const choices = splitTrailingChoiceE(q.option_d ?? "", q.option_e ?? "");
     q.option_d = choices.option_d;
@@ -1419,13 +1419,14 @@ export async function loadSchoolPaperQuestions(paperId: string, published: boole
     const points = readPointMarker(q.explanation);
     const page_image_url = readPageImage(q.explanation);
     const explanation = stripPageImage(stripPointMarker(q.explanation));
-    if (published) return { ...q, explanation, points, page_image_url };
+    if (published) return { ...q, explanation, points, page_image_url, sort_order: row.sort_order };
     return {
       ...q,
       correct_answer: "",
       explanation: "",
       points,
       page_image_url,
+      sort_order: row.sort_order,
     };
   });
   const cleanedQuestions = (slug === "ap-micro-2025" ? fixAp2025Questions(questions) : questions).map((question) => ({

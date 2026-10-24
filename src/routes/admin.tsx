@@ -15,7 +15,9 @@ import { ManualPaymentsPanel } from "@/components/admin/ManualPaymentsPanel";
 import { TeacherUploadsPanel } from "@/components/admin/TeacherUploadsPanel";
 import { ExamScoresPanel } from "@/components/admin/ExamScoresPanel";
 import { isFullPageScan, shapeOfficialFrq } from "@/lib/ap-exam-parse";
+import { fixAp2025Frqs, fixAp2025Questions } from "@/lib/ap-2025-paper";
 import { cropFigureFromExamPage } from "@/lib/exam-page-crop";
+import { mediaSrc } from "@/lib/media-src";
 
 // 判断题干是否提示包含图表（导入时在题干里以「[此题含图…]」「见原 PDF」「见图」等方式标注）
 function StoredFigure({ src }: { src: string }) {
@@ -418,13 +420,19 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
                         )}
                       </div>
                       <p className="text-sm line-clamp-2">{q.stem}</p>
-                      {q.image_url && (
-                        <img
-                          src={q.image_url}
-                          alt="题目配图"
-                          className="mt-2 max-h-24 rounded border border-border object-contain"
-                        />
-                      )}
+                      {(() => {
+                        const paper2025 = papers.find((p) => p.slug === "ap-micro-2025");
+                        const sort = paper2025 ? paperMap[paper2025.id]?.get(q.id) : undefined;
+                        const image = fixAp2025Questions([{ ...q, sort_order: sort }])[0].image_url;
+                        if (!image) return null;
+                        return (
+                          <img
+                            src={mediaSrc(image)}
+                            alt="题目配图"
+                            className="mt-2 max-h-24 rounded border border-border object-contain"
+                          />
+                        );
+                      })()}
                     </div>
                     <div className="flex gap-2">
                       <ImageUploadButton
@@ -453,32 +461,38 @@ function AdminPanel({ token, onLogout }: { token: string; onLogout: () => void }
                   FRQ 大题（{frqList.length}）
                 </div>
               )}
-              {frqList.map((f) => (
+              {frqList.map((f) => {
+                const shown = papers.find((p) => p.id === f.paper_id)?.slug === "ap-micro-2025" ? fixAp2025Frqs([f])[0] : f;
+                return (
                 <Card key={`frq-${f.id}`}>
                   <CardContent className="p-4 flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <span className="text-xs px-1.5 py-0.5 rounded bg-primary text-primary-foreground font-bold">FRQ</span>
                         <span className="text-xs px-1.5 py-0.5 rounded bg-secondary">{paperTitleMap.get(f.paper_id) ?? "—"}</span>
-                        <span className="text-xs text-muted-foreground">Q{f.sort_order}{f.title ? ` · ${f.title}` : ""}</span>
+                        <span className="text-xs text-muted-foreground">Q{shown.sort_order}{shown.title ? ` · ${shown.title}` : ""}</span>
                         <span className="text-xs px-1.5 py-0.5 rounded bg-success/15 text-success">满分 {f.max_score}</span>
                         {f.rubric_note && (
                           <span className="text-xs px-1.5 py-0.5 rounded bg-primary/15 text-primary">已配 rubric</span>
                         )}
-                        {f.image_url && (
+                        {shown.image_url && (
                           <span className="text-xs px-1.5 py-0.5 rounded bg-primary/15 text-primary inline-flex items-center gap-1">
                             <ImageIcon className="h-3 w-3" /> 带图
                           </span>
                         )}
                       </div>
-                      <p className="text-sm line-clamp-2 whitespace-pre-wrap">{f.content}</p>
+                      <p className="text-sm line-clamp-2 whitespace-pre-wrap">{shapeOfficialFrq(shown.content)}</p>
+                      {shown.image_url && (
+                        <img src={mediaSrc(shown.image_url)} alt="" className="mt-2 max-h-24 rounded border border-border object-contain" />
+                      )}
                     </div>
                     <div className="flex gap-2">
                       <Button size="sm" variant="outline" onClick={() => setTab("frq")}>编辑</Button>
                     </div>
                   </CardContent>
                 </Card>
-              ))}
+                );
+              })}
             </div>
           </TabsContent>
 
@@ -1482,13 +1496,13 @@ function FrqPanel({ token }: { token: string }) {
 
               {list.length === 0 && <p className="text-xs text-muted-foreground">暂无 FRQ。</p>}
 
-              {list.map((f, i) => (
+              {(p.slug === "ap-micro-2025" ? fixAp2025Frqs(list) : list).map((f, i) => (
                 <div key={f.id} className="border rounded-md p-3 space-y-2">
                   <div className="font-semibold text-sm">Q{i + 1}{f.title ? ` · ${f.title}` : ""}</div>
                   <p className="text-xs whitespace-pre-wrap text-muted-foreground">{shapeOfficialFrq(f.content)}</p>
                   {f.image_url && (
                     <div className="flex items-start gap-3">
-                      <StoredFigure src={f.image_url} />
+                      <StoredFigure src={mediaSrc(f.image_url)} />
                       <Button size="sm" variant="outline" onClick={() => void extractText(f.id)}>
                         <Sparkles className="h-4 w-4" /> 提取图片文字
                       </Button>
