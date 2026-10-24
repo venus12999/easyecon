@@ -48,7 +48,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/hooks/use-auth";
 import { authFetch } from "@/lib/auth-fetch";
-import { applyKnownApAnswerKey, fillOptionEFrom, looksLikeProvidedFigure, parseApExamPages, readableFrqLabel, readPrintedScore, studentVisibleQuestion, withUniqueQuestionNumbers, type ParsedExamItem } from "@/lib/ap-exam-parse";
+import { applyKnownApAnswerKey, fillOptionEFrom, looksLikeProvidedFigure, parseApExamPages, readableFrqLabel, readPrintedScore, studentVisibleQuestion, sumGuidelinePoints, withUniqueQuestionNumbers, type ParsedExamItem } from "@/lib/ap-exam-parse";
 import { CUSTOM_SCORE_MAX_DEFAULT, apBasisText, apDistributionText, apMicroScore, apScoreText, formatScaledScore, pointsOnScale, scoreMaxError, summarizeApScores, type ApClassSummary, type ApScore } from "@/lib/ap-score";
 import { ap2025Clock } from "@/lib/ap-2025-paper";
 import { BREAK_MINUTES_DEFAULT, FRQ_MINUTES_DEFAULT, MCQ_MINUTES_DEFAULT, sectionMinutesError, sectionTimingLabel, sectionTotalMinutes } from "@/lib/exam-sections";
@@ -1555,17 +1555,25 @@ function TeacherHome() {
       });
       const j = await r.json();
       const repairs = (Array.isArray(j.repairs) ? j.repairs : []) as Array<{ key: string; content: string; stem?: string; complete?: boolean }>;
+      const scores = (Array.isArray(j.scores) ? j.scores : []) as Array<{ key: string; max_score: number; rubric_note?: string }>;
       let reviewedItems = current;
-      if (repairs.length) {
+      if (repairs.length || scores.length) {
         const byKey = new Map(repairs.map((fix) => [fix.key, fix]));
+        const byScore = new Map(scores.map((score) => [score.key, score]));
         reviewedItems = current.map((it) => {
           const fix = byKey.get(`${it.kind}-${it.sort_order}`);
-          if (!fix?.content) return it;
-          return {
-            ...it,
-            content: fix.content,
-            stem: fix.stem || readableFrqLabel(it.stem, fix.content, it.sort_order),
-          };
+          const score = byScore.get(`${it.kind}-${it.sort_order}`);
+          if (!fix?.content && !score) return it;
+          const next = { ...it };
+          if (fix?.content) {
+            next.content = fix.content;
+            next.stem = fix.stem || readableFrqLabel(it.stem, fix.content, it.sort_order);
+          }
+          if (score && !(it.max_score >= 1)) {
+            next.max_score = score.max_score;
+            if (!(it.rubric_note ?? "").trim() && score.rubric_note) next.rubric_note = score.rubric_note;
+          }
+          return next;
         });
         setItems(reviewedItems);
         const saved = await authFetch("/api/teacher/pdf", {
@@ -1574,7 +1582,7 @@ function TeacherHome() {
         });
         if (!saved.ok) {
           const sj = await saved.json().catch(() => ({}));
-          toast.error(sj.error ?? "补全的正文没能保存，请再点一次核对");
+          toast.error(sj.error ?? "补上的正文或满分没能保存，请再点一次核对");
         }
       }
       if (!r.ok) {
@@ -1600,6 +1608,9 @@ function TeacherHome() {
       setPdfAiRan(true);
       setPdfAiDone(true);
       const unfinished = repairs.filter((fix) => fix.complete === false).length;
+      if (scores.length) {
+        toast.success(`AI 已按评分标准填上满分：${scores.map((score) => `${score.key.replace("frq-", "Q")} ${score.max_score} 分`).join("、")}。`);
+      }
       if (repairs.length && unfinished === 0 && findings.length === 0) {
         toast.success(repairs.length === 1 ? "AI 已按页图补全这道大题，可以直接提交。" : `AI 已按页图补全 ${repairs.length} 道大题，可以直接提交。`);
       } else if (repairs.length) {
@@ -1853,15 +1864,16 @@ function TeacherHome() {
     setPdfClassId(String(j.import?.class_id ?? ""));
     const loadedPages = (j.pages ?? []) as PdfPage[];
     const nextItems: PdfItem[] = (j.items ?? []).map((it: PdfItem & { stem?: string | null; content?: string | null }) => {
-        const unpacked = it.kind === "frq" ? splitTeacherFrq(it.content) : { content: it.content ?? "", rubric_note: it.rubric_note ?? "" };
+        const unpacked = it.kind === "frq" ? splitTeacherFrq(it.content) : { content: it.content ?? "", rubric_note: it.rubric_note ?? "", omitImage: false };
         const page = loadedPages.find((p) => p.page_number === it.page_number);
-        const blob = `${it.stem ?? ""} ${unpacked.content}`;
-        const needs = it.needs_image ?? looksLikeProvidedFigure(blob);
+        const blob = `${it.stem ?? ""} ${unpacked.content}\n${unpacked.rubric_note ?? ""}`;
+        const needs = unpacked.omitImage ? false : (it.needs_image ?? looksLikeProvidedFigure(blob));
+        const guided = sumGuidelinePoints(blob);
         const printed = readPrintedScore(blob, 0);
         const storedScore = Number(it.max_score) || 0;
         const max_score = it.kind === "mcq"
           ? printed || storedScore || 1
-          : printed || (storedScore >= 1 && storedScore !== 9 ? storedScore : 0);
+          : guided || (storedScore >= 1 && storedScore !== 9 ? storedScore : 0);
         const stored = it.image_url && !isPageShot(it.image_url) ? it.image_url : null;
         return {
           ...emptyItem(it.page_number, it.sort_order, it.kind),
@@ -1876,9 +1888,10 @@ function TeacherHome() {
           content: unpacked.content,
           rubric_note: unpacked.rubric_note,
           max_score,
-          image_url: stored,
+          image_url: unpacked.omitImage ? null : stored,
           page_image_url: page?.image_url ?? null,
           needs_image: needs,
+          omit_image: unpacked.omitImage,
         };
       });
     const applied = sortPdfItems(applyKnownApAnswerKey(nextItems, j.import?.filename ?? ""));
@@ -1958,14 +1971,38 @@ function TeacherHome() {
     const local = URL.createObjectURL(file);
     const key = `${it.kind}-${it.sort_order}`;
     setPdfFindings((findings) => findings.filter((finding) => !(finding.key === key && missingImageFinding(finding.reason))));
-    setItems((xs) => xs.map((row, i) => (i === index ? { ...row, image_url: local, needs_image: true } : row)));
+    setItems((xs) => xs.map((row, i) => (i === index ? { ...row, image_url: local, needs_image: true, omit_image: false } : row)));
     if (!pdfClassId || !activeImport) return;
     try {
       const uploaded = await putAssignmentPng(pdfClassId, activeImport, `${it.kind}-${it.sort_order}.png`, file);
-      setItems((xs) => xs.map((row, i) => (i === index ? { ...row, image_url: uploaded, needs_image: true } : row)));
+      let next: PdfItem[] = [];
+      setItems((xs) => {
+        next = xs.map((row, i) => (i === index ? { ...row, image_url: uploaded, needs_image: true, omit_image: false } : row));
+        return next;
+      });
+      await authFetch("/api/teacher/pdf", {
+        method: "POST",
+        body: JSON.stringify({ action: "save-items", import_id: activeImport, items: next }),
+      });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "图片没能保存，先用本地预览");
     }
+  }
+
+  async function clearItemImage(index: number) {
+    const next = items.map((row, i) => (i === index ? { ...row, image_url: null, needs_image: false, omit_image: true } : row));
+    setItems(next);
+    if (!activeImport) return;
+    const saved = await authFetch("/api/teacher/pdf", {
+      method: "POST",
+      body: JSON.stringify({ action: "save-items", import_id: activeImport, items: next }),
+    });
+    if (!saved.ok) {
+      const body = await saved.json().catch(() => ({}));
+      toast.error(body.error ?? "图片已从这道题拿掉，但没能保存");
+      return;
+    }
+    toast.success("已删除图片");
   }
 
   function recropItem(index: number) {
@@ -3311,6 +3348,7 @@ function TeacherHome() {
                     }}
                     onRemove={(idx) => setItems((xs) => xs.filter((_, i) => i !== idx))}
                     onReplaceImage={(idx, file) => void replaceItemImage(idx, file)}
+                    onDeleteImage={(idx) => void clearItemImage(idx)}
                     onRecrop={(idx) => void recropItem(idx)}
                     locked={alreadyPublished}
                   />

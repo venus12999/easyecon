@@ -1,4 +1,4 @@
-import { acceptFrqRewrite, looksLikeProvidedFigure, officialFrqMax, printedQuestionNumber, readableFrqLabel, readPrintedScore, recoverOptionE, shapeOfficialFrq, studentVisibleQuestion, withUniqueQuestionNumbers } from "@/lib/ap-exam-parse";
+import { acceptFrqRewrite, looksLikeProvidedFigure, officialFrqMax, printedQuestionNumber, readableFrqLabel, readPrintedScore, recoverOptionE, shapeOfficialFrq, studentVisibleQuestion, sumGuidelinePoints, withUniqueQuestionNumbers } from "@/lib/ap-exam-parse";
 
 export type VisionExamItem = {
   kind: "mcq" | "frq";
@@ -75,6 +75,7 @@ function sanitizeItems(raw: unknown, pages: VisionPage[]): VisionExamItem[] {
     if (kind === "frq" && visible.length < 8) continue;
     const answer = clip(rec.correct_answer, 8).toUpperCase();
     const blob = `${stem} ${content}`;
+    const guided = sumGuidelinePoints(blob);
     const printed = readPrintedScore(blob, 0);
     const modelScore = Number(rec.max_score);
     const fromModel = Number.isFinite(modelScore) && modelScore >= 1 && modelScore <= 20 ? modelScore : 0;
@@ -94,7 +95,7 @@ function sanitizeItems(raw: unknown, pages: VisionPage[]): VisionExamItem[] {
       option_e,
       correct_answer: kind === "mcq" && /^[A-E]$/.test(answer) ? answer : "",
       content: kind === "frq" ? shapeOfficialFrq(visible) : "",
-      max_score: kind === "frq" ? officialFrqMax(`${stem}\n${content}`, fromModel > 0 && fromModel !== 9 ? fromModel : 0) : printed || fromModel || 1,
+      max_score: kind === "frq" ? guided || officialFrqMax(`${stem}\n${content}`, fromModel > 0 && fromModel !== 9 ? fromModel : 0) : printed || fromModel || 1,
       needs_image: looksLikeProvidedFigure(`${blob}\n${visible}`),
     });
   }
@@ -116,7 +117,8 @@ export async function visionParseExamPages(pages: VisionPage[]): Promise<{ items
         "如果这一页上有图表（坐标轴、曲线、表格），needs_image 设为 true。题图只要图表本身，不要把整页试卷当成题图。文字进题目，图表另裁。页面上没有印好的图表、只是让学生自己画图时，needs_image 设为 false。",
         "只抽出页面上真正印出的题目，不要编造，不要把说明、封面、答题卡说明当成题。",
         "选择题 kind=mcq。卷面是 A 到 E 五选一。option_a 到 option_e 都要原样抄下，option_e 不能空，也不要把 E 并进 option_d。E 经常在 D 的下一行或右栏。大题、简答、free-response 用 kind=frq。",
-        "max_score 用卷面印出的分值。大题如果每个小问写了 (N points)，把各小问分值相加作为这道大题的满分。选择题没写分值就用 1。看不清分值时不要填 9。",
+        "评分标准页不是新题目。页上如果写着 Scoring Guidelines、One point is earned，或 (a) 3 points 这种小问分值，不要把它切成一道大题，也不要把评分标准写进题目正文。",
+        "max_score 用卷面印出的分值。大题如果每个小问写了 (a) 3 points 或 (N points)，把各小问的分值相加作为这道大题的满分，不要只取第一处，也不要把 One point is earned 再加一遍。选择题没写分值就用 1。看不清分值时不要填 9。",
         "question_number 用卷面印的题号。选择题和大题如果连着编成 Q1、Q2、Q3、Q4，大题就要写成 3 和 4，不要把大题从 1 重新编号。",
         "页码用我标出的 page_number。看不清就不要猜那一题。",
         "大题的 content 严格照 2022 年 AP 微观卷的长度和分段。那三道大题刚刚好：一道大约 1100 到 1600 个字符，先一段题干，再写卷面上的 (a)(b)(c)…，小问用 i. ii. iii. 另起一行。不要翻译，不要加粗，不要项目符号，不要「写出计算过程」，不要评分说明，也不要把下一题或整页文字接进来。卷面上有几问就写到最后一问，不要写到 (a) 就跳到最后一问，也不要停在半个词上。",
@@ -290,4 +292,113 @@ export async function rewriteFrqFromPage(input: {
   }
   const kept = keepPrintedQuestion(content, input.sort);
   return acceptFrqRewrite(input.content, kept);
+}
+
+function tidyGuideline(text: string) {
+  const lines = text.replace(/\r/g, "").split("\n").map((line) => line.trim()).filter((line) => {
+    if (!line) return false;
+    if (/©|college board|visit the college board|^-\d+-$/i.test(line)) return false;
+    return true;
+  });
+  const seen = new Set<string>();
+  const kept: string[] = [];
+  for (const line of lines) {
+    const key = line.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    kept.push(line);
+  }
+  return kept.join("\n").slice(0, 2400).trim();
+}
+
+/** Read Scoring Guidelines pages and sum each question's part totals. */
+export async function readGuidelineScores(pages: { page_number: number; imageUrl: string }[]): Promise<Array<{ question_number: number; max_score: number; rubric: string }>> {
+  const apiKey = process.env.LOVABLE_API_KEY;
+  const usable = pages.filter((page) => page.imageUrl.startsWith("https://")).sort((a, b) => a.page_number - b.page_number);
+  if (!apiKey || usable.length === 0) return [];
+  const batches: typeof usable[] = [];
+  for (let i = 0; i < usable.length; i += 4) batches.push(usable.slice(i, i + 4));
+  const found = await Promise.all(batches.map(async (batch) => {
+    const content: Array<Record<string, unknown>> = [{
+      type: "text",
+      text: [
+        "这些是同一份 AP 微观试卷的页图，可能包含 Scoring Guidelines。",
+        "只抽出印出的评分标准。每道题按题号分开。",
+        "小问标题是「(a) 3 points」「(b) 1 point」这种。rubric 里要保留这些标题，再把下面的 One point is earned 各写一行。",
+        "不要把评分标准写成新的题目，不要翻译，不要把 One point is earned 的条数当成额外的分。",
+        "某一页如果是上一题的续页，仍然归到那一题。没有评分标准的页不要输出。",
+      ].join("\n"),
+    }];
+    for (const page of batch) {
+      content.push({ type: "text", text: `第 ${page.page_number} 页` });
+      content.push({ type: "image_url", image_url: { url: page.imageUrl } });
+    }
+    const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        temperature: 0,
+        messages: [
+          { role: "system", content: "你从评分标准页里摘出每道大题的得分点。只输出工具要求的 JSON。" },
+          { role: "user", content },
+        ],
+        tools: [{
+          type: "function",
+          function: {
+            name: "report_guideline_scores",
+            description: "按题号返回评分标准原文",
+            parameters: {
+              type: "object",
+              properties: {
+                scores: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      question_number: { type: "number" },
+                      rubric: { type: "string" },
+                    },
+                    required: ["question_number", "rubric"],
+                    additionalProperties: false,
+                  },
+                },
+              },
+              required: ["scores"],
+              additionalProperties: false,
+            },
+          },
+        }],
+        tool_choice: { type: "function", function: { name: "report_guideline_scores" } },
+      }),
+    });
+    if (!r.ok) return [] as Array<{ question_number: number; rubric: string }>;
+    const body = await r.json().catch(() => null);
+    const argStr = body?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
+    try {
+      const parsed = argStr ? JSON.parse(argStr) : {};
+      const rows = Array.isArray(parsed.scores) ? parsed.scores : [];
+      return rows.flatMap((row: { question_number?: number; rubric?: string }) => {
+        const question = Number(row.question_number);
+        const rubric = String(row.rubric ?? "").trim();
+        if (!Number.isInteger(question) || question < 1 || question > 20 || rubric.length < 8) return [];
+        return [{ question_number: question, rubric }];
+      });
+    } catch {
+      return [];
+    }
+  }));
+  const byQuestion = new Map<number, string[]>();
+  for (const row of found.flat()) {
+    const list = byQuestion.get(row.question_number) ?? [];
+    list.push(row.rubric);
+    byQuestion.set(row.question_number, list);
+  }
+  const scores: Array<{ question_number: number; max_score: number; rubric: string }> = [];
+  for (const [question, parts] of byQuestion) {
+    const rubric = tidyGuideline(parts.join("\n"));
+    const max = sumGuidelinePoints(rubric);
+    if (max >= 1) scores.push({ question_number: question, max_score: max, rubric });
+  }
+  return scores;
 }

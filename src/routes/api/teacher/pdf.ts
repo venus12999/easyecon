@@ -4,7 +4,7 @@ import { jsonErr } from "@/lib/json-api";
 import { frqExtractGap, readableFrqLabel, shapeOfficialFrq, studentVisibleQuestion, withUniqueQuestionNumbers } from "@/lib/ap-exam-parse";
 import { withPageImage, withPointMarker } from "@/lib/exam-flags";
 import { packTeacherFrq, splitTeacherFrq, teacherGradingNote, withTeacherRubric } from "@/lib/frq-teacher-fields";
-import { fileToVisionPage, rewriteFrqFromPage, visionParseExamPages } from "@/lib/pdf-vision.server";
+import { fileToVisionPage, readGuidelineScores, rewriteFrqFromPage, visionParseExamPages } from "@/lib/pdf-vision.server";
 import { ensureTeacherClass, getTeacherDb, uploadTeacherAssignmentImage, verifyTeacherRequest } from "@/lib/teacher-auth.server";
 import { isUuid } from "@/lib/school-exam-session";
 
@@ -29,6 +29,7 @@ type PdfItemIn = {
   needs_image?: boolean;
   image_url?: string | null;
   rubric_note?: string | null;
+  omit_image?: boolean;
 };
 
 function stripFences(s: string) {
@@ -188,6 +189,29 @@ async function repairShortFrqs(
     repairs.push({ key: `frq-${sort}`, content, stem: item.stem, complete: !frqExtractGap(content) });
   }));
   return { items: next, repairs };
+}
+
+async function applyGuidelineScores(
+  items: PdfItemIn[],
+  pages: Array<{ page_number: number; image_url?: string | null }>,
+) {
+  const scores: Array<{ key: string; max_score: number; rubric_note: string }> = [];
+  const next = items.map((item) => ({ ...item }));
+  const missing = next.some((item) => item.kind === "frq" && !(Number(item.max_score) >= 1));
+  const urls = pages.filter((page) => (page.image_url ?? "").startsWith("https://"));
+  if (!missing || urls.length === 0) return { items: next, scores };
+  const found = await readGuidelineScores(urls.map((page) => ({
+    page_number: page.page_number,
+    imageUrl: page.image_url ?? "",
+  })));
+  for (const row of found) {
+    const item = next.find((candidate) => candidate.kind === "frq" && candidate.sort_order === row.question_number);
+    if (!item || Number(item.max_score) >= 1) continue;
+    item.max_score = row.max_score;
+    if (!(item.rubric_note ?? "").trim()) item.rubric_note = row.rubric;
+    scores.push({ key: `frq-${item.sort_order}`, max_score: row.max_score, rubric_note: item.rubric_note ?? "" });
+  }
+  return { items: next, scores };
 }
 
 function mcqKey(raw: string | null | undefined) {
@@ -405,7 +429,7 @@ export const Route = createFileRoute("/api/teacher/pdf")({
                 option_e: it.option_e ?? null,
                 correct_answer: it.correct_answer ?? null,
                 content: it.kind === "frq"
-                  ? packTeacherFrq(it.content, it.rubric_note ?? splitTeacherFrq(it.content).rubric_note)
+                  ? packTeacherFrq(it.content, it.rubric_note ?? splitTeacherFrq(it.content).rubric_note, !!it.omit_image)
                   : (it.content ?? null),
                 max_score: it.kind === "mcq" ? Number(it.max_score) || 1 : Number(it.max_score) > 0 ? Number(it.max_score) : 0,
                 reviewed: !!it.reviewed,
@@ -422,17 +446,18 @@ export const Route = createFileRoute("/api/teacher/pdf")({
             ...it,
             kind: it.kind === "frq" ? "frq" as const : "mcq" as const,
           }));
-          const { items: repairedItems, repairs } = await repairShortFrqs(source, packed.pages);
+          const { items: scoredItems, scores } = await applyGuidelineScores(source, packed.pages);
+          const { items: repairedItems, repairs } = await repairShortFrqs(scoredItems, packed.pages);
           const reviewed = await aiReviewItems(repairedItems);
           const payload = await reviewed.json().catch(() => ({ error: "AI 审核没有返回结果" })) as { findings?: Array<{ key: string; reason: string }> };
-          if (!reviewed.ok && repairs.length === 0) return Response.json(payload, { status: reviewed.status });
+          if (!reviewed.ok && repairs.length === 0 && scores.length === 0) return Response.json(payload, { status: reviewed.status });
           const findings = [...(payload.findings ?? [])];
           const seen = new Set(findings.map((finding) => finding.key));
           for (const fix of repairs) {
             if (fix.complete || seen.has(fix.key)) continue;
             findings.push({ key: fix.key, reason: "大题正文过短（明显没切全）" });
           }
-          return Response.json({ ...payload, findings, repairs });
+          return Response.json({ ...payload, findings, repairs, scores });
         }
 
         if (action === "publish") {

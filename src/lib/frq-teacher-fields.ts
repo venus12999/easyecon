@@ -1,22 +1,25 @@
 import { stripPageImage } from "@/lib/exam-flags";
 
 const RUBRIC_MARK = "<<<RUBRIC>>>";
+const NO_IMAGE_MARK = "<<<NOIMAGE>>>";
 
-export function splitTeacherFrq(content: string | null | undefined): { content: string; rubric_note: string } {
-  const raw = content ?? "";
+export function splitTeacherFrq(content: string | null | undefined): { content: string; rubric_note: string; omitImage: boolean } {
+  const raw = (content ?? "").replaceAll(NO_IMAGE_MARK, "\n");
+  const omitImage = (content ?? "").includes(NO_IMAGE_MARK);
   const at = raw.indexOf(RUBRIC_MARK);
-  if (at < 0) return { content: raw, rubric_note: "" };
+  if (at < 0) return { content: raw.trim(), rubric_note: "", omitImage };
   return {
     content: raw.slice(0, at).trim(),
     rubric_note: raw.slice(at + RUBRIC_MARK.length).trim(),
+    omitImage,
   };
 }
 
-export function packTeacherFrq(content: string | null | undefined, rubric: string | null | undefined) {
+export function packTeacherFrq(content: string | null | undefined, rubric: string | null | undefined, omitImage = false) {
   const clean = splitTeacherFrq(content).content.trim();
   const note = (rubric ?? "").trim();
-  if (!note) return clean;
-  return `${clean}\n\n${RUBRIC_MARK}\n${note}`;
+  const packed = note ? `${clean}\n\n${RUBRIC_MARK}\n${note}` : clean;
+  return omitImage ? `${NO_IMAGE_MARK}\n${packed}` : packed;
 }
 
 export function teacherGradingNote(reference: string | null | undefined, rubric: string | null | undefined) {

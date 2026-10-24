@@ -25,6 +25,7 @@ export type TeacherPdfItem = {
   image_url?: string | null;
   page_image_url?: string | null;
   needs_image?: boolean;
+  omit_image?: boolean;
 };
 
 export type PdfAiFinding = { key: string; reason: string };
@@ -102,6 +103,7 @@ export function PdfQuestionList({
   onChange,
   onRemove,
   onReplaceImage,
+  onDeleteImage,
   onRecrop,
   locked,
 }: {
@@ -111,6 +113,7 @@ export function PdfQuestionList({
   onChange: (index: number, patch: Partial<TeacherPdfItem>) => void;
   onRemove: (index: number) => void;
   onReplaceImage?: (index: number, file: File) => void;
+  onDeleteImage?: (index: number) => void;
   onRecrop?: (index: number) => void;
   locked?: boolean;
 }) {
@@ -148,6 +151,7 @@ export function PdfQuestionList({
           onChange={onChange}
           onRemove={onRemove}
           onReplaceImage={onReplaceImage}
+          onDeleteImage={onDeleteImage}
           onRecrop={onRecrop}
           locked={locked}
         />
@@ -166,6 +170,7 @@ function PdfQuestionCard({
   onChange,
   onRemove,
   onReplaceImage,
+  onDeleteImage,
   onRecrop,
   locked,
 }: {
@@ -178,6 +183,7 @@ function PdfQuestionCard({
   onChange: (index: number, patch: Partial<TeacherPdfItem>) => void;
   onRemove: (index: number) => void;
   onReplaceImage?: (index: number, file: File) => void;
+  onDeleteImage?: (index: number) => void;
   onRecrop?: (index: number) => void;
   locked?: boolean;
 }) {
@@ -264,6 +270,11 @@ function PdfQuestionCard({
                           }}
                         />
                       </label>
+                      {it.image_url || (it.needs_image && it.page_image_url) ? (
+                        <Button type="button" size="sm" variant="outline" disabled={locked} onClick={() => onDeleteImage?.(idx)}>
+                          删除图片
+                        </Button>
+                      ) : null}
                       {onRecrop ? (
                         <Button type="button" size="sm" variant="outline" onClick={() => onRecrop(idx)}>
                           在本页框选图表

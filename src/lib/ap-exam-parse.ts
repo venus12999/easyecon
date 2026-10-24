@@ -146,6 +146,44 @@ export function readPrintedScore(text: string, fallback: number) {
   return fallback;
 }
 
+const POINT_WORD: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+
+/**
+ * Scoring guidelines print a total on each part, such as "(a) 3 points",
+ * then repeat the same points as "One point is earned". Sum the part totals once.
+ */
+export function sumGuidelinePoints(text: string) {
+  const headers = [...text.matchAll(/[（(]\s*([a-e])\s*[)）]\s*(\d{1,2})\s*(?:points?|分)/gi)];
+  if (headers.length > 0) {
+    const seen = new Set<string>();
+    let sum = 0;
+    for (const header of headers) {
+      const part = header[1].toLowerCase();
+      if (seen.has(part)) continue;
+      seen.add(part);
+      const points = Number(header[2]);
+      if (points >= 1 && points <= 15) sum += points;
+    }
+    if (sum >= 1 && sum <= 20) return sum;
+  }
+  const earned = [...text.matchAll(/\b(one|two|three|four|five|six|seven|eight|nine|ten|\d{1,2})\s+points?\s+(?:is|are)\s+earned\b/gi)];
+  if (earned.length > 0) {
+    let sum = 0;
+    for (const line of earned) {
+      const raw = line[1].toLowerCase();
+      const points = POINT_WORD[raw] ?? Number(raw);
+      if (points >= 1 && points <= 15) sum += points;
+    }
+    if (sum >= 1 && sum <= 20) return sum;
+  }
+  const grants = [...text.matchAll(/(?:^|\n)\s*(?:给|得)\s*(\d{1,2})\s*分/g)];
+  if (grants.length > 0) {
+    const sum = grants.reduce((total, line) => total + Number(line[1]), 0);
+    if (sum >= 1 && sum <= 20) return sum;
+  }
+  return 0;
+}
+
 /** Use the points printed on the question. A stored 9 is the column default, not a printed score. */
 export function officialFrqMax(text: string, stored: number | null | undefined) {
   const printed = readPrintedScore(text, 0);
