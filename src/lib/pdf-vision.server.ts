@@ -1,4 +1,4 @@
-import { looksLikeProvidedFigure, officialFrqMax, printedQuestionNumber, readableFrqLabel, readPrintedScore, recoverOptionE, shapeOfficialFrq, studentVisibleQuestion, withUniqueQuestionNumbers } from "@/lib/ap-exam-parse";
+import { acceptFrqRewrite, looksLikeProvidedFigure, officialFrqMax, printedQuestionNumber, readableFrqLabel, readPrintedScore, recoverOptionE, shapeOfficialFrq, studentVisibleQuestion, withUniqueQuestionNumbers } from "@/lib/ap-exam-parse";
 
 export type VisionExamItem = {
   kind: "mcq" | "frq";
@@ -119,7 +119,9 @@ export async function visionParseExamPages(pages: VisionPage[]): Promise<{ items
         "max_score 用卷面印出的分值。大题如果每个小问写了 (N points)，把各小问分值相加作为这道大题的满分。选择题没写分值就用 1。看不清分值时不要填 9。",
         "question_number 用卷面印的题号。选择题和大题如果连着编成 Q1、Q2、Q3、Q4，大题就要写成 3 和 4，不要把大题从 1 重新编号。",
         "页码用我标出的 page_number。看不清就不要猜那一题。",
-        "大题的 content 严格照 2022 年 AP 微观卷的长度和分段。那三道大题刚刚好：一道大约 1100 到 1600 个字符，先一段题干，再写卷面上的 (a)(b)(c)…，小问用 i. ii. iii. 另起一行。不要翻译，不要加粗，不要项目符号，不要「写出计算过程」，不要评分说明，也不要把下一题或整页文字接进来。印了表才放一个紧凑的 HTML 表格，和 2022 年第 3 题一样。题干写 table above、diagram above、上表、上图时，把这道题上方的表或图里印出的文字一并放进 content，不要丢掉。不要描述图，不要写曲线怎么走，不要写交点、均衡价格或数量。卷面如果只写了 Refer to Figure 1，就只保留这句。",
+        "大题的 content 严格照 2022 年 AP 微观卷的长度和分段。那三道大题刚刚好：一道大约 1100 到 1600 个字符，先一段题干，再写卷面上的 (a)(b)(c)…，小问用 i. ii. iii. 另起一行。不要翻译，不要加粗，不要项目符号，不要「写出计算过程」，不要评分说明，也不要把下一题或整页文字接进来。卷面上有几问就写到最后一问，不要写到 (a) 就跳到最后一问，也不要停在半个词上。",
+        "下标和上标写成普通文字，不要 LaTeX。P 的下标 m 写成 P_m，P 的下标 f2 写成 P_f2。不要输出 \\mathrm、$、{ }。金额仍写 $12。",
+        "印了表才放一个紧凑的 HTML 表格，和 2022 年第 3 题一样。题干写 table above、diagram above、上表、上图时，把这道题上方的表或图里印出的文字一并放进 content，不要丢掉。不要描述图，不要写曲线怎么走，不要写交点、均衡价格或数量。卷面如果只写了 Refer to Figure 1，就只保留这句。",
         ...pages.map((p) => `\n--- 第 ${p.page_number} 页文字 ---\n${p.text || "（这一页没有提取到文字）"}`),
       ].join("\n"),
     },
@@ -203,4 +205,89 @@ export async function visionParseExamPages(pages: VisionPage[]): Promise<{ items
   const items = sanitizeItems(parsed.items, pages);
   if (items.length === 0) return { items, error: "AI 看完页图，没有认出完整题目。" };
   return { items };
+}
+
+function keepPrintedQuestion(text: string, sort: number) {
+  const lines = text.replace(/\r/g, "").split("\n").filter((line) => {
+    const t = line.trim();
+    if (!t) return true;
+    if (/^(directions|planning time|writing time|section ii|microeconomics|go on to the next page|visit the college board)/i.test(t)) return false;
+    if (/©|college board|form b|free-response questions/i.test(t) && t.length < 90) return false;
+    if (/^-\d+-$/.test(t)) return false;
+    return true;
+  });
+  let body = lines.join("\n").trim();
+  const next = body.search(new RegExp(`\\n\\s*${sort + 1}\\.\\s+[A-Z]`));
+  if (next > 200) body = body.slice(0, next).trim();
+  return body;
+}
+
+/** Rewrite one short or garbled FRQ from its page image. Returns "" when the page cannot be read. */
+export async function rewriteFrqFromPage(input: {
+  imageUrl: string;
+  content: string;
+  sort: number;
+  stem: string;
+}): Promise<string> {
+  const apiKey = process.env.LOVABLE_API_KEY;
+  if (!apiKey || !input.imageUrl.startsWith("https://")) return "";
+  const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-flash",
+      temperature: 0,
+      messages: [
+        {
+          role: "system",
+          content: "你按试卷页图重写一道已经被切短或符号写坏的大题。只输出工具要求的 JSON。",
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: [
+                `只重写第 ${input.sort} 题。以页图为准，残稿只用来认出是哪一题。`,
+                "从题干写到最后一个小问。卷面上有 (a)(b)(c)(d)(e) 就都要在，不要从 (a) 跳到最后一问，也不要停在半个词上。",
+                "下标写成普通文字：P 的下标 f 写成 P_f，P 的下标 f2 写成 P_f2，P 的下标 m 写成 P_m。不要 LaTeX，不要 \\mathrm，不要 $ { }。金额仍写 $12。",
+                "不要翻译，不要加粗，不要项目符号，不要 Directions、页脚、评分说明，也不要把下一题写进来。",
+                "小问 (a)(b)(c) 另起一段，i. ii. iii. 另起一行。",
+                `残稿：\n${input.content.slice(0, 1200) || input.stem.slice(0, 240)}`,
+              ].join("\n"),
+            },
+            { type: "image_url", image_url: { url: input.imageUrl } },
+          ],
+        },
+      ],
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "rewrite_frq",
+            description: "返回这一道大题印出的全文",
+            parameters: {
+              type: "object",
+              properties: { content: { type: "string" } },
+              required: ["content"],
+              additionalProperties: false,
+            },
+          },
+        },
+      ],
+      tool_choice: { type: "function", function: { name: "rewrite_frq" } },
+    }),
+  });
+  if (!r.ok) return "";
+  const j = await r.json().catch(() => null);
+  const argStr = j?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
+  let content = "";
+  try {
+    const parsed = argStr ? JSON.parse(argStr) : {};
+    content = String(parsed.content ?? "");
+  } catch {
+    content = "";
+  }
+  const kept = keepPrintedQuestion(content, input.sort);
+  return acceptFrqRewrite(input.content, kept);
 }

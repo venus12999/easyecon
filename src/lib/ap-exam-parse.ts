@@ -41,14 +41,69 @@ export function repairPrintedSpacing(text: string) {
     .replace(/(\d)\s+\.\s+(\d)/g, "$1.$2");
 }
 
+const SUBSCRIPT_CHAR: Record<string, string> = {
+  "₀": "0", "₁": "1", "₂": "2", "₃": "3", "₄": "4", "₅": "5", "₆": "6", "₇": "7", "₈": "8", "₉": "9",
+  "ₐ": "a", "ₑ": "e", "ₕ": "h", "ᵢ": "i", "ⱼ": "j", "ₖ": "k", "ₗ": "l", "ₘ": "m", "ₙ": "n", "ₒ": "o",
+  "ₚ": "p", "ᵣ": "r", "ₛ": "s", "ₜ": "t", "ᵤ": "u", "ᵥ": "v", "ₓ": "x",
+};
+
+/**
+ * Printed subscripts have no plain character for letters like f.
+ * Vision often emits LaTeX (`${\mathrm{P}}_{-}(\mathrm{f})}$2}$`) or Unicode subscripts.
+ * Keep them readable as P_f and P_f2. A price like $12 stays a price.
+ */
+export function plainMathText(text: string) {
+  const letters = text
+    .replace(/\\mathrm\{([A-Za-z0-9]+)\}/g, "$1")
+    .replace(/[₀₁₂₃₄₅₆₇₈₉ₐₑₕᵢⱼₖₗₘₙₒₚᵣₛₜᵤᵥₓ]+/gu, (run) => `_${[...run].map((ch) => SUBSCRIPT_CHAR[ch] ?? "").join("")}`);
+  return letters
+    .replace(/\$?\{+([A-Za-z])\}+_\{-?\}?\(([A-Za-z0-9]+)\)\}*\$?(\d*)\}*\$?/g, "$1_$2$3")
+    .replace(/\$?\{?([A-Za-z])\}_\{([A-Za-z0-9]+)\}+\$?/g, "$1_$2")
+    .replace(/\$([A-Za-z])_\{([A-Za-z0-9]+)\}\$/g, "$1_$2")
+    .replace(/_\{([A-Za-z0-9]+)\}/g, "_$1")
+    .replace(/\$\{+|\}+\$/g, "");
+}
+
 /** Drop Markdown the extractor wrapped around a printed question. */
 export function plainPrintedText(text: string) {
-  return repairPrintedSpacing(text
+  return repairPrintedSpacing(plainMathText(text)
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/\*\*/g, "")
     .replace(/^\s*[-*•]\s+/gm, "")
     .replace(/[ \t]+\n/g, "\n")
     .trim());
+}
+
+/** Why an extracted FRQ should be rewritten from the page image before a person edits it. */
+export function frqExtractGap(text: string) {
+  const t = plainPrintedText(text);
+  if (!t) return "short";
+  const parts = [...t.matchAll(/\(([a-e])\)/gi)].map((match) => match[1].toLowerCase());
+  const seen = new Set(parts);
+  const order = ["a", "b", "c", "d", "e"];
+  const present = order.filter((letter) => seen.has(letter));
+  if (present.length >= 2) {
+    const first = order.indexOf(present[0]);
+    const last = order.indexOf(present[present.length - 1]);
+    for (let i = first; i <= last; i += 1) {
+      if (!seen.has(order[i])) return "gap";
+    }
+  }
+  if (/\b(?:draw|show|labeled|following|the|of|and|to|each)\s+[A-Za-z]{0,2}$/i.test(t)) return "cut";
+  if (t.length < 280) return "short";
+  if (/\\mathrm|\$\{|_\{/.test(text)) return "symbols";
+  return "";
+}
+
+/** Accept a page rewrite only when it is the same question and no longer cut off or full of LaTeX. */
+export function acceptFrqRewrite(before: string, after: string) {
+  const next = shapeOfficialFrq(after);
+  if (next.length < 40 || frqExtractGap(next)) return "";
+  const token = before.toLowerCase().match(/[a-z]{6,}/);
+  if (token && !next.toLowerCase().includes(token[0])) return "";
+  const grew = next.length >= plainPrintedText(before).length + 80;
+  if (!grew && frqExtractGap(before) !== "symbols") return "";
+  return next;
 }
 
 /**

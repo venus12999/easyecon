@@ -1551,9 +1551,32 @@ function TeacherHome() {
       const r = await authFetch("/api/teacher/pdf", {
         method: "POST",
         body: JSON.stringify({ action: "ai-review", import_id: importId, items: current }),
-        signal: AbortSignal.timeout(20000),
+        signal: AbortSignal.timeout(90000),
       });
       const j = await r.json();
+      const repairs = (Array.isArray(j.repairs) ? j.repairs : []) as Array<{ key: string; content: string; stem?: string; complete?: boolean }>;
+      let reviewedItems = current;
+      if (repairs.length) {
+        const byKey = new Map(repairs.map((fix) => [fix.key, fix]));
+        reviewedItems = current.map((it) => {
+          const fix = byKey.get(`${it.kind}-${it.sort_order}`);
+          if (!fix?.content) return it;
+          return {
+            ...it,
+            content: fix.content,
+            stem: fix.stem || readableFrqLabel(it.stem, fix.content, it.sort_order),
+          };
+        });
+        setItems(reviewedItems);
+        const saved = await authFetch("/api/teacher/pdf", {
+          method: "POST",
+          body: JSON.stringify({ action: "save-items", import_id: importId, items: reviewedItems }),
+        });
+        if (!saved.ok) {
+          const sj = await saved.json().catch(() => ({}));
+          toast.error(sj.error ?? "补全的正文没能保存，请再点一次核对");
+        }
+      }
       if (!r.ok) {
         toast.error(j.error ?? "AI 审核失败，请再跑一遍后再提交");
         setPdfFindings([]);
@@ -1568,7 +1591,7 @@ function TeacherHome() {
         return;
       }
       const findings = ((j.findings ?? []) as PdfAiFinding[]).filter((finding) => {
-        const item = current.find((it) => `${it.kind}-${it.sort_order}` === finding.key);
+        const item = reviewedItems.find((it) => `${it.kind}-${it.sort_order}` === finding.key);
         const url = (item?.image_url ?? "").trim();
         const hasFigure = !!url && !isPageShot(url);
         return !(hasFigure && missingImageFinding(finding.reason));
@@ -1576,12 +1599,18 @@ function TeacherHome() {
       setPdfFindings(findings);
       setPdfAiRan(true);
       setPdfAiDone(true);
-      if (findings.length === 0) {
-        toast.success(current.length === 1 ? "AI 没有发现这道题有明显问题。" : "AI 没有发现明显切题问题，可以直接提交。有需要再点编辑。");
-      } else if (findings.length >= current.length) {
-        toast.message(current.length === 1 ? "AI 标出这道题需要看一眼。" : `AI 标出全部 ${findings.length} 道题需要看一眼。`);
+      const unfinished = repairs.filter((fix) => fix.complete === false).length;
+      if (repairs.length && unfinished === 0 && findings.length === 0) {
+        toast.success(repairs.length === 1 ? "AI 已按页图补全这道大题，可以直接提交。" : `AI 已按页图补全 ${repairs.length} 道大题，可以直接提交。`);
+      } else if (repairs.length) {
+        const left = Math.max(findings.length, unfinished);
+        toast.message(`AI 已改 ${repairs.length} 道大题。还有 ${left} 道需要你看一眼。`);
+      } else if (findings.length === 0) {
+        toast.success(reviewedItems.length === 1 ? "AI 没有发现这道题有明显问题。" : "AI 没有发现明显切题问题，可以直接提交。有需要再点编辑。");
+      } else if (findings.length >= reviewedItems.length) {
+        toast.message(reviewedItems.length === 1 ? "AI 标出这道题需要看一眼。" : `AI 标出全部 ${findings.length} 道题需要看一眼。`);
       } else {
-        toast.message(`AI 标出 ${findings.length} 道需要看一眼，另外 ${current.length - findings.length} 道没有被标出。`);
+        toast.message(`AI 标出 ${findings.length} 道需要看一眼，另外 ${reviewedItems.length - findings.length} 道没有被标出。`);
       }
     } catch {
       setPdfFindings([]);
@@ -3222,7 +3251,7 @@ function TeacherHome() {
                       <Button size="sm" variant="outline" disabled={alreadyPublished} onClick={() => setItems((xs) => [...xs, emptyItem(pages[0]?.page_number ?? 1, xs.length + 1, "frq")])}>加大题</Button>
                       <Button size="sm" variant="outline" disabled={aiBusy || !items.length} onClick={() => void runPdfAi(activeImport, items)}>
                         {aiBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                        {aiBusy ? "AI 审核中…" : "再跑一遍 AI 审核"}
+                        {aiBusy ? "AI 正在补全…" : "AI 核对并补全"}
                       </Button>
                       <Button
                         size="sm"
@@ -3236,7 +3265,7 @@ function TeacherHome() {
                     {alreadyPublished && (
                       <p className="mt-3 text-xs text-muted-foreground">已交给管理员审核，题目已锁定。老师不能自己把它放进公开模考。要改题请重新上传一份 PDF，避免卷库里出现重复的学校卷。</p>
                     )}
-                    {aiBusy && <p className="mt-3 text-xs text-muted-foreground">AI 正在审核切题，审完后即可提交。</p>}
+                    {aiBusy && <p className="mt-3 text-xs text-muted-foreground">AI 先按页图补不完整的大题和写坏的下标，补不好的会留给你改。</p>}
                     {!pdfAiDone && items.length > 0 && !aiBusy && !alreadyPublished && (
                       <p className="mt-3 text-xs text-muted-foreground">请等 AI 审完，或点「再跑一遍 AI 审核」后再提交。</p>
                     )}

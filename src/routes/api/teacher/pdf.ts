@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { jsonErr } from "@/lib/json-api";
-import { readableFrqLabel, studentVisibleQuestion, withUniqueQuestionNumbers } from "@/lib/ap-exam-parse";
+import { frqExtractGap, readableFrqLabel, shapeOfficialFrq, studentVisibleQuestion, withUniqueQuestionNumbers } from "@/lib/ap-exam-parse";
 import { withPageImage, withPointMarker } from "@/lib/exam-flags";
 import { packTeacherFrq, splitTeacherFrq, teacherGradingNote, withTeacherRubric } from "@/lib/frq-teacher-fields";
-import { fileToVisionPage, visionParseExamPages } from "@/lib/pdf-vision.server";
+import { fileToVisionPage, rewriteFrqFromPage, visionParseExamPages } from "@/lib/pdf-vision.server";
 import { ensureTeacherClass, getTeacherDb, uploadTeacherAssignmentImage, verifyTeacherRequest } from "@/lib/teacher-auth.server";
 import { isUuid } from "@/lib/school-exam-session";
 
@@ -69,7 +69,8 @@ async function aiReviewItems(items: PdfItemIn[]) {
       ? { A: it.option_a, B: it.option_b, C: it.option_c, D: it.option_d, E: it.option_e }
       : undefined,
     options_ok: optionsComplete(it),
-    content: it.kind === "frq" ? (it.content ?? "").slice(0, 500) : undefined,
+    content: it.kind === "frq" ? (it.content ?? "").slice(0, 1800) : undefined,
+    content_chars: it.kind === "frq" ? (it.content ?? "").trim().length : undefined,
     has_image: itemHasFigure(it),
     needs_image: !!it.needs_image,
     has_answer: !!(it.correct_answer ?? "").trim(),
@@ -81,7 +82,7 @@ async function aiReviewItems(items: PdfItemIn[]) {
 - 仅当 options_ok 为 false 时，才可以说选择题缺少 A–D。options_ok 为 true 时，禁止写「缺少选项」或「缺少 A–D」
 - 选项文本明显不是选项（例如整段题干被塞进某一个选项）
 - 仅当 needs_image 为 true 且 has_image 为 false，题干又明确提到已经印出的 graph/table/figure/见图 时，才报告缺图。理由写「题干提到图表，但没有配图」。has_image 为 true 时禁止报告缺图，也不要写出 has_image=false
-- 大题正文过短（明显没切全）
+- 大题正文过短（明显没切全）。只在 content_chars 不到 400、小问序号中间缺了（有 (a) 和 (e) 却没有 (b) 或 (c)）、或某一问停在半个词上时才报。下标写成 P_f、P_f2 是正常的，不要当成乱码。不要因为预览没贴全文就说没切全
 
 不要：
 - 不要猜正确答案，也不要因为没填答案而报警
@@ -160,6 +161,33 @@ async function aiReviewItems(items: PdfItemIn[]) {
     );
   }
   return Response.json({ findings, total: items.length });
+}
+
+async function repairShortFrqs(
+  items: PdfItemIn[],
+  pages: Array<{ page_number: number; image_url?: string | null }>,
+) {
+  const repairs: Array<{ key: string; content: string; stem: string; complete: boolean }> = [];
+  const next = items.map((item) => ({ ...item }));
+  const jobs = next.filter((item) => item.kind === "frq" && frqExtractGap(item.content ?? ""));
+  await Promise.all(jobs.slice(0, 4).map(async (item) => {
+    const before = item.content ?? "";
+    const sort = item.sort_order;
+    const page = pages.find((row) => row.page_number === item.page_number);
+    const rewritten = await rewriteFrqFromPage({
+      imageUrl: page?.image_url ?? "",
+      content: before,
+      sort,
+      stem: item.stem ?? "",
+    });
+    const cleaned = shapeOfficialFrq(before);
+    const content = rewritten || (cleaned !== before.trim() ? cleaned : "");
+    if (!content || content === before.trim()) return;
+    item.content = content;
+    item.stem = readableFrqLabel(item.stem ?? "", content, sort);
+    repairs.push({ key: `frq-${sort}`, content, stem: item.stem, complete: !frqExtractGap(content) });
+  }));
+  return { items: next, repairs };
 }
 
 function mcqKey(raw: string | null | undefined) {
@@ -390,13 +418,21 @@ export const Route = createFileRoute("/api/teacher/pdf")({
         }
 
         if (action === "ai-review") {
-          const source = Array.isArray(body.items) ? body.items : packed.items;
-          return aiReviewItems(
-            source.map((it) => ({
-              ...it,
-              kind: it.kind === "frq" ? "frq" : "mcq",
-            })),
-          );
+          const source = (Array.isArray(body.items) ? body.items : packed.items).map((it) => ({
+            ...it,
+            kind: it.kind === "frq" ? "frq" as const : "mcq" as const,
+          }));
+          const { items: repairedItems, repairs } = await repairShortFrqs(source, packed.pages);
+          const reviewed = await aiReviewItems(repairedItems);
+          const payload = await reviewed.json().catch(() => ({ error: "AI 审核没有返回结果" })) as { findings?: Array<{ key: string; reason: string }> };
+          if (!reviewed.ok && repairs.length === 0) return Response.json(payload, { status: reviewed.status });
+          const findings = [...(payload.findings ?? [])];
+          const seen = new Set(findings.map((finding) => finding.key));
+          for (const fix of repairs) {
+            if (fix.complete || seen.has(fix.key)) continue;
+            findings.push({ key: fix.key, reason: "大题正文过短（明显没切全）" });
+          }
+          return Response.json({ ...payload, findings, repairs });
         }
 
         if (action === "publish") {
